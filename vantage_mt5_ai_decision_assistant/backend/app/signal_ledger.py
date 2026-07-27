@@ -229,6 +229,27 @@ def _bars_left(setup_age: Any) -> int:
     return max(0, max_age - age)
 
 
+def _setup_fingerprint(symbol: str, side: str, st: dict[str, Any], mode: str) -> str:
+    """Identity of a desk setup — exclude mid so price ticks do not mint duplicates."""
+    return (
+        f"{str(symbol).upper()}|{str(side).upper()}|"
+        f"{st.get('h1_bias')}|{st.get('m15_structure')}|{st.get('m5_trigger')}|"
+        f"{mode}"
+    )
+
+
+def _parse_utc(value: str | None) -> Optional[datetime]:
+    if not value:
+        return None
+    try:
+        prev = datetime.fromisoformat(value)
+    except ValueError:
+        return None
+    if prev.tzinfo is None:
+        prev = prev.replace(tzinfo=timezone.utc)
+    return prev
+
+
 def _recent_fingerprint(conn: sqlite3.Connection, fingerprint: str, within_sec: int = 1800) -> bool:
     row = conn.execute(
         "SELECT created_utc FROM signals WHERE fingerprint = ? ORDER BY created_utc DESC LIMIT 1",
@@ -236,14 +257,46 @@ def _recent_fingerprint(conn: sqlite3.Connection, fingerprint: str, within_sec: 
     ).fetchone()
     if not row:
         return False
-    try:
-        prev = datetime.fromisoformat(row["created_utc"])
-        if prev.tzinfo is None:
-            prev = prev.replace(tzinfo=timezone.utc)
-        age = (datetime.now(timezone.utc) - prev).total_seconds()
-        return age < within_sec
-    except ValueError:
+    prev = _parse_utc(row["created_utc"])
+    if not prev:
         return False
+    return (datetime.now(timezone.utc) - prev).total_seconds() < within_sec
+
+
+def _has_pending_for_symbol(conn: sqlite3.Connection, symbol: str) -> bool:
+    row = conn.execute(
+        """
+        SELECT 1 FROM signals
+        WHERE symbol = ? AND COALESCE(user_decision, 'PENDING') = 'PENDING'
+        LIMIT 1
+        """,
+        (symbol.upper(),),
+    ).fetchone()
+    return row is not None
+
+
+def _latest_recent_for_fingerprint(
+    conn: sqlite3.Connection,
+    fingerprint: str,
+    within_sec: int = 1800,
+) -> Optional[sqlite3.Row]:
+    row = conn.execute(
+        """
+        SELECT * FROM signals
+        WHERE fingerprint = ?
+        ORDER BY created_utc DESC
+        LIMIT 1
+        """,
+        (fingerprint,),
+    ).fetchone()
+    if not row:
+        return None
+    prev = _parse_utc(row["created_utc"])
+    if not prev:
+        return None
+    if (datetime.now(timezone.utc) - prev).total_seconds() >= within_sec:
+        return None
+    return row
 
 
 def _row_to_dict(r: sqlite3.Row) -> dict[str, Any]:
@@ -338,13 +391,17 @@ def maybe_accept_from_monitor(
         return None
 
     bars_left = _bars_left(age)
-    fp = f"{symbol}|{side}|{st.get('h1_bias')}|{st.get('m15_structure')}|{round(mid, digits)}|{mode}"
+    fp = _setup_fingerprint(symbol, side, st, mode)
     note = str(st.get("note") or "M5 Alignment Desk accepted")
     tf = _desk_timeframe(mode)
 
     with _lock:
         conn = _connect()
         try:
+            # One open card per symbol; same setup must not re-accept after Take/Ignore
+            # just because mid ticked.
+            if _has_pending_for_symbol(conn, symbol):
+                return None
             if _recent_fingerprint(conn, fp):
                 return None
             sig_id = str(uuid.uuid4())
@@ -616,6 +673,20 @@ def build_analyzer_status(
         symbols = [symbol]
 
     active = latest_pending_for_symbol(symbol) if symbol else None
+    if not active and symbol:
+        # Keep Take/Ignore visible as TAKEN/IGNORED for this setup instead of
+        # minting a lookalike preview that the next heartbeat would re-accept.
+        side_hint = _resolve_side(st)
+        if side_hint:
+            fp = _setup_fingerprint(symbol, side_hint, st, mode)
+            with _lock:
+                conn = _connect()
+                try:
+                    row = _latest_recent_for_fingerprint(conn, fp)
+                    if row:
+                        active = _row_to_dict(row)
+                finally:
+                    conn.close()
     if not active:
         active = _preview_plan(monitor_status, dash, mode)
 

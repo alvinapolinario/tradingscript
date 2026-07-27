@@ -78,6 +78,27 @@ def test_dedupes_within_window(tmp_ledger):
     assert len(ledger.list_signals()) == 1
 
 
+def test_dedupes_when_mid_ticks(tmp_ledger):
+    a1 = ledger.maybe_accept_from_monitor(_ok_status())
+    assert a1 is not None
+    st = _ok_status()
+    st["vantage_ea"]["bid"] = 3310.0
+    st["vantage_ea"]["ask"] = 3310.3
+    assert ledger.maybe_accept_from_monitor(st) is None
+    assert len(ledger.list_signals()) == 1
+
+
+def test_no_second_pending_while_open(tmp_ledger):
+    a1 = ledger.maybe_accept_from_monitor(_ok_status())
+    assert a1 is not None
+    # Even a different structural fingerprint must not stack another PENDING card
+    st = _ok_status(side_bias="BULLISH")
+    st["vantage_ea"]["strategy"]["m5_trigger"] = "BULLISH"
+    st["vantage_ea"]["strategy"]["allowed_direction"] = "BUY"
+    assert ledger.maybe_accept_from_monitor(st) is None
+    assert len(ledger.list_signals()) == 1
+
+
 def test_rejects_when_not_setup_ok(tmp_ledger):
     st = _ok_status()
     st["vantage_ea"]["strategy"]["h1_m15_aligned"] = False

@@ -77,11 +77,23 @@ def test_record_take_decision(tmp_ledger):
     updated = ledger.record_decision(accepted["id"], "TAKE")
     assert updated["user_decision"] == "TAKE"
     assert updated["decided_utc"]
-    # Pending-only active: after TAKE, analyzer falls back to preview while SETUP_OK
+    # Same setup stays TAKEN — no lookalike preview that invites another Take
     st = ledger.build_analyzer_status(_ok_status())
-    assert st["decision_state"] == "AWAITING_YOUR_DECISION"
-    assert st["active_signal"].get("preview") is True
+    assert st["decision_state"] == "TAKEN"
+    assert st["active_signal"]["id"] == accepted["id"]
+    assert not st["active_signal"].get("preview")
     assert ledger.latest_pending_for_symbol("XAUUSD") is None
+
+
+def test_take_does_not_duplicate_when_price_moves(tmp_ledger):
+    accepted = ledger.maybe_accept_from_monitor(_ok_status())
+    assert accepted is not None
+    ledger.record_decision(accepted["id"], "TAKE")
+    st = _ok_status()
+    st["vantage_ea"]["bid"] = 3305.0
+    st["vantage_ea"]["ask"] = 3305.2
+    assert ledger.maybe_accept_from_monitor(st) is None
+    assert len(ledger.list_signals()) == 1
 
 
 def test_reject_redecide(tmp_ledger):
