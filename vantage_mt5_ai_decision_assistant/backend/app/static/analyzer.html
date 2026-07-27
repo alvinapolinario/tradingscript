@@ -402,11 +402,19 @@
 
     function gauge(score) {
       const circ = 2 * Math.PI * 52;
-      const s = Math.max(0, Math.min(100, Number(score) || 0));
       const arc = $("gaugeArc");
+      if (score == null || score === "" || Number.isNaN(Number(score))) {
+        arc.setAttribute("stroke-dasharray", `0 ${circ}`);
+        arc.setAttribute("stroke", "#1c2628");
+        arc.setAttribute("stroke-linecap", "butt");
+        $("gaugeNum").textContent = "—";
+        return;
+      }
+      const s = Math.max(0, Math.min(100, Number(score)));
+      arc.setAttribute("stroke-linecap", s > 0 ? "round" : "butt");
       arc.setAttribute("stroke-dasharray", `${(s / 100) * circ} ${circ}`);
       arc.setAttribute("stroke", s >= 60 ? "#00e887" : (s >= 40 ? "#e8c547" : "#ff5c6a"));
-      $("gaugeNum").textContent = score != null ? String(score) : "—";
+      $("gaugeNum").textContent = String(Math.round(s));
     }
 
     function renderLevelStrip(payload) {
@@ -555,8 +563,8 @@
         $("btnIgnore").disabled = true;
         $("btnTake").textContent = "TAKE";
         $("btnTake").classList.remove("sell");
-        gauge(0);
-        $("lockedSide").textContent = "LOCKED —";
+        gauge(null);
+        $("lockedSide").textContent = "NO LOCK";
         $("lockedSide").className = "locked";
         $("sideAwait").textContent = "NO SIGNAL";
         $("botTake").textContent = "—";
@@ -568,14 +576,21 @@
       }
 
       const votes = payload.votes || {};
-      const bp = Number(votes.buy_points) || 0;
-      const sp = Number(votes.sell_points) || 0;
-      const tot = bp + sp || 1;
-      $("buyVote").textContent = `BUY — ${votes.buy_votes || 0} / ${bp} pts`;
-      $("sellVote").textContent = `SELL — ${votes.sell_votes || 0} / ${sp} pts`;
-      $("buyBar").style.width = `${(bp / tot) * 100}%`;
-      $("sellBar").style.width = `${(sp / tot) * 100}%`;
-
+      const noSignal = !sig || !side;
+      const bp = noSignal ? 0 : (Number(votes.buy_points) || 0);
+      const sp = noSignal ? 0 : (Number(votes.sell_points) || 0);
+      const bv = noSignal ? 0 : (votes.buy_votes || 0);
+      const sv = noSignal ? 0 : (votes.sell_votes || 0);
+      const tot = bp + sp;
+      $("buyVote").textContent = `BUY — ${bv} / ${bp} pts`;
+      $("sellVote").textContent = `SELL — ${sv} / ${sp} pts`;
+      if (tot <= 0) {
+        $("buyBar").style.width = "0%";
+        $("sellBar").style.width = "0%";
+      } else {
+        $("buyBar").style.width = `${(bp / tot) * 100}%`;
+        $("sellBar").style.width = `${(sp / tot) * 100}%`;
+      }
       const scores = (sig && sig.contributor_scores) || [];
       const passed = scores.filter((c) => c.status === "pass").slice(0, 6);
       $("contribList").innerHTML = passed.length

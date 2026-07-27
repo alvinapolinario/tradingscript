@@ -39,10 +39,6 @@ _GATE_WEIGHTS: dict[str, tuple[str, int]] = {
     "ema": ("EMA stack", 4),
 }
 
-_BUY_LEANING = {"alignment", "adx", "ema", "close_confirm", "rr"}
-_SELL_LEANING = {"alignment", "adx", "ema", "close_confirm", "rr"}
-
-
 def _utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
@@ -503,6 +499,14 @@ def record_decision(signal_id: str, decision: str) -> Optional[dict[str, Any]]:
 
 
 def _vote_split(side: Optional[str], details: list[dict[str, Any]]) -> dict[str, Any]:
+    """Split passed-gate points into BUY vs SELL. Empty when no locked side."""
+    if side not in {"BUY", "SELL"}:
+        return {
+            "buy_votes": 0,
+            "buy_points": 0,
+            "sell_votes": 0,
+            "sell_points": 0,
+        }
     buy_pts = 0
     sell_pts = 0
     buy_votes = 0
@@ -511,26 +515,12 @@ def _vote_split(side: Optional[str], details: list[dict[str, Any]]) -> dict[str,
         if d.get("status") != "pass":
             continue
         pts = int(d.get("points") or 0)
-        key = d.get("key")
         if side == "BUY":
             buy_pts += pts
             buy_votes += 1
-            if key not in _BUY_LEANING:
-                sell_pts += max(1, pts // 3)
-        elif side == "SELL":
+        else:
             sell_pts += pts
             sell_votes += 1
-            if key not in _SELL_LEANING:
-                buy_pts += max(1, pts // 3)
-        else:
-            buy_pts += pts // 2
-            sell_pts += pts // 2
-    if side == "BUY" and sell_pts == 0:
-        sell_pts = max(20, buy_pts // 3)
-        sell_votes = max(1, buy_votes // 2)
-    if side == "SELL" and buy_pts == 0:
-        buy_pts = max(20, sell_pts // 3)
-        buy_votes = max(1, sell_votes // 2)
     return {
         "buy_votes": buy_votes,
         "buy_points": buy_pts,
@@ -632,12 +622,13 @@ def build_analyzer_status(
     if active and st.get("setup_age_m5") is not None:
         active = {**active, "bars_left": _bars_left(st.get("setup_age_m5"))}
 
+    side = (active or {}).get("side")
     if active and active.get("contributor_scores"):
         details = list(active["contributor_scores"])
-    else:
+    elif active:
         _, _, details = _score_details_from_gates(dash.get("gates") or [])
-
-    side = (active or {}).get("side")
+    else:
+        details = []
     votes = _vote_split(side, details)
 
     aligned = 0
@@ -664,7 +655,7 @@ def build_analyzer_status(
 
     tf = timeframe or (active or {}).get("timeframe") or _desk_timeframe(mode)
     leading = None
-    if details:
+    if active and details:
         passed = [d for d in details if d.get("status") == "pass"]
         if passed:
             leading = max(passed, key=lambda d: int(d.get("score") or 0))

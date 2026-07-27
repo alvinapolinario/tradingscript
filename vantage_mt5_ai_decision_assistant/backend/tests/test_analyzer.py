@@ -110,6 +110,21 @@ def test_alignment_total_is_three(tmp_ledger):
     assert st["alignment"]["aligned"] == 3
 
 
+def test_no_signal_clears_votes(tmp_ledger):
+    st = _ok_status()
+    st["vantage_ea"]["strategy"]["h1_m15_aligned"] = False
+    st["vantage_ea"]["strategy"]["m15_structure"] = "BEARISH"
+    out = ledger.build_analyzer_status(st)
+    assert out["decision_state"] == "NO_SIGNAL"
+    assert out["active_signal"] is None
+    assert out["votes"] == {
+        "buy_votes": 0,
+        "buy_points": 0,
+        "sell_votes": 0,
+        "sell_points": 0,
+    }
+
+
 def test_decision_api(tmp_ledger, monkeypatch):
     accepted = ledger.maybe_accept_from_monitor(_ok_status())
     assert accepted is not None
