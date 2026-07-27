@@ -124,24 +124,43 @@
       gap: .75rem;
       min-height: 520px;
     }
-    .chart-panel { position: relative; overflow: hidden; min-height: 520px; }
+    .chart-panel { position: relative; overflow: hidden; min-height: 560px; display: flex; flex-direction: column; }
     .chart-legend {
-      display: flex; flex-wrap: wrap; gap: .55rem;
+      display: flex; flex-wrap: wrap; gap: .55rem; align-items: center;
       font-size: .68rem; color: var(--muted); margin-bottom: .5rem;
     }
-    .chart-legend span::before {
-      content: ""; display: inline-block; width: 10px; height: 2px;
-      margin-right: .3rem; vertical-align: middle; background: currentColor;
+    .chart-wrap {
+      height: 460px; width: 100%; flex: 1; min-height: 420px;
+      border-radius: 10px; overflow: hidden; border: 1px solid var(--line);
+      background: #0c1213;
     }
-    .chart-legend .ema20 { color: #5ec8ff; }
-    .chart-legend .ema50 { color: #c9a227; }
-    .chart-legend .ema200 { color: #b388ff; }
-    .chart-wrap { height: 430px; width: 100%; }
-    .chart-wrap svg { width: 100%; height: 100%; display: block; }
+    .chart-wrap .tradingview-widget-container,
+    .chart-wrap .tradingview-widget-container__widget {
+      height: 100% !important;
+      width: 100% !important;
+    }
+    .chart-wrap .tradingview-widget-copyright {
+      font-size: .65rem !important;
+      padding: .25rem .4rem !important;
+      background: #0c1213;
+    }
+    .level-strip {
+      display: flex; flex-wrap: wrap; gap: .55rem;
+      margin-top: .55rem; font-size: .72rem; font-family: var(--mono);
+    }
+    .level-strip .chip {
+      border: 1px solid var(--line); border-radius: 8px;
+      padding: .3rem .55rem; background: var(--panel2);
+    }
+    .level-strip .chip b { color: var(--muted); font-weight: 600; margin-right: .35rem; font-family: var(--sans); font-size: .65rem; letter-spacing: .04em; }
+    .level-strip .chip.entry { color: var(--buy); }
+    .level-strip .chip.sl { color: var(--sell); }
+    .level-strip .chip.tp { color: var(--accent); }
     .pattern-badge {
-      position: absolute; left: 1rem; bottom: 1rem;
+      position: absolute; left: 1rem; bottom: 3.2rem;
       background: rgba(10,16,14,.9); border: 1px solid var(--line);
       border-radius: 10px; padding: .55rem .7rem; font-size: .78rem;
+      z-index: 2; pointer-events: none;
     }
     .pattern-badge strong { color: var(--buy); }
     .side-panel { display: flex; flex-direction: column; gap: .65rem; }
@@ -261,13 +280,12 @@
     <div class="main">
       <section class="card chart-panel">
         <div class="chart-legend">
-          <span class="ema20">EMA 20</span>
-          <span class="ema50">EMA 50</span>
-          <span class="ema200">EMA 200</span>
-          <span>Entry / SL / Targets</span>
-          <span style="color:#e8c547">Schematic (not live OHLC)</span>
+          <span>TradingView chart</span>
+          <span>EMA 20 / 50 / 200</span>
+          <span>Desk levels listed below (Vantage MT5)</span>
         </div>
         <div class="chart-wrap" id="chart"></div>
+        <div class="level-strip" id="levelStrip"></div>
         <div class="pattern-badge" id="patternBadge" hidden>
           <strong id="patternLabel">—</strong>
           <div id="patternBias"></div>
@@ -337,6 +355,7 @@
       timeframe: "M5",
       data: null,
       busy: false,
+      tvKey: "",
     };
 
     function $(id) { return document.getElementById(id); }
@@ -346,6 +365,21 @@
       const x = Number(n);
       const d = digits != null ? digits : (x >= 100 ? 2 : (x >= 1 ? 4 : 5));
       return x.toLocaleString(undefined, { minimumFractionDigits: d, maximumFractionDigits: d });
+    }
+
+    function tvSymbol(raw) {
+      const s = String(raw || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+      if (!s) return "OANDA:XAUUSD";
+      if (s.includes("XAU") || s.includes("GOLD")) return "OANDA:XAUUSD";
+      if (s.includes("BTC") || s.includes("BITCOIN")) return "BINANCE:BTCUSDT";
+      if (s.includes("ETH")) return "BINANCE:ETHUSDT";
+      if (s.length === 6) return `OANDA:${s}`;
+      return `FX_IDC:${s}`;
+    }
+
+    function tvInterval(tf) {
+      const map = { M1: "1", M5: "5", M15: "15", H1: "60", H4: "240" };
+      return map[tf] || "5";
     }
 
     function setMode(mode) {
@@ -375,109 +409,82 @@
       $("gaugeNum").textContent = score != null ? String(score) : "—";
     }
 
-    function synthCandles(mid, atr, n = 48) {
-      const out = [];
-      let p = mid - atr * 1.2;
-      let seed = Math.floor(mid * 100) % 9973;
-      const rnd = () => {
-        seed = (seed * 16807) % 2147483647;
-        return (seed % 1000) / 1000;
-      };
-      for (let i = 0; i < n; i++) {
-        const drift = (rnd() - 0.45) * atr * 0.35;
-        const o = p;
-        const c = p + drift;
-        const h = Math.max(o, c) + rnd() * atr * 0.15;
-        const l = Math.min(o, c) - rnd() * atr * 0.15;
-        out.push({ o, h, l, c });
-        p = c;
+    function renderLevelStrip(payload) {
+      const strip = $("levelStrip");
+      if (!strip) return;
+      const sig = payload.active_signal;
+      const live = payload.live || {};
+      const digits = live.digits;
+      if (!sig) {
+        strip.innerHTML = `<span class="chip">No desk levels yet · TradingView is reference data (may differ from Vantage MT5)</span>`;
+        return;
       }
-      // Pull last candle toward live mid
-      const last = out[out.length - 1];
-      last.c = mid;
-      last.h = Math.max(last.h, mid);
-      last.l = Math.min(last.l, mid);
-      return out;
+      const chips = [
+        `<span class="chip entry"><b>ENTRY</b>${fmtPx(sig.entry_low, digits)}–${fmtPx(sig.entry_high, digits)}</span>`,
+        `<span class="chip sl"><b>SL</b>${fmtPx(sig.stop, digits)}</span>`,
+        `<span class="chip tp"><b>TP1</b>${fmtPx(sig.target, digits)}</span>`,
+      ];
+      (payload.targets || []).slice(1).forEach((t) => {
+        chips.push(`<span class="chip tp"><b>${t.label || "TP"}</b>${fmtPx(t.price, digits)}</span>`);
+      });
+      chips.push(`<span class="chip"><b>NOTE</b>TV chart ≠ MT5 ticks · levels from Vantage desk</span>`);
+      strip.innerHTML = chips.join("");
     }
 
-    function ema(values, period) {
-      const k = 2 / (period + 1);
-      const out = [];
-      let prev = values[0];
-      for (let i = 0; i < values.length; i++) {
-        prev = i === 0 ? values[0] : values[i] * k + prev * (1 - k);
-        out.push(prev);
-      }
-      return out;
+    function mountTradingView(symbol, interval) {
+      const el = $("chart");
+      const key = `${symbol}|${interval}`;
+      if (state.tvKey === key && el.querySelector(".tradingview-widget-container")) return;
+      state.tvKey = key;
+      el.innerHTML = "";
+      const box = document.createElement("div");
+      box.className = "tradingview-widget-container";
+      box.style.height = "100%";
+      box.style.width = "100%";
+      const widget = document.createElement("div");
+      widget.className = "tradingview-widget-container__widget";
+      widget.style.height = "calc(100% - 28px)";
+      widget.style.width = "100%";
+      const copy = document.createElement("div");
+      copy.className = "tradingview-widget-copyright";
+      copy.innerHTML = `<a href="https://www.tradingview.com/" rel="noopener nofollow" target="_blank"><span style="color:#00e887">Track all markets on TradingView</span></a>`;
+      const script = document.createElement("script");
+      script.type = "text/javascript";
+      script.src = "https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js";
+      script.async = true;
+      script.text = JSON.stringify({
+        autosize: true,
+        symbol,
+        interval,
+        timezone: "Etc/UTC",
+        theme: "dark",
+        style: "1",
+        locale: "en",
+        backgroundColor: "rgba(12, 18, 19, 1)",
+        gridColor: "rgba(36, 48, 53, 0.6)",
+        hide_top_toolbar: false,
+        hide_legend: false,
+        allow_symbol_change: false,
+        save_image: false,
+        calendar: false,
+        support_host: "https://www.tradingview.com",
+        withdateranges: true,
+        studies: [
+          { id: "MAExp@tv-basicstudies", version: "60.0", inputs: { length: 20 } },
+          { id: "MAExp@tv-basicstudies", version: "60.0", inputs: { length: 50 } },
+          { id: "MAExp@tv-basicstudies", version: "60.0", inputs: { length: 200 } },
+        ],
+      });
+      box.appendChild(widget);
+      box.appendChild(copy);
+      box.appendChild(script);
+      el.appendChild(box);
     }
 
     function renderChart(payload) {
-      const el = $("chart");
-      const sig = payload.active_signal;
-      const live = payload.live || {};
-      const mid = Number(live.mid) || (sig ? (Number(sig.entry_low) + Number(sig.entry_high)) / 2 : 0);
-      const atr = Number((sig && sig.atr14) || (payload.dashboard && payload.dashboard.market && payload.dashboard.market.atr14) || mid * 0.002);
-      if (!mid) {
-        el.innerHTML = `<div class="empty-hint">Attach EA and wait for price feed</div>`;
-        return;
-      }
-      const candles = synthCandles(mid, atr || mid * 0.002);
-      const closes = candles.map((c) => c.c);
-      const e20 = ema(closes, 20);
-      const e50 = ema(closes, 50);
-      const e200 = ema(closes, 200);
-
-      const levels = [];
-      if (sig) {
-        levels.push({ label: "Entry", price: (Number(sig.entry_low) + Number(sig.entry_high)) / 2, color: "#00e887" });
-        levels.push({ label: "SL", price: Number(sig.stop), color: "#ff5c6a" });
-      }
-      (payload.targets || []).forEach((t, i) => {
-        levels.push({ label: t.label || `TP${i + 1}`, price: Number(t.price), color: i === 0 ? "#00e887" : "#7f9490" });
-      });
-
-      const allY = candles.flatMap((c) => [c.h, c.l]).concat(levels.map((l) => l.price).filter(Boolean));
-      let ymin = Math.min(...allY);
-      let ymax = Math.max(...allY);
-      const pad = (ymax - ymin) * 0.08 || atr;
-      ymin -= pad; ymax += pad;
-
-      const W = 900, H = 420, L = 8, R = 72, T = 10, B = 16;
-      const plotW = W - L - R, plotH = H - T - B;
-      const x = (i) => L + (i + 0.5) * (plotW / candles.length);
-      const y = (p) => T + ((ymax - p) / (ymax - ymin)) * plotH;
-      const cw = Math.max(2, plotW / candles.length - 2);
-
-      let candlesSvg = "";
-      candles.forEach((c, i) => {
-        const up = c.c >= c.o;
-        const color = up ? "#00e887" : "#ff5c6a";
-        candlesSvg += `<line x1="${x(i)}" y1="${y(c.h)}" x2="${x(i)}" y2="${y(c.l)}" stroke="${color}" stroke-width="1"/>`;
-        candlesSvg += `<rect x="${x(i) - cw / 2}" y="${y(Math.max(c.o, c.c))}" width="${cw}" height="${Math.max(1, Math.abs(y(c.o) - y(c.c)))}" fill="${color}"/>`;
-      });
-
-      const linePath = (arr, color) => {
-        let d = "";
-        arr.forEach((v, i) => { d += `${i ? "L" : "M"}${x(i).toFixed(1)},${y(v).toFixed(1)} `; });
-        return `<path d="${d}" fill="none" stroke="${color}" stroke-width="1.4"/>`;
-      };
-
-      let levelSvg = "";
-      levels.forEach((lv) => {
-        if (!lv.price) return;
-        const yy = y(lv.price);
-        levelSvg += `<line x1="${L}" y1="${yy}" x2="${W - R}" y2="${yy}" stroke="${lv.color}" stroke-dasharray="4 3" stroke-width="1" opacity=".85"/>`;
-        levelSvg += `<text x="${W - R + 4}" y="${yy + 3}" fill="${lv.color}" font-size="10" font-family="monospace">${lv.label} ${fmtPx(lv.price, live.digits)}</text>`;
-      });
-
-      el.innerHTML = `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">
-        <rect x="0" y="0" width="${W}" height="${H}" fill="#0c1213"/>
-        ${candlesSvg}
-        ${linePath(e20, "#5ec8ff")}
-        ${linePath(e50, "#c9a227")}
-        ${linePath(e200, "#b388ff")}
-        ${levelSvg}
-      </svg>`;
+      const sym = payload.selected_symbol || (payload.active_signal && payload.active_signal.symbol) || "XAUUSD";
+      mountTradingView(tvSymbol(sym), tvInterval(state.timeframe));
+      renderLevelStrip(payload);
     }
 
     function render(payload) {
@@ -500,7 +507,7 @@
 
       $("brokerLine").textContent = payload.broker || "MT5";
       const al = payload.alignment || {};
-      $("alignLine").textContent = `${al.aligned ?? 0}/${al.total ?? 5} aligned`;
+      $("alignLine").textContent = `${al.aligned ?? 0}/${al.total ?? 3} aligned`;
       $("decisionState").textContent = (payload.decision_state || "NO_SIGNAL").replaceAll("_", " ");
       $("caption").textContent = payload.caption || "Records your decision only — no MT5 order is sent.";
       $("regime").textContent = payload.market_regime || "—";

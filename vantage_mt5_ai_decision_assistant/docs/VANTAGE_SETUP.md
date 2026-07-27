@@ -262,7 +262,7 @@ Default publish port: **8000** (confirm it is free: `ss -tulnp | grep 8000`).
 | Opportunity Radar / Strategy Lab (desk) | `/dashboard` |
 | Other tools | `/coming-soon` |
 
-Left nav is shared (`/static/shell.js`). Analyzer chart is **schematic** until real OHLC is streamed from MT5.
+Left nav is shared (`/static/shell.js`). Analyzer embeds a **TradingView Advanced Chart** (reference market data; Vantage desk levels stay in the strip below — ticks may differ from MT5).
 
 ### Firewall (if MT5 is remote)
 ```bash
