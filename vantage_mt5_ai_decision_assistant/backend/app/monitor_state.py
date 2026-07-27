@@ -203,6 +203,8 @@ class MonitorStore:
         self._cal_req_month: int = 0
         # Analyzer STANDARD | SCALPING — used when persisting accepted signals
         self._analyzer_mode: str = "STANDARD"
+        # Strategy Lab session overrides (affect gate evaluation on this host)
+        self._lab_overrides: dict[str, Any] = {}
         # symbol -> "YYYY-MM" -> calendar payload
         self._calendar_cache: dict[str, dict[str, dict[str, Any]]] = {}
         for sym in DEFAULT_MONITOR_PAIRS:
@@ -219,6 +221,51 @@ class MonitorStore:
     def analyzer_mode(self) -> str:
         with self._lock:
             return self._analyzer_mode
+
+    def lab_overrides(self) -> dict[str, Any]:
+        with self._lock:
+            return dict(self._lab_overrides)
+
+    def set_lab_overrides(self, overrides: dict[str, Any]) -> dict[str, Any]:
+        with self._lock:
+            self._lab_overrides = dict(overrides or {})
+            out = dict(self._lab_overrides)
+        return out
+
+    def clear_lab_overrides(self) -> None:
+        with self._lock:
+            self._lab_overrides = {}
+
+    def pair_statuses(self) -> list[dict[str, Any]]:
+        """Lightweight per-symbol status blobs for Strategy Scanner."""
+        now = _utc_now()
+        with self._lock:
+            out: list[dict[str, Any]] = []
+            for name in list(DEFAULT_MONITOR_PAIRS) + [
+                k for k in sorted(self._eas.keys()) if k not in DEFAULT_MONITOR_PAIRS and k != "UNKNOWN"
+            ]:
+                ea = self._eas.get(name) or EaSnapshot(symbol=name)
+                connected, age = self._ea_connected(ea, now)
+                empty_cal_req = {"year": 0, "month": 0, "cached_months": [], "pending": False}
+                payload = self._serialize_ea(
+                    ea, now, display_cal=None, calendar_request=empty_cal_req
+                )
+                out.append(
+                    {
+                        "selected_symbol": name,
+                        "symbol": name,
+                        "available_symbols": [name],
+                        "vantage_ea": payload,
+                        "link_health": {
+                            "api_online": True,
+                            "ea_online": connected,
+                            "any_ea_online": connected,
+                            "overall": "CONNECTED" if connected else "WAITING_FOR_EA",
+                            "seconds_since_heartbeat": age,
+                        },
+                    }
+                )
+            return out
 
     def _get_or_create(self, symbol: str) -> EaSnapshot:
         key = _norm_symbol(symbol)
@@ -462,6 +509,7 @@ class MonitorStore:
                 },
                 "selected_symbol": selected,
                 "analyzer_mode": self._analyzer_mode,
+                "lab_overrides": dict(self._lab_overrides),
                 "available_symbols": [x["symbol"] for x in symbols],
                 "symbols": symbols,
                 "vantage_ea": self._serialize_ea(

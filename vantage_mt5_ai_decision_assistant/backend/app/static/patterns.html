@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Pattern Strategy · Vantage</title>
+  <link rel="stylesheet" href="/static/shell.css" />
+  <style>
+    :root {
+      --bg: #070a0b; --panel: #101518; --line: #243035; --text: #e8f0ee;
+      --muted: #7f9490; --ok: #00e887; --bad: #ff5c6a; --warn: #e8c547;
+      --sans: "Segoe UI", system-ui, sans-serif; --mono: Consolas, monospace;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; font-family: var(--sans); color: var(--text); min-height: 100vh;
+      background: radial-gradient(700px 320px at 80% 0%, #123028 0%, transparent 55%), var(--bg);
+    }
+    header {
+      display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: .75rem;
+      padding: .85rem 1.1rem; border-bottom: 1px solid var(--line); background: rgba(7,10,11,.92);
+      position: sticky; top: 0; z-index: 5;
+    }
+    h1 { margin: 0; font-size: 1.05rem; }
+    .sub { color: var(--muted); font-size: .78rem; margin-top: .15rem; }
+    .pill { border: 1px solid var(--line); border-radius: 999px; padding: .35rem .7rem; font-size: .78rem; background: var(--panel); }
+    main { max-width: 1100px; margin: 0 auto; padding: 1rem 1.1rem 2.5rem; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: .7rem; }
+    .card {
+      background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: .9rem 1rem;
+    }
+    .card.pass { border-color: rgba(0,232,135,.35); }
+    .card.fail { border-color: rgba(255,92,106,.35); }
+    .card.warn, .card.unknown { border-color: rgba(232,197,71,.28); }
+    .k { font-size: .65rem; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+    .name { font-size: 1.05rem; font-weight: 700; margin: .25rem 0; }
+    .fam { font-size: .75rem; color: var(--muted); }
+    .detail { font-size: .82rem; margin-top: .55rem; color: #c5d5cf; }
+    .status { font-family: var(--mono); font-size: .78rem; font-weight: 700; }
+    .status.pass { color: var(--ok); } .status.fail { color: var(--bad); }
+    .status.warn, .status.unknown { color: var(--warn); }
+    ul { margin: .45rem 0 0; padding-left: 1.1rem; color: var(--muted); font-size: .78rem; }
+  </style>
+</head>
+<body data-nav="patterns">
+  <header>
+    <div>
+      <h1>Pattern Strategy</h1>
+      <div class="sub">Advisory pattern catalog vs live M5 desk gates</div>
+    </div>
+    <div class="pill" id="sumPill">—</div>
+  </header>
+  <main>
+    <div class="card" style="margin-bottom:.85rem">
+      <div class="k">Selected pair context</div>
+      <div id="ctx" style="margin-top:.35rem;font-family:var(--mono);font-size:.85rem">Loading…</div>
+    </div>
+    <div class="grid" id="grid"></div>
+  </main>
+  <script>
+    async function refresh() {
+      const r = await fetch("/api/v1/patterns/status");
+      const j = await r.json();
+      document.getElementById("sumPill").textContent = `${j.active_count || 0}/${j.total || 0} active · ${j.symbol || "—"}`;
+      const m = j.market || {};
+      const v = (j.verdict || {}).verdict || "—";
+      document.getElementById("ctx").textContent =
+        `${j.symbol || "—"} · ${v} · H1 ${m.h1_bias || "—"} · M15 ${m.m15_structure || "—"} · M5 ${m.m5_trigger || "—"} · ADX ${m.adx14 ?? "—"}`;
+      document.getElementById("grid").innerHTML = (j.items || []).map((p) => `
+        <article class="card ${p.status || "unknown"}">
+          <div class="k">${p.family || "Pattern"}</div>
+          <div class="name">${p.name}</div>
+          <div class="status ${p.status}">${(p.status || "unknown").toUpperCase()}</div>
+          <div class="detail">${p.description || ""}</div>
+          <div class="detail">${p.detail || ""}</div>
+          <ul>${(p.rules || []).map((x) => `<li>${x}</li>`).join("")}</ul>
+        </article>`).join("");
+    }
+    refresh();
+    setInterval(refresh, 12000);
+  </script>
+  <script src="/static/shell.js"></script>
+</body>
+</html>

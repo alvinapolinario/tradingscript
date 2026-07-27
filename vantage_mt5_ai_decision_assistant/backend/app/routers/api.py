@@ -293,6 +293,61 @@ def signal_decision(signal_id: str, body: dict) -> dict:
     }
 
 
+@router.get("/api/v1/patterns/status")
+def patterns_status() -> dict:
+    from app.strategy_workspace import build_patterns
+
+    return build_patterns(monitor_store.status())
+
+
+@router.get("/api/v1/scanner/status")
+def scanner_status() -> dict:
+    from app.strategy_workspace import build_scanner
+
+    base = monitor_store.status()
+    return build_scanner(base, monitor_store.pair_statuses())
+
+
+@router.get("/api/v1/lab/status")
+def lab_status() -> dict:
+    from app.strategy_workspace import build_lab
+
+    return build_lab(monitor_store.status())
+
+
+@router.post("/api/v1/lab/simulate")
+def lab_simulate(body: dict | None = None) -> dict:
+    """What-if evaluation without saving session overrides."""
+    from app.strategy_workspace import build_lab, sanitize_lab_overrides
+
+    trial = sanitize_lab_overrides(body or {})
+    return build_lab(monitor_store.status(), trial_overrides=trial)
+
+
+@router.post("/api/v1/lab/apply")
+def lab_apply(body: dict | None = None) -> dict:
+    """Persist Strategy Lab overrides for this backend session."""
+    from app.strategy_workspace import build_lab, sanitize_lab_overrides
+    from app.ws_hub import push_monitor_update
+
+    overrides = sanitize_lab_overrides(body or {})
+    monitor_store.set_lab_overrides(overrides)
+    monitor_store.add_log("INFO", "lab", f"Session overrides applied: {overrides or '{}'}")
+    push_monitor_update("lab")
+    return build_lab(monitor_store.status())
+
+
+@router.post("/api/v1/lab/reset")
+def lab_reset() -> dict:
+    from app.strategy_workspace import build_lab
+    from app.ws_hub import push_monitor_update
+
+    monitor_store.clear_lab_overrides()
+    monitor_store.add_log("INFO", "lab", "Session overrides reset to playbook defaults")
+    push_monitor_update("lab")
+    return build_lab(monitor_store.status())
+
+
 @router.get("/api/v1/monitor/logs")
 def monitor_logs(limit: int = Query(default=100, ge=1, le=300)) -> dict:
     return {"items": monitor_store.logs(limit)}

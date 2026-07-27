@@ -37,7 +37,10 @@ The **M5 Alignment Desk** (`/dashboard`) is a separate surface with fixed rules:
 
 When the desk reaches **SETUP_OK**, the backend stores an advisory BUY/SELL on the **Accepted Signal Ledger** (`/signals`, `GET /api/v1/signals`) with score, entry band, stop, and T2 — still no auto-trading.
 
-**Smart Analyzer** (`/analyzer`) is the live decision desk: STANDARD/SCALPING modes, score gauge, **TradingView Advanced Chart** (with EMA 20/50/200), desk entry/SL/TP strip, and **TAKE / Ignore** buttons that only record your choice — never send an MT5 order. Shared left sidebar links Market Overview, Analyzer, Signal Center, and Opportunity Radar.
+**Smart Analyzer** (`/analyzer`) is the live decision desk: STANDARD/SCALPING modes, score gauge, **TradingView Advanced Chart** (with EMA 20/50/200), desk entry/SL/TP strip, and **TAKE / Ignore** buttons that only record your choice — never send an MT5 order.
+
+Also live: **Pattern Strategy** (`/patterns`), **Strategy Scanner** (`/scanner`), and **Strategy Lab** (`/lab`) — advisory pattern catalog, multi-pair desk ranking, and session playbook what-ifs. Shared left sidebar links the full workspace.
+
 
 ## Design guarantees
 

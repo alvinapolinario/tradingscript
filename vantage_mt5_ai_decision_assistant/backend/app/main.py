@@ -118,6 +118,30 @@ def analyzer_page():
     return FileResponse(page)
 
 
+@app.get("/patterns")
+def patterns_page():
+    page = STATIC_DIR / "patterns.html"
+    if not page.exists():
+        return {"error": "patterns.html missing", "path": str(page)}
+    return FileResponse(page)
+
+
+@app.get("/scanner")
+def scanner_page():
+    page = STATIC_DIR / "scanner.html"
+    if not page.exists():
+        return {"error": "scanner.html missing", "path": str(page)}
+    return FileResponse(page)
+
+
+@app.get("/lab")
+def lab_page():
+    page = STATIC_DIR / "lab.html"
+    if not page.exists():
+        return {"error": "lab.html missing", "path": str(page)}
+    return FileResponse(page)
+
+
 @app.get("/coming-soon")
 def coming_soon_page():
     page = STATIC_DIR / "coming-soon.html"

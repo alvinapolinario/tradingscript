@@ -259,7 +259,10 @@ Default publish port: **8000** (confirm it is free: `ss -tulnp | grep 8000`).
 | Market Overview | `/monitor` |
 | Smart Analyzer | `/analyzer` |
 | Signal Center | `/signals` |
-| Opportunity Radar / Strategy Lab (desk) | `/dashboard` |
+| Opportunity Radar | `/dashboard` |
+| Pattern Strategy | `/patterns` |
+| Strategy Scanner | `/scanner` |
+| Strategy Lab | `/lab` |
 | Other tools | `/coming-soon` |
 
 Left nav is shared (`/static/shell.js`). Analyzer embeds a **TradingView Advanced Chart** (reference market data; Vantage desk levels stay in the strip below — ticks may differ from MT5).

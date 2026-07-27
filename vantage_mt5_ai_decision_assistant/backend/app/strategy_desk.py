@@ -6,6 +6,7 @@ Advisory-only; does not execute trades.
 """
 from __future__ import annotations
 
+from copy import deepcopy
 from typing import Any, Optional
 
 
@@ -59,6 +60,28 @@ def _sym_key(symbol: str) -> str:
         if key in s or s.endswith(key) or s.startswith(key):
             return key
     return s
+
+
+def playbook_spec(monitor_status: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Base STRATEGY_SPEC merged with optional session lab_overrides."""
+    spec = deepcopy(STRATEGY_SPEC)
+    ov = (monitor_status or {}).get("lab_overrides") or {}
+    try:
+        if ov.get("min_adx") is not None:
+            spec["indicators"]["min_adx"] = float(ov["min_adx"])
+        if ov.get("min_reward_risk") is not None:
+            spec["risk"]["min_reward_risk"] = float(ov["min_reward_risk"])
+        if ov.get("risk_pct") is not None:
+            spec["risk"]["risk_pct"] = float(ov["risk_pct"])
+        if ov.get("max_age_completed_m5") is not None:
+            spec["setup"]["max_age_completed_m5"] = int(ov["max_age_completed_m5"])
+        if ov.get("news_before") is not None:
+            spec["news_block"]["minutes_before"] = int(ov["news_before"])
+        if ov.get("news_after") is not None:
+            spec["news_block"]["minutes_after"] = int(ov["news_after"])
+    except (TypeError, ValueError):
+        pass
+    return spec
 
 
 def max_spread_for_symbol(symbol: str) -> Optional[int]:
@@ -135,7 +158,7 @@ def evaluate_gates(monitor_status: dict[str, Any]) -> list[dict[str, Any]]:
     ea = _ea_blob(monitor_status)
     connected = _ea_is_connected(monitor_status, ea)
     st = _extra_strategy(ea)
-    spec = STRATEGY_SPEC
+    spec = playbook_spec(monitor_status)
     symbol = str(ea.get("symbol") or monitor_status.get("selected_symbol") or "")
     spread = int(ea.get("spread_points") or 0)
     high_spread = bool(ea.get("high_spread"))
@@ -144,6 +167,12 @@ def evaluate_gates(monitor_status: dict[str, Any]) -> list[dict[str, Any]]:
         max_spread = max_spread_for_symbol(symbol)
 
     gates: list[dict[str, Any]] = []
+    min_adx = float(spec["indicators"]["min_adx"])
+    min_rr = float(spec["risk"]["min_reward_risk"])
+    risk_pct = float(spec["risk"]["risk_pct"])
+    adx_label = f"ADX ≥ {min_adx:.0f}"
+    rr_label = f"Reward:risk ≥ {min_rr:.1f}"
+    risk_label = f"Risk ≤ {risk_pct:.2f}%"
 
     # 1) Live feed
     if not connected:
@@ -187,9 +216,8 @@ def evaluate_gates(monitor_status: dict[str, Any]) -> list[dict[str, Any]]:
 
     # 3) ADX
     adx = st.get("adx14")
-    min_adx = float(spec["indicators"]["min_adx"])
     if adx is None:
-        gates.append(_gate("adx", "ADX ≥ 20", "unknown", f"ADX({spec['indicators']['adx_period']}) pending strategy feed"))
+        gates.append(_gate("adx", adx_label, "unknown", f"ADX({spec['indicators']['adx_period']}) pending strategy feed"))
     else:
         try:
             adx_f = float(adx)
@@ -197,13 +225,13 @@ def evaluate_gates(monitor_status: dict[str, Any]) -> list[dict[str, Any]]:
             gates.append(
                 _gate(
                     "adx",
-                    "ADX ≥ 20",
+                    adx_label,
                     "pass" if ok else "fail",
                     f"ADX={adx_f:.1f} (min {min_adx:.0f})",
                 )
             )
         except (TypeError, ValueError):
-            gates.append(_gate("adx", "ADX ≥ 20", "unknown", "Invalid ADX value"))
+            gates.append(_gate("adx", adx_label, "unknown", "Invalid ADX value"))
 
     # 4) R:R
     rr = st.get("reward_risk_ratio")
@@ -212,9 +240,8 @@ def evaluate_gates(monitor_status: dict[str, Any]) -> list[dict[str, Any]]:
     # sometimes flat on decision
     if rr is None:
         rr = ea.get("reward_risk_ratio")
-    min_rr = float(spec["risk"]["min_reward_risk"])
     if rr is None:
-        gates.append(_gate("rr", "Reward:risk ≥ 2.0", "unknown", f"Min R:R {min_rr:.1f} · awaiting setup levels"))
+        gates.append(_gate("rr", rr_label, "unknown", f"Min R:R {min_rr:.1f} · awaiting setup levels"))
     else:
         try:
             rr_f = float(rr)
@@ -222,16 +249,15 @@ def evaluate_gates(monitor_status: dict[str, Any]) -> list[dict[str, Any]]:
             gates.append(
                 _gate(
                     "rr",
-                    "Reward:risk ≥ 2.0",
+                    rr_label,
                     "pass" if ok else "fail",
                     f"R:R={rr_f:.2f} (min {min_rr:.1f})",
                 )
             )
         except (TypeError, ValueError):
-            gates.append(_gate("rr", "Reward:risk ≥ 2.0", "unknown", "Invalid R:R"))
+            gates.append(_gate("rr", rr_label, "unknown", "Invalid R:R"))
 
     # 5) Risk % — prefer desk planned size, then open-position equity risk
-    risk_pct = float(spec["risk"]["risk_pct"])
     equity_risk = st.get("planned_equity_risk_pct")
     if equity_risk is None:
         equity_risk = ea.get("equity_risk_pct")
@@ -239,7 +265,7 @@ def evaluate_gates(monitor_status: dict[str, Any]) -> list[dict[str, Any]]:
         gates.append(
             _gate(
                 "risk_pct",
-                "Risk ≤ 0.50%",
+                risk_label,
                 "warn",
                 f"Playbook risk {risk_pct:.2f}% of equity · size manually to this cap",
             )
@@ -251,7 +277,7 @@ def evaluate_gates(monitor_status: dict[str, Any]) -> list[dict[str, Any]]:
                 gates.append(
                     _gate(
                         "risk_pct",
-                        "Risk ≤ 0.50%",
+                        risk_label,
                         "warn",
                         f"Playbook risk {risk_pct:.2f}% of equity · size manually to this cap",
                     )
@@ -262,13 +288,13 @@ def evaluate_gates(monitor_status: dict[str, Any]) -> list[dict[str, Any]]:
                 gates.append(
                     _gate(
                         "risk_pct",
-                        "Risk ≤ 0.50%",
+                        risk_label,
                         "pass" if ok else "fail",
                         f"Equity risk {er:.2f}% (cap {risk_pct:.2f}%)",
                     )
                 )
         except (TypeError, ValueError):
-            gates.append(_gate("risk_pct", "Risk ≤ 0.50%", "warn", f"Cap {risk_pct:.2f}%"))
+            gates.append(_gate("risk_pct", risk_label, "warn", f"Cap {risk_pct:.2f}%"))
 
     # 6) Spread
     if max_spread is None:
