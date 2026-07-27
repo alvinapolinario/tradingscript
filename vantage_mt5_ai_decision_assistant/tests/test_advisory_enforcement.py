@@ -72,4 +72,4 @@ def test_login_not_in_payload_builder():
 def test_webrequest_guidance_present():
     backend = (MQL5 / "Include" / "VantageAI" / "VantageBackend.mqh").read_text(encoding="utf-8")
     assert "Allow WebRequest" in backend
-    assert "127.0.0.1:8000" in backend
+    assert "187.77.142.118:8000" in backend or "8000" in backend

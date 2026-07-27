@@ -62,7 +62,7 @@ Other Vantage builds may show suffixes (`XAUUSD.`, `XAUUSD+`, `GOLD`). Use whate
 2. Enable **Allow WebRequest for listed URL**.
 3. Add exactly:
    ```
-   http://127.0.0.1:8000
+   http://187.77.142.118:8000
    ```
 4. OK → restart the terminal if prompted.
 
@@ -90,7 +90,7 @@ python run.py
 
 Defaults:
 
-- Monitor UI: **http://127.0.0.1:8000/monitor**
+- Monitor UI: **http://187.77.142.118:8000/monitor**
 - Health: `GET /health`
 - Heartbeat: `POST /api/v1/heartbeat`
 - Analyze: `POST /api/v1/analyze`
@@ -99,16 +99,18 @@ Defaults:
 Open the monitor page in a browser to see:
 
 - API online / offline
-- Live **WebSocket** updates (`ws://127.0.0.1:8000/ws/monitor`) — no page refresh polling
+- Live **WebSocket** updates (`ws://187.77.142.118:8000/ws/monitor`) — no page refresh polling
 - Vantage EA connected (heartbeat within ~45s)
 - Symbol, spread, dual decisions (new entry + existing position), risk status
 - Equity risk %, estimated SL loss, add/new position allowed
 - **Decision Brief** (situation, prioritized recommendations, checklist — not raw logs)
 
-**Separate M5 Alignment Desk:** [http://127.0.0.1:8000/dashboard](http://127.0.0.1:8000/dashboard)  
+**Separate M5 Alignment Desk:** [http://187.77.142.118:8000/dashboard](http://187.77.142.118:8000/dashboard)  
+**Accepted Signal Ledger:** [http://187.77.142.118:8000/signals](http://187.77.142.118:8000/signals) (stores advisory BUY/SELL when desk is SETUP_OK)  
+**Smart Analyzer:** [http://187.77.142.118:8000/analyzer](http://187.77.142.118:8000/analyzer) (Take/Ignore records a decision only — no MT5 order)
 Playbook: M5 analysis / M15 structure / H1 bias · EMA 20/50/200 · ATR/ADX 14 (min ADX 20) · min R:R 2.0 · risk 0.50% · pair-specific max spread · news block 30m before / 15m after · setup age ≤ 3 completed M5 · candle-close confirmation · direction only with H1+M15 alignment.
 
-With EA input **H. M5 Alignment Desk** enabled (`InpM5DeskEnable=true`, default), each heartbeat includes a `strategy` object so the gate board can go PASS/FAIL. Requires: backend running, WebRequest allowed for `http://127.0.0.1:8000`, EA attached to the selected pair, MetaEditor recompile after sync.
+With EA input **H. M5 Alignment Desk** enabled (`InpM5DeskEnable=true`, default), each heartbeat includes a `strategy` object so the gate board can go PASS/FAIL. Requires: backend running, WebRequest allowed for `http://187.77.142.118:8000`, EA attached to the selected pair, MetaEditor recompile after sync.
 
 **Clear EA feed FAIL:** start backend (`python run.py`) → allow WebRequest URL → attach compiled EA → pick matching pair on `/dashboard` → wait ~15s.
 
@@ -136,7 +138,7 @@ The web monitor has a **Pair** selector (**XAUUSD** / **BTCUSD**). Each chart ne
 1. Open the symbol on **M30** (gold: **XAUUSD**, crypto: **BTCUSD** — use your broker’s exact name).
 2. Navigator → Expert Advisors → drag `VantageMT5AIDecisionAssistant`.
 3. Inputs:
-   - `InpBackendUrl` = `http://127.0.0.1:8000` (or your host if remote)
+   - `InpBackendUrl` = `http://187.77.142.118:8000`
    - `InpBearerToken` = same as backend `LOCAL_API_TOKEN`
    - `InpAdvisoryOnly` = **true** (required)
    - On BTCUSD: keep `InpLevelSource=AUTO_NON_GOLD` or `AUTO`; raise `InpMaxSpreadPoints` or set `0`
@@ -213,7 +215,7 @@ No FastAPI / WebRequest is used in tester. A separate trading EA would be requir
 
 | Symptom | Likely cause | Fix |
 |--------|---------------|-----|
-| err 4014 / 4060 | URL not allow-listed | Add `http://127.0.0.1:8000` |
+| err 4014 / 4060 | URL not allow-listed | Add `http://187.77.142.118:8000` |
 | Connection failure | Backend not running | Start `python run.py` |
 | HTTP 401 | Token mismatch | Align EA token and `.env` |
 | Timeout | Backend hung / firewall | Check localhost:8000 `/health` |
@@ -258,10 +260,10 @@ sudo ufw reload
 ```
 
 ### MT5 EA settings
-1. `InpBackendUrl` = `http://YOUR_VPS_IP:8000` (or `https://trading.yourdomain.com` if proxied)
+1. `InpBackendUrl` = `http://187.77.142.118:8000` (or your HTTPS domain if proxied)
 2. `InpBearerToken` = same as `LOCAL_API_TOKEN` in `.env`
 3. Tools → Options → Expert Advisors → Allow WebRequest for that exact URL
-4. Open monitor: `http://YOUR_VPS_IP:8000/monitor` (or `/dashboard`)
+4. Open monitor: `http://187.77.142.118:8000/monitor` (or `/dashboard`)
 
 ### Useful commands
 ```bash

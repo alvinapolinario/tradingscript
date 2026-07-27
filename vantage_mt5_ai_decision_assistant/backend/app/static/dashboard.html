@@ -4,6 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>M5 Alignment Desk · Vantage</title>
+  <link rel="stylesheet" href="/static/shell.css" />
   <style>
     :root {
       --bg: #0a1210;
@@ -227,7 +228,7 @@
     }
   </style>
 </head>
-<body>
+<body data-nav="dashboard">
   <header>
     <div>
       <h1>M5 Alignment Desk</h1>
@@ -243,7 +244,6 @@
       </div>
       <span class="pill" id="connPill"><span class="dot" id="connDot"></span><span id="connText">…</span></span>
       <span class="pill" id="wsPill"><span class="dot" id="wsDot"></span><span id="wsText">WS …</span></span>
-      <span class="pill linkish"><a href="/monitor">M30 Cockpit →</a></span>
       <span class="pill">Advisory only</span>
     </div>
   </header>
@@ -481,5 +481,6 @@
     connectWs();
     setInterval(refresh, 15000);
   </script>
+  <script src="/static/shell.js"></script>
 </body>
 </html>

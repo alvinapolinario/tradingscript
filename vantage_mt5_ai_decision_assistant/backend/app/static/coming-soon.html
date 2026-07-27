@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Coming soon · Vantage</title>
+  <link rel="stylesheet" href="/static/shell.css" />
+  <style>
+    :root {
+      --bg: #070a0b;
+      --text: #e8f0ee;
+      --muted: #7f9490;
+      --line: #243035;
+      --panel: #101518;
+      --accent: #10b981;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", system-ui, sans-serif;
+      color: var(--text);
+      min-height: 100vh;
+      background: radial-gradient(700px 320px at 70% 0%, #123028 0%, transparent 55%), var(--bg);
+    }
+    main {
+      max-width: 560px;
+      margin: 0 auto;
+      padding: 4rem 1.25rem;
+    }
+    .card {
+      border: 1px solid var(--line);
+      background: var(--panel);
+      border-radius: 16px;
+      padding: 1.5rem 1.35rem;
+    }
+    h1 { margin: 0 0 .5rem; font-size: 1.35rem; }
+    p { color: var(--muted); line-height: 1.5; margin: 0 0 1rem; }
+    a.cta {
+      display: inline-block;
+      padding: .55rem .9rem;
+      border-radius: 10px;
+      background: rgba(16,185,129,.15);
+      color: var(--accent);
+      text-decoration: none;
+      font-weight: 650;
+    }
+  </style>
+</head>
+<body data-nav="coming-soon">
+  <main>
+    <div class="card">
+      <h1 id="title">Coming soon</h1>
+      <p>This tool is on the roadmap. The live advisory surfaces today are Market Overview, Smart Analyzer, Signal Center, and Opportunity Radar / Strategy Lab.</p>
+      <a class="cta" href="/analyzer">Open Smart Analyzer</a>
+    </div>
+  </main>
+  <script>
+    const t = new URLSearchParams(location.search).get("t");
+    if (t) document.getElementById("title").textContent = t;
+    document.title = (t || "Coming soon") + " · Vantage";
+  </script>
+  <script src="/static/shell.js"></script>
+</body>
+</html>

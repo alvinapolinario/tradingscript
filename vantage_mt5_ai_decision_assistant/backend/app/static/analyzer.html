@@ -1,0 +1,659 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Smart Analyzer · Vantage</title>
+  <link rel="stylesheet" href="/static/shell.css" />
+  <style>
+    :root {
+      --bg: #070a0b;
+      --panel: #101518;
+      --panel2: #141a1c;
+      --line: #243035;
+      --text: #e8f0ee;
+      --muted: #7f9490;
+      --buy: #00e887;
+      --buy-dim: rgba(0, 232, 135, .14);
+      --sell: #ff5c6a;
+      --sell-dim: rgba(255, 92, 106, .14);
+      --accent: #00e887;
+      --warn: #e8c547;
+      --mono: "IBM Plex Mono", "Cascadia Code", Consolas, monospace;
+      --sans: "Segoe UI", "IBM Plex Sans", system-ui, sans-serif;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: var(--sans);
+      color: var(--text);
+      background:
+        radial-gradient(900px 420px at 80% -10%, #123028 0%, transparent 55%),
+        var(--bg);
+      min-height: 100vh;
+      padding-bottom: 4.5rem;
+    }
+    a { color: var(--accent); text-decoration: none; }
+    button { font: inherit; cursor: pointer; }
+    .topbar {
+      display: flex; align-items: center; justify-content: space-between;
+      gap: .75rem; flex-wrap: wrap;
+      padding: .7rem 1rem;
+      border-bottom: 1px solid var(--line);
+      background: rgba(7,10,11,.92);
+      position: sticky; top: 0; z-index: 20;
+    }
+    .brand { display: flex; align-items: center; gap: .75rem; }
+    .brand h1 { margin: 0; font-size: 1.05rem; letter-spacing: .02em; }
+    .mode-toggle {
+      display: inline-flex; border: 1px solid var(--line); border-radius: 999px; overflow: hidden;
+    }
+    .mode-toggle button {
+      border: 0; background: transparent; color: var(--muted);
+      padding: .35rem .85rem; font-size: .72rem; letter-spacing: .08em; font-weight: 700;
+    }
+    .mode-toggle button.active { background: var(--buy-dim); color: var(--buy); }
+    .top-actions { display: flex; gap: .5rem; align-items: center; flex-wrap: wrap; }
+    select, .run-btn, .nav-pill {
+      border: 1px solid var(--line); background: var(--panel); color: var(--text);
+      border-radius: 10px; padding: .45rem .75rem; font-size: .82rem;
+    }
+    .run-btn {
+      background: linear-gradient(180deg, #14f09a, #00c874);
+      color: #04140e; border: 0; font-weight: 700;
+    }
+    .run-btn:disabled { opacity: .55; cursor: wait; }
+    .nav-pill a { color: inherit; }
+    .wrap { max-width: 1440px; margin: 0 auto; padding: .85rem 1rem 1rem; }
+    .signal-row {
+      display: grid;
+      grid-template-columns: 1.35fr 1fr 1.1fr auto;
+      gap: .7rem; margin-bottom: .7rem;
+    }
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: .85rem 1rem;
+    }
+    .card .k {
+      font-size: .68rem; letter-spacing: .08em; text-transform: uppercase; color: var(--muted);
+    }
+    .card .v { margin-top: .35rem; font-size: 1.05rem; font-weight: 700; }
+    .card .s { margin-top: .25rem; font-size: .78rem; color: var(--muted); }
+    .action-card.buy { border-color: rgba(0,232,135,.35); background: linear-gradient(135deg, #0e2218, var(--panel)); }
+    .action-card.sell { border-color: rgba(255,92,106,.35); background: linear-gradient(135deg, #261014, var(--panel)); }
+    .action-card .v { font-size: 1.25rem; }
+    .action-card.buy .v { color: var(--buy); }
+    .action-card.sell .v { color: var(--sell); }
+    .score-chip {
+      display: inline-flex; align-items: center; gap: .35rem;
+      margin-top: .45rem; font-family: var(--mono); font-size: .9rem;
+    }
+    .decide {
+      display: flex; flex-direction: column; gap: .45rem; justify-content: center; min-width: 180px;
+    }
+    .btn-take {
+      border: 0; border-radius: 12px; padding: .75rem 1rem;
+      font-weight: 800; letter-spacing: .04em; font-size: .95rem;
+      background: linear-gradient(180deg, #14f09a, #00c874); color: #04140e;
+    }
+    .btn-take.sell { background: linear-gradient(180deg, #ff7a84, #e44555); color: #1a0507; }
+    .btn-ignore {
+      border: 1px solid var(--line); border-radius: 12px; padding: .55rem 1rem;
+      background: transparent; color: var(--muted); font-weight: 600;
+    }
+    .btn-take:disabled, .btn-ignore:disabled { opacity: .45; cursor: not-allowed; }
+    .caption { font-size: .68rem; color: var(--muted); text-align: center; line-height: 1.35; }
+    .subbar {
+      display: flex; align-items: center; justify-content: space-between; gap: .75rem; flex-wrap: wrap;
+      padding: .55rem .75rem; margin-bottom: .7rem;
+      border: 1px solid var(--line); border-radius: 12px; background: var(--panel2);
+      font-size: .78rem; color: var(--muted);
+    }
+    .tf-tabs { display: inline-flex; gap: .25rem; }
+    .tf-tabs button {
+      border: 0; background: transparent; color: var(--muted);
+      padding: .3rem .55rem; border-radius: 8px; font-weight: 700; font-size: .75rem;
+    }
+    .tf-tabs button.active { background: var(--buy-dim); color: var(--buy); }
+    .subbar .state { color: var(--warn); font-weight: 700; letter-spacing: .04em; }
+    .main {
+      display: grid;
+      grid-template-columns: 1fr 340px;
+      gap: .75rem;
+      min-height: 520px;
+    }
+    .chart-panel { position: relative; overflow: hidden; min-height: 520px; }
+    .chart-legend {
+      display: flex; flex-wrap: wrap; gap: .55rem;
+      font-size: .68rem; color: var(--muted); margin-bottom: .5rem;
+    }
+    .chart-legend span::before {
+      content: ""; display: inline-block; width: 10px; height: 2px;
+      margin-right: .3rem; vertical-align: middle; background: currentColor;
+    }
+    .chart-legend .ema20 { color: #5ec8ff; }
+    .chart-legend .ema50 { color: #c9a227; }
+    .chart-legend .ema200 { color: #b388ff; }
+    .chart-wrap { height: 430px; width: 100%; }
+    .chart-wrap svg { width: 100%; height: 100%; display: block; }
+    .pattern-badge {
+      position: absolute; left: 1rem; bottom: 1rem;
+      background: rgba(10,16,14,.9); border: 1px solid var(--line);
+      border-radius: 10px; padding: .55rem .7rem; font-size: .78rem;
+    }
+    .pattern-badge strong { color: var(--buy); }
+    .side-panel { display: flex; flex-direction: column; gap: .65rem; }
+    .gauge-wrap { text-align: center; padding: 1rem .75rem .75rem; }
+    .gauge { width: 140px; height: 140px; margin: 0 auto; position: relative; }
+    .gauge svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+    .gauge .num {
+      position: absolute; inset: 0; display: grid; place-items: center;
+      font-size: 2.2rem; font-weight: 800; font-family: var(--mono);
+    }
+    .locked {
+      margin-top: .35rem; font-size: .72rem; letter-spacing: .1em;
+      text-transform: uppercase; color: var(--muted);
+    }
+    .locked.buy { color: var(--buy); }
+    .locked.sell { color: var(--sell); }
+    .await { font-size: .78rem; color: var(--warn); margin-top: .2rem; }
+    .vote { margin-top: .85rem; text-align: left; }
+    .vote-row { display: flex; justify-content: space-between; font-size: .72rem; margin-bottom: .2rem; }
+    .vote-bar { height: 8px; border-radius: 999px; background: #1a2224; overflow: hidden; display: flex; }
+    .vote-bar .b { background: var(--buy); }
+    .vote-bar .s { background: var(--sell); }
+    .meta-grid { display: grid; gap: .45rem; font-size: .8rem; }
+    .meta-grid div { display: flex; justify-content: space-between; gap: .5rem; }
+    .meta-grid span { color: var(--muted); }
+    .contrib h3 {
+      margin: 0 0 .55rem; font-size: .72rem; letter-spacing: .08em;
+      text-transform: uppercase; color: var(--muted); font-weight: 700;
+    }
+    .contrib-item {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: .4rem 0; border-top: 1px solid var(--line); font-size: .82rem;
+    }
+    .contrib-item .sc { font-family: var(--mono); font-weight: 700; color: var(--buy); }
+    .plan-note {
+      font-size: .72rem; color: var(--muted); border-top: 1px solid var(--line);
+      padding-top: .55rem; margin-top: .35rem;
+    }
+    .bottombar {
+      position: fixed; left: var(--shell-w, 232px); right: 0; bottom: 0; z-index: 30;
+      display: grid; grid-template-columns: 1.1fr 1fr 1fr 1fr 1fr;
+      gap: .5rem; align-items: center;
+      padding: .65rem 1rem;
+      background: rgba(8,12,13,.96);
+      border-top: 1px solid var(--line);
+      font-size: .78rem;
+    }
+    @media (max-width: 960px) {
+      .bottombar { left: 0; }
+    }
+    .bottombar .bk { color: var(--muted); font-size: .65rem; letter-spacing: .06em; text-transform: uppercase; }
+    .bottombar .bv { font-family: var(--mono); font-weight: 700; margin-top: .15rem; }
+    .bottombar .take-lbl { color: var(--buy); font-size: 1rem; font-weight: 800; }
+    .bottombar .take-lbl.sell { color: var(--sell); }
+    .empty-hint { color: var(--muted); padding: 2rem 1rem; text-align: center; }
+    @media (max-width: 1100px) {
+      .signal-row { grid-template-columns: 1fr 1fr; }
+      .decide { grid-column: 1 / -1; flex-direction: row; align-items: center; }
+      .main { grid-template-columns: 1fr; }
+      .bottombar { grid-template-columns: 1fr 1fr; }
+    }
+  </style>
+</head>
+<body data-nav="analyzer">
+  <header class="topbar">
+    <div class="brand">
+      <h1>Smart Analyzer</h1>
+      <div class="mode-toggle" id="modeToggle">
+        <button type="button" data-mode="STANDARD" class="active">STANDARD</button>
+        <button type="button" data-mode="SCALPING">SCALPING</button>
+      </div>
+    </div>
+    <div class="top-actions">
+      <select id="symbolSelect" aria-label="Symbol"></select>
+      <button class="run-btn" id="runBtn" type="button">Run analysis</button>
+    </div>
+  </header>
+
+  <div class="wrap">
+    <div class="signal-row">
+      <div class="card action-card" id="actionCard">
+        <div class="k">Action required</div>
+        <div class="v" id="actionTitle">No active signal</div>
+        <div class="s" id="actionSub">Waiting for M5 SETUP_OK</div>
+        <div class="score-chip">Score <strong id="actionScore">—</strong></div>
+      </div>
+      <div class="card">
+        <div class="k" id="entryLabel">Entry zone</div>
+        <div class="v" id="entryZone">—</div>
+        <div class="s">Advisory levels from desk + ATR</div>
+      </div>
+      <div class="card">
+        <div class="k">Signal expiration</div>
+        <div class="v" id="expiryTitle">ENTRY WINDOW</div>
+        <div class="s" id="expirySub">— closed candles remaining</div>
+      </div>
+      <div class="decide">
+        <button class="btn-take" id="btnTake" type="button" disabled>TAKE</button>
+        <button class="btn-ignore" id="btnIgnore" type="button" disabled>Ignore</button>
+        <div class="caption" id="caption">Records your decision only — no MT5 order is sent.</div>
+      </div>
+    </div>
+
+    <div class="subbar">
+      <div class="tf-tabs" id="tfTabs">
+        <button type="button" data-tf="M1">M1</button>
+        <button type="button" data-tf="M5">M5</button>
+        <button type="button" data-tf="M15">M15</button>
+        <button type="button" data-tf="H1">H1</button>
+        <button type="button" data-tf="H4" class="active">H4</button>
+      </div>
+      <div id="brokerLine">MT5</div>
+      <div id="alignLine">0/5 aligned</div>
+      <div class="state" id="decisionState">NO SIGNAL</div>
+    </div>
+
+    <div class="main">
+      <section class="card chart-panel">
+        <div class="chart-legend">
+          <span class="ema20">EMA 20</span>
+          <span class="ema50">EMA 50</span>
+          <span class="ema200">EMA 200</span>
+          <span>Entry / SL / Targets</span>
+        </div>
+        <div class="chart-wrap" id="chart"></div>
+        <div class="pattern-badge" id="patternBadge" hidden>
+          <strong id="patternLabel">—</strong>
+          <div id="patternBias"></div>
+        </div>
+      </section>
+
+      <aside class="side-panel">
+        <div class="card gauge-wrap">
+          <div class="k">Authoritative signal</div>
+          <div class="gauge">
+            <svg viewBox="0 0 120 120" aria-hidden="true">
+              <circle cx="60" cy="60" r="52" fill="none" stroke="#1c2628" stroke-width="10" />
+              <circle id="gaugeArc" cx="60" cy="60" r="52" fill="none" stroke="#00e887"
+                stroke-width="10" stroke-linecap="round"
+                stroke-dasharray="0 327" />
+            </svg>
+            <div class="num" id="gaugeNum">—</div>
+          </div>
+          <div class="locked" id="lockedSide">LOCKED —</div>
+          <div class="await" id="sideAwait">—</div>
+          <div class="vote">
+            <div class="vote-row"><span id="buyVote">BUY — 0 / 0 pts</span><span id="sellVote">SELL — 0 / 0 pts</span></div>
+            <div class="vote-bar"><div class="b" id="buyBar" style="width:50%"></div><div class="s" id="sellBar" style="width:50%"></div></div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="meta-grid">
+            <div><span>Market regime</span><strong id="regime">—</strong></div>
+            <div><span>Leading contributor</span><strong id="leading">—</strong></div>
+          </div>
+        </div>
+        <div class="card contrib">
+          <h3>Signal contributors</h3>
+          <div id="contribList"><div class="empty-hint">No contributors yet</div></div>
+          <div class="plan-note">Confirmed trade planning is advisory and auto-recorded when you Take or Ignore — never sent to MT5.</div>
+        </div>
+      </aside>
+    </div>
+  </div>
+
+  <footer class="bottombar">
+    <div>
+      <div class="bk">Top action</div>
+      <div class="take-lbl" id="botTake">—</div>
+    </div>
+    <div>
+      <div class="bk">Live / entry</div>
+      <div class="bv" id="botLive">—</div>
+    </div>
+    <div>
+      <div class="bk">Protection (SL)</div>
+      <div class="bv" id="botSl">—</div>
+    </div>
+    <div>
+      <div class="bk">Profit map (TP1)</div>
+      <div class="bv" id="botTp">—</div>
+    </div>
+    <div>
+      <div class="bk">Validity</div>
+      <div class="bv" id="botBars">—</div>
+    </div>
+  </footer>
+
+  <script>
+    const state = {
+      mode: "STANDARD",
+      timeframe: "H4",
+      data: null,
+      busy: false,
+    };
+
+    function $(id) { return document.getElementById(id); }
+
+    function fmtPx(n, digits) {
+      if (n == null || Number.isNaN(Number(n))) return "—";
+      const x = Number(n);
+      const d = digits != null ? digits : (x >= 100 ? 2 : (x >= 1 ? 4 : 5));
+      return x.toLocaleString(undefined, { minimumFractionDigits: d, maximumFractionDigits: d });
+    }
+
+    function setMode(mode) {
+      state.mode = mode;
+      document.querySelectorAll("#modeToggle button").forEach((b) => {
+        b.classList.toggle("active", b.dataset.mode === mode);
+      });
+      if (mode === "SCALPING" && state.timeframe === "H4") setTf("M5", false);
+      if (mode === "STANDARD" && state.timeframe === "M5") setTf("H4", false);
+      refresh();
+    }
+
+    function setTf(tf, doRefresh = true) {
+      state.timeframe = tf;
+      document.querySelectorAll("#tfTabs button").forEach((b) => {
+        b.classList.toggle("active", b.dataset.tf === tf);
+      });
+      if (doRefresh) refresh();
+    }
+
+    function gauge(score) {
+      const circ = 2 * Math.PI * 52;
+      const s = Math.max(0, Math.min(100, Number(score) || 0));
+      const arc = $("gaugeArc");
+      arc.setAttribute("stroke-dasharray", `${(s / 100) * circ} ${circ}`);
+      arc.setAttribute("stroke", s >= 60 ? "#00e887" : (s >= 40 ? "#e8c547" : "#ff5c6a"));
+      $("gaugeNum").textContent = score != null ? String(score) : "—";
+    }
+
+    function synthCandles(mid, atr, n = 48) {
+      const out = [];
+      let p = mid - atr * 1.2;
+      let seed = Math.floor(mid * 100) % 9973;
+      const rnd = () => {
+        seed = (seed * 16807) % 2147483647;
+        return (seed % 1000) / 1000;
+      };
+      for (let i = 0; i < n; i++) {
+        const drift = (rnd() - 0.45) * atr * 0.35;
+        const o = p;
+        const c = p + drift;
+        const h = Math.max(o, c) + rnd() * atr * 0.15;
+        const l = Math.min(o, c) - rnd() * atr * 0.15;
+        out.push({ o, h, l, c });
+        p = c;
+      }
+      // Pull last candle toward live mid
+      const last = out[out.length - 1];
+      last.c = mid;
+      last.h = Math.max(last.h, mid);
+      last.l = Math.min(last.l, mid);
+      return out;
+    }
+
+    function ema(values, period) {
+      const k = 2 / (period + 1);
+      const out = [];
+      let prev = values[0];
+      for (let i = 0; i < values.length; i++) {
+        prev = i === 0 ? values[0] : values[i] * k + prev * (1 - k);
+        out.push(prev);
+      }
+      return out;
+    }
+
+    function renderChart(payload) {
+      const el = $("chart");
+      const sig = payload.active_signal;
+      const live = payload.live || {};
+      const mid = Number(live.mid) || (sig ? (Number(sig.entry_low) + Number(sig.entry_high)) / 2 : 0);
+      const atr = Number((sig && sig.atr14) || (payload.dashboard && payload.dashboard.market && payload.dashboard.market.atr14) || mid * 0.002);
+      if (!mid) {
+        el.innerHTML = `<div class="empty-hint">Attach EA and wait for price feed</div>`;
+        return;
+      }
+      const candles = synthCandles(mid, atr || mid * 0.002);
+      const closes = candles.map((c) => c.c);
+      const e20 = ema(closes, 20);
+      const e50 = ema(closes, 50);
+      const e200 = ema(closes, 200);
+
+      const levels = [];
+      if (sig) {
+        levels.push({ label: "Entry", price: (Number(sig.entry_low) + Number(sig.entry_high)) / 2, color: "#00e887" });
+        levels.push({ label: "SL", price: Number(sig.stop), color: "#ff5c6a" });
+      }
+      (payload.targets || []).forEach((t, i) => {
+        levels.push({ label: t.label || `TP${i + 1}`, price: Number(t.price), color: i === 0 ? "#00e887" : "#7f9490" });
+      });
+
+      const allY = candles.flatMap((c) => [c.h, c.l]).concat(levels.map((l) => l.price).filter(Boolean));
+      let ymin = Math.min(...allY);
+      let ymax = Math.max(...allY);
+      const pad = (ymax - ymin) * 0.08 || atr;
+      ymin -= pad; ymax += pad;
+
+      const W = 900, H = 420, L = 8, R = 72, T = 10, B = 16;
+      const plotW = W - L - R, plotH = H - T - B;
+      const x = (i) => L + (i + 0.5) * (plotW / candles.length);
+      const y = (p) => T + ((ymax - p) / (ymax - ymin)) * plotH;
+      const cw = Math.max(2, plotW / candles.length - 2);
+
+      let candlesSvg = "";
+      candles.forEach((c, i) => {
+        const up = c.c >= c.o;
+        const color = up ? "#00e887" : "#ff5c6a";
+        candlesSvg += `<line x1="${x(i)}" y1="${y(c.h)}" x2="${x(i)}" y2="${y(c.l)}" stroke="${color}" stroke-width="1"/>`;
+        candlesSvg += `<rect x="${x(i) - cw / 2}" y="${y(Math.max(c.o, c.c))}" width="${cw}" height="${Math.max(1, Math.abs(y(c.o) - y(c.c)))}" fill="${color}"/>`;
+      });
+
+      const linePath = (arr, color) => {
+        let d = "";
+        arr.forEach((v, i) => { d += `${i ? "L" : "M"}${x(i).toFixed(1)},${y(v).toFixed(1)} `; });
+        return `<path d="${d}" fill="none" stroke="${color}" stroke-width="1.4"/>`;
+      };
+
+      let levelSvg = "";
+      levels.forEach((lv) => {
+        if (!lv.price) return;
+        const yy = y(lv.price);
+        levelSvg += `<line x1="${L}" y1="${yy}" x2="${W - R}" y2="${yy}" stroke="${lv.color}" stroke-dasharray="4 3" stroke-width="1" opacity=".85"/>`;
+        levelSvg += `<text x="${W - R + 4}" y="${yy + 3}" fill="${lv.color}" font-size="10" font-family="monospace">${lv.label} ${fmtPx(lv.price, live.digits)}</text>`;
+      });
+
+      el.innerHTML = `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">
+        <rect x="0" y="0" width="${W}" height="${H}" fill="#0c1213"/>
+        ${candlesSvg}
+        ${linePath(e20, "#5ec8ff")}
+        ${linePath(e50, "#c9a227")}
+        ${linePath(e200, "#b388ff")}
+        ${levelSvg}
+      </svg>`;
+    }
+
+    function render(payload) {
+      state.data = payload;
+      const sig = payload.active_signal;
+      const live = payload.live || {};
+      const digits = live.digits;
+      const side = (sig && sig.side) || null;
+      const isBuy = side === "BUY";
+      const isSell = side === "SELL";
+
+      const sel = $("symbolSelect");
+      const symbols = payload.symbols || [];
+      const current = payload.selected_symbol || "";
+      if (sel.options.length === 0 || symbols.join() !== [...sel.options].map((o) => o.value).join()) {
+        sel.innerHTML = (symbols.length ? symbols : [current || "—"]).map(
+          (s) => `<option value="${s}" ${s === current ? "selected" : ""}>${s}</option>`
+        ).join("");
+      } else if (current) sel.value = current;
+
+      $("brokerLine").textContent = payload.broker || "MT5";
+      const al = payload.alignment || {};
+      $("alignLine").textContent = `${al.aligned ?? 0}/${al.total ?? 5} aligned`;
+      $("decisionState").textContent = (payload.decision_state || "NO_SIGNAL").replaceAll("_", " ");
+      $("caption").textContent = payload.caption || "Records your decision only — no MT5 order is sent.";
+      $("regime").textContent = payload.market_regime || "—";
+      $("leading").textContent = (payload.leading_contributor && payload.leading_contributor.label) || "—";
+
+      const actionCard = $("actionCard");
+      actionCard.classList.toggle("buy", isBuy);
+      actionCard.classList.toggle("sell", isSell);
+
+      if (sig && side) {
+        $("actionTitle").textContent = `TAKE ${side} SIGNAL`;
+        $("actionSub").textContent = `${sig.symbol || current} · ${payload.timeframe || state.timeframe}`;
+        $("actionScore").textContent = sig.score ?? "—";
+        $("entryLabel").textContent = isBuy ? "Buy entry zone" : "Sell entry zone";
+        $("entryZone").textContent = `${fmtPx(sig.entry_low, digits)} – ${fmtPx(sig.entry_high, digits)}`;
+        const bars = sig.bars_left ?? 0;
+        $("expirySub").textContent = `${bars} closed candle${bars === 1 ? "" : "s"} remaining`;
+        $("btnTake").textContent = `TAKE ${side}`;
+        $("btnTake").classList.toggle("sell", isSell);
+        const canDecide = !!sig.id && sig.user_decision === "PENDING";
+        $("btnTake").disabled = !canDecide;
+        $("btnIgnore").disabled = !canDecide;
+        if (sig.user_decision === "TAKE") $("btnTake").textContent = "TAKEN";
+        if (sig.user_decision === "IGNORE") $("btnIgnore").textContent = "Ignored";
+        else $("btnIgnore").textContent = "Ignore";
+
+        gauge(sig.score);
+        $("lockedSide").textContent = `LOCKED ${side}`;
+        $("lockedSide").className = `locked ${isBuy ? "buy" : "sell"}`;
+        $("sideAwait").textContent = (payload.decision_state || "").replaceAll("_", " ");
+
+        $("botTake").textContent = `TAKE ${side}`;
+        $("botTake").className = `take-lbl ${isSell ? "sell" : ""}`;
+        $("botLive").textContent = fmtPx(live.mid || live.bid, digits);
+        $("botSl").textContent = fmtPx(sig.stop, digits);
+        $("botTp").textContent = fmtPx(sig.target, digits);
+        $("botBars").textContent = `${bars} BARS LEFT`;
+      } else {
+        $("actionTitle").textContent = "No active signal";
+        $("actionSub").textContent = "Waiting for M5 SETUP_OK";
+        $("actionScore").textContent = "—";
+        $("entryZone").textContent = "—";
+        $("expirySub").textContent = "— closed candles remaining";
+        $("btnTake").disabled = true;
+        $("btnIgnore").disabled = true;
+        $("btnTake").textContent = "TAKE";
+        $("btnTake").classList.remove("sell");
+        gauge(0);
+        $("lockedSide").textContent = "LOCKED —";
+        $("lockedSide").className = "locked";
+        $("sideAwait").textContent = "NO SIGNAL";
+        $("botTake").textContent = "—";
+        $("botTake").className = "take-lbl";
+        $("botLive").textContent = fmtPx(live.mid || live.bid, digits);
+        $("botSl").textContent = "—";
+        $("botTp").textContent = "—";
+        $("botBars").textContent = "—";
+      }
+
+      const votes = payload.votes || {};
+      const bp = Number(votes.buy_points) || 0;
+      const sp = Number(votes.sell_points) || 0;
+      const tot = bp + sp || 1;
+      $("buyVote").textContent = `BUY — ${votes.buy_votes || 0} / ${bp} pts`;
+      $("sellVote").textContent = `SELL — ${votes.sell_votes || 0} / ${sp} pts`;
+      $("buyBar").style.width = `${(bp / tot) * 100}%`;
+      $("sellBar").style.width = `${(sp / tot) * 100}%`;
+
+      const scores = (sig && sig.contributor_scores) || [];
+      const passed = scores.filter((c) => c.status === "pass").slice(0, 6);
+      $("contribList").innerHTML = passed.length
+        ? passed.map((c) => `<div class="contrib-item"><span>${c.label}</span><span class="sc">${c.score}</span></div>`).join("")
+        : `<div class="empty-hint">No contributors yet</div>`;
+
+      const pat = payload.pattern || {};
+      if (pat.label) {
+        $("patternBadge").hidden = false;
+        $("patternLabel").textContent = pat.label;
+        $("patternBias").textContent = pat.bias_pct != null ? `Bias score ${pat.bias_pct}` : "";
+      } else {
+        $("patternBadge").hidden = true;
+      }
+
+      renderChart(payload);
+    }
+
+    async function refresh() {
+      if (state.busy) return;
+      state.busy = true;
+      $("runBtn").disabled = true;
+      try {
+        const q = new URLSearchParams({ mode: state.mode, timeframe: state.timeframe });
+        const r = await fetch(`/api/v1/analyzer/status?${q}`);
+        const j = await r.json();
+        render(j);
+      } catch (e) {
+        $("actionTitle").textContent = "Load failed";
+      } finally {
+        state.busy = false;
+        $("runBtn").disabled = false;
+      }
+    }
+
+    async function decide(decision) {
+      const sig = state.data && state.data.active_signal;
+      if (!sig || !sig.id) {
+        alert("No persisted signal yet — wait for SETUP_OK heartbeat to store a signal, then Take/Ignore.");
+        return;
+      }
+      $("btnTake").disabled = true;
+      $("btnIgnore").disabled = true;
+      try {
+        const r = await fetch(`/api/v1/signals/${sig.id}/decision`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ decision }),
+        });
+        if (!r.ok) {
+          const err = await r.json().catch(() => ({}));
+          alert(err.detail || "Decision failed");
+        }
+        await refresh();
+      } catch (e) {
+        alert("Decision request failed");
+        await refresh();
+      }
+    }
+
+    $("modeToggle").addEventListener("click", (e) => {
+      const b = e.target.closest("button[data-mode]");
+      if (b) setMode(b.dataset.mode);
+    });
+    $("tfTabs").addEventListener("click", (e) => {
+      const b = e.target.closest("button[data-tf]");
+      if (b) setTf(b.dataset.tf);
+    });
+    $("runBtn").addEventListener("click", refresh);
+    $("btnTake").addEventListener("click", () => decide("TAKE"));
+    $("btnIgnore").addEventListener("click", () => decide("IGNORE"));
+    $("symbolSelect").addEventListener("change", async () => {
+      const sym = $("symbolSelect").value;
+      try {
+        await fetch("/api/v1/monitor/select-symbol", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ symbol: sym }),
+        });
+      } catch (_) {}
+      refresh();
+    });
+
+    refresh();
+    setInterval(refresh, 12000);
+  </script>
+  <script src="/static/shell.js"></script>
+</body>
+</html>

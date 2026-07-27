@@ -1,11 +1,13 @@
 # Deploy FastAPI backend on Linux VPS (port 8000 is free on your host).
 # MT5 EA cannot run inside this container — attach EA on Windows MT5 and
-# point InpBackendUrl to http://<VPS_IP>:8000 (or nginx HTTPS URL).
+# Public URL: http://187.77.142.118:8000
+# EA InpBackendUrl must match that URL (or nginx HTTPS).
 #
 # Usage:
-#   cp .env.docker.example .env   # edit secrets
+#   cp .env.docker.example .env   # edit secrets + PUBLIC_BASE_URL
 #   docker compose up -d --build
 #   curl http://127.0.0.1:8000/health
+#   curl http://187.77.142.118:8000/health
 
 services:
   vantage-api:
@@ -17,6 +19,9 @@ services:
     restart: unless-stopped
     ports:
       - "8000:8000"
+    volumes:
+      # Persist Accepted Signal Ledger SQLite across rebuilds
+      - vantage_signal_data:/app/data
     env_file:
       - .env
     environment:
@@ -33,3 +38,6 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
+
+volumes:
+  vantage_signal_data:

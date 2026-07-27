@@ -13,6 +13,7 @@ from pathlib import Path
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, RedirectResponse
+from fastapi.staticfiles import StaticFiles
 
 from app.config import get_settings
 from app.monitor_state import monitor_store
@@ -53,15 +54,28 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+_cors_origins = [
+    "http://127.0.0.1",
+    "http://localhost",
+    "http://127.0.0.1:8000",
+    "http://localhost:8000",
+    "http://187.77.142.118:8000",
+    "http://187.77.142.118",
+]
+_pub = (settings.public_base_url or "").rstrip("/")
+if _pub and _pub not in _cors_origins:
+    _cors_origins.append(_pub)
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://127.0.0.1", "http://localhost", "http://127.0.0.1:8000"],
+    allow_origins=_cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 app.include_router(router)
+app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 
 @app.get("/")
@@ -83,6 +97,32 @@ def dashboard_page():
     page = STATIC_DIR / "dashboard.html"
     if not page.exists():
         return {"error": "dashboard.html missing", "path": str(page)}
+    return FileResponse(page)
+
+
+@app.get("/signals")
+def signals_page():
+    """Accepted Signal Ledger — BUY/SELL history cards."""
+    page = STATIC_DIR / "signals.html"
+    if not page.exists():
+        return {"error": "signals.html missing", "path": str(page)}
+    return FileResponse(page)
+
+
+@app.get("/analyzer")
+def analyzer_page():
+    """Smart Analyzer — advisory decision desk (Take/Ignore, no orders)."""
+    page = STATIC_DIR / "analyzer.html"
+    if not page.exists():
+        return {"error": "analyzer.html missing", "path": str(page)}
+    return FileResponse(page)
+
+
+@app.get("/coming-soon")
+def coming_soon_page():
+    page = STATIC_DIR / "coming-soon.html"
+    if not page.exists():
+        return {"error": "coming-soon.html missing", "path": str(page)}
     return FileResponse(page)
 
 

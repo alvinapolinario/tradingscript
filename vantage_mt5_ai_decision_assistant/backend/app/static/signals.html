@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Accepted Signal Ledger · Vantage</title>
+  <link rel="stylesheet" href="/static/shell.css" />
+  <style>
+    :root {
+      --bg: #0b1210;
+      --panel: #121c19;
+      --line: #2a3d36;
+      --text: #e8f2ed;
+      --muted: #8aa399;
+      --buy: #3dd68c;
+      --sell: #f07575;
+      --accent: #5ee0b5;
+      --mono: "Cascadia Code", "Consolas", ui-monospace, monospace;
+      --sans: "Segoe UI", system-ui, sans-serif;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: var(--sans);
+      color: var(--text);
+      min-height: 100vh;
+      background:
+        radial-gradient(700px 320px at 90% 100%, #163028 0%, transparent 55%),
+        var(--bg);
+    }
+    a { color: var(--accent); text-decoration: none; }
+    header {
+      display: flex; justify-content: space-between; align-items: center;
+      gap: 1rem; flex-wrap: wrap;
+      padding: .85rem 1.25rem;
+      border-bottom: 1px solid var(--line);
+      background: rgba(11,18,16,.92);
+      position: sticky; top: 0; z-index: 5;
+    }
+    header h1 { margin: 0; font-size: 1.05rem; }
+    header .sub { color: var(--muted); font-size: .78rem; margin-top: .15rem; }
+    .actions { display: flex; gap: .45rem; flex-wrap: wrap; align-items: center; }
+    .pill {
+      display: inline-flex; align-items: center; gap: .35rem;
+      border: 1px solid var(--line); border-radius: 999px;
+      padding: .35rem .7rem; font-size: .78rem; background: var(--panel);
+    }
+    .pill a { color: inherit; }
+    main {
+      max-width: 720px; margin: 0 auto;
+      padding: 1rem 1.1rem 2.5rem;
+    }
+    .ledger-title {
+      font-size: .72rem; letter-spacing: .1em; text-transform: uppercase;
+      color: var(--muted); margin: .4rem 0 1rem;
+    }
+    .empty {
+      border: 1px dashed var(--line); border-radius: 14px;
+      padding: 1.5rem; color: var(--muted); text-align: center;
+    }
+    .card {
+      display: grid;
+      grid-template-columns: 1.1fr 1fr 1.2fr 1.2fr;
+      gap: .75rem;
+      align-items: center;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: .95rem 1rem;
+      margin-bottom: .7rem;
+    }
+    .side-block { display: flex; gap: .65rem; align-items: center; min-width: 0; }
+    .arrow {
+      width: 2.1rem; height: 2.1rem; border-radius: 10px;
+      display: grid; place-items: center; font-size: 1.1rem; font-weight: 800;
+    }
+    .card.buy .arrow { background: rgba(61,214,140,.15); color: var(--buy); }
+    .card.sell .arrow { background: rgba(240,117,117,.15); color: var(--sell); }
+    .status {
+      font-size: .68rem; letter-spacing: .08em; text-transform: uppercase; color: var(--muted);
+    }
+    .side {
+      font-size: 1.35rem; font-weight: 800; line-height: 1.1;
+    }
+    .card.buy .side { color: var(--buy); }
+    .card.sell .side { color: var(--sell); }
+    .pair { font-size: .82rem; color: var(--muted); margin-top: .15rem; }
+    .col .k {
+      font-size: .68rem; letter-spacing: .06em; text-transform: uppercase; color: var(--muted);
+    }
+    .col .v {
+      font-family: var(--mono); font-size: .92rem; font-weight: 650; margin-top: .2rem;
+    }
+    .col .s { font-size: .72rem; color: var(--muted); margin-top: .15rem; }
+    .score .v { font-size: 1.35rem; }
+    @media (max-width: 700px) {
+      .card { grid-template-columns: 1fr 1fr; }
+      .side-block { grid-column: 1 / -1; }
+    }
+  </style>
+</head>
+<body data-nav="signals">
+  <header>
+    <div>
+      <h1>Accepted Signal Ledger</h1>
+      <div class="sub">Advisory only · from M5 Alignment Desk when SETUP_OK</div>
+    </div>
+    <div class="actions">
+      <span class="pill" id="countPill">0 signals</span>
+    </div>
+  </header>
+  <main>
+    <div class="ledger-title">Signal history</div>
+    <div id="list"><div class="empty">Loading…</div></div>
+  </main>
+  <script>
+    function fmtPx(n) {
+      if (n == null || Number.isNaN(Number(n))) return "—";
+      const x = Number(n);
+      const d = x >= 100 ? 2 : (x >= 1 ? 4 : 5);
+      return x.toLocaleString(undefined, { minimumFractionDigits: d, maximumFractionDigits: d });
+    }
+    function fmtEntry(lo, hi) {
+      return `${fmtPx(lo)} – ${fmtPx(hi)}`;
+    }
+    function arrow(side) {
+      return side === "BUY" ? "↑" : "↓";
+    }
+    function render(items) {
+      const root = document.getElementById("list");
+      document.getElementById("countPill").textContent = `${items.length} signal${items.length === 1 ? "" : "s"}`;
+      if (!items.length) {
+        root.innerHTML = `<div class="empty">No accepted signals yet.<br/>When the M5 desk reaches <b>SETUP_OK</b>, BUY/SELL entries appear here.</div>`;
+        return;
+      }
+      root.innerHTML = items.map((s) => {
+        const cls = (s.side || "").toLowerCase() === "buy" ? "buy" : "sell";
+        const n = s.contributing_count ?? (s.contributors || []).length;
+        return `<article class="card ${cls}">
+          <div class="side-block">
+            <div class="arrow">${arrow(s.side)}</div>
+            <div>
+              <div class="status">${s.status || "ACCEPTED"}</div>
+              <div class="side">${s.side || "—"}</div>
+              <div class="pair">${s.symbol || "—"} · ${s.timeframe || "M5"}</div>
+            </div>
+          </div>
+          <div class="col score">
+            <div class="k">Signal score</div>
+            <div class="v">${s.score ?? "—"}</div>
+            <div class="s">${n} contributing strateg${n === 1 ? "y" : "ies"}</div>
+          </div>
+          <div class="col">
+            <div class="k">Entry</div>
+            <div class="v">${fmtEntry(s.entry_low, s.entry_high)}</div>
+          </div>
+          <div class="col">
+            <div class="k">Stop / T2</div>
+            <div class="v">${fmtPx(s.stop)} / ${fmtPx(s.target)}</div>
+          </div>
+        </article>`;
+      }).join("");
+    }
+    async function refresh() {
+      try {
+        const r = await fetch("/api/v1/signals?limit=80");
+        const j = await r.json();
+        render(j.items || []);
+      } catch (e) {
+        document.getElementById("list").innerHTML = `<div class="empty">Failed to load signals</div>`;
+      }
+    }
+    refresh();
+    setInterval(refresh, 15000);
+  </script>
+  <script src="/static/shell.js"></script>
+</body>
+</html>

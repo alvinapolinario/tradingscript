@@ -48,8 +48,8 @@
 //| Inputs                                                           |
 //+------------------------------------------------------------------+
 input group "A. Backend (local FastAPI)"
-input string InpBackendUrl        = "http://127.0.0.1:8000"; // Backend base URL
-input string InpBearerToken       = "local-dev-token-change-me"; // Local bearer token (NOT a cloud AI key)
+input string InpBackendUrl        = "http://187.77.142.118:8000"; // Backend base URL (VPS)
+input string InpBearerToken       = ""; // Paste LOCAL_API_TOKEN from backend/.env (do not commit secrets)
 input int    InpHttpTimeoutMs     = 8000;   // WebRequest timeout (ms)
 input int    InpMaxResponseAgeSec = 120;    // Max acceptable AI response age (sec)
 input int    InpTimerSec          = 5;      // Timer poll (seconds)

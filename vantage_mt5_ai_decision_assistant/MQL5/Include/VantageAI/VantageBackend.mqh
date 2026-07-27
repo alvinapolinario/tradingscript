@@ -196,7 +196,7 @@ public:
       if(m_last_http == -1)
         {
          if(err == 4014 || err == 4060)
-            m_last_error = "WebRequest URL not permitted. Add http://127.0.0.1:8000 to Tools → Options → Expert Advisors → Allow WebRequest for listed URL.";
+            m_last_error = "WebRequest URL not permitted. Add http://187.77.142.118:8000 to Tools → Options → Expert Advisors → Allow WebRequest for listed URL.";
          else if(err == 5203)
             m_last_error = "Backend connection failure / timeout.";
          else

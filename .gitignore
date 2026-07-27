@@ -41,6 +41,10 @@ desktop.ini
 # Docker local overrides
 docker-compose.override.yml
 
+# Signal ledger SQLite (local / container data)
+**/backend/data/
+*.db
+
 # Misc
 *.bak
 *.tmp

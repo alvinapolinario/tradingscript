@@ -1,0 +1,207 @@
+/* Shared left app navigation (Workspace / Tools) */
+:root {
+  --shell-w: 232px;
+  --shell-bg: #060908;
+  --shell-line: #1a2622;
+  --shell-text: #d7e4df;
+  --shell-muted: #6f837c;
+  --shell-active-bg: #0b1f18;
+  --shell-accent: #10b981;
+  --shell-badge: #e8b84a;
+}
+
+body.has-app-shell {
+  padding-left: var(--shell-w);
+}
+
+body.has-app-shell.app-shell-collapsed {
+  padding-left: 0;
+}
+
+.app-sidebar {
+  position: fixed;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: var(--shell-w);
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  background:
+    linear-gradient(180deg, #08110e 0%, var(--shell-bg) 40%);
+  border-right: 1px solid var(--shell-line);
+  padding: .85rem .65rem 1rem;
+  overflow-y: auto;
+  font-family: "Segoe UI", "IBM Plex Sans", system-ui, sans-serif;
+}
+
+.app-sidebar .sb-brand {
+  display: flex;
+  align-items: center;
+  gap: .55rem;
+  padding: .35rem .55rem .95rem;
+  border-bottom: 1px solid var(--shell-line);
+  margin-bottom: .85rem;
+}
+
+.app-sidebar .sb-mark {
+  width: 1.55rem;
+  height: 1.55rem;
+  border-radius: 8px;
+  background: radial-gradient(circle at 30% 30%, #1dff9a, #0a7a52);
+  box-shadow: 0 0 12px rgba(16, 185, 129, .35);
+  flex-shrink: 0;
+}
+
+.app-sidebar .sb-brand-text {
+  font-size: .82rem;
+  font-weight: 700;
+  color: var(--shell-text);
+  letter-spacing: .02em;
+  line-height: 1.2;
+}
+
+.app-sidebar .sb-brand-text span {
+  display: block;
+  font-size: .62rem;
+  font-weight: 500;
+  color: var(--shell-muted);
+  letter-spacing: .04em;
+}
+
+.app-sidebar .sb-section {
+  margin: .35rem 0 .35rem;
+}
+
+.app-sidebar .sb-section-label {
+  padding: .55rem .7rem .35rem;
+  font-size: .62rem;
+  font-weight: 700;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--shell-muted);
+}
+
+.app-sidebar .sb-item {
+  display: flex;
+  align-items: center;
+  gap: .65rem;
+  padding: .55rem .7rem;
+  margin: .12rem 0;
+  border-radius: 10px;
+  color: #b7c7c1;
+  text-decoration: none;
+  font-size: .86rem;
+  font-weight: 500;
+  transition: background .15s ease, color .15s ease;
+  position: relative;
+}
+
+.app-sidebar .sb-item:hover {
+  background: rgba(255, 255, 255, .03);
+  color: #eef6f2;
+  text-decoration: none;
+}
+
+.app-sidebar .sb-item.active {
+  background: var(--shell-active-bg);
+  color: #ecfff6;
+  box-shadow: inset 0 0 0 1px rgba(16, 185, 129, .18);
+}
+
+.app-sidebar .sb-item.active .sb-dot {
+  opacity: 1;
+}
+
+.app-sidebar .sb-icon {
+  width: 1.15rem;
+  height: 1.15rem;
+  flex-shrink: 0;
+  opacity: .85;
+  color: currentColor;
+}
+
+.app-sidebar .sb-item.active .sb-icon {
+  color: var(--shell-accent);
+  opacity: 1;
+}
+
+.app-sidebar .sb-label {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.app-sidebar .sb-dot {
+  width: .45rem;
+  height: .45rem;
+  border-radius: 50%;
+  background: var(--shell-accent);
+  box-shadow: 0 0 8px rgba(16, 185, 129, .9);
+  opacity: 0;
+  flex-shrink: 0;
+}
+
+.app-sidebar .sb-badge {
+  min-width: 1.15rem;
+  height: 1.15rem;
+  padding: 0 .3rem;
+  border-radius: 999px;
+  background: var(--shell-badge);
+  color: #1a1405;
+  font-size: .65rem;
+  font-weight: 800;
+  display: inline-grid;
+  place-items: center;
+  line-height: 1;
+}
+
+.app-sidebar .sb-foot {
+  margin-top: auto;
+  padding: .75rem .55rem 0;
+  border-top: 1px solid var(--shell-line);
+  font-size: .68rem;
+  color: var(--shell-muted);
+  line-height: 1.4;
+}
+
+.app-shell-toggle {
+  display: none;
+  position: fixed;
+  left: .65rem;
+  top: .65rem;
+  z-index: 110;
+  border: 1px solid var(--shell-line);
+  background: #0e1613;
+  color: var(--shell-text);
+  border-radius: 10px;
+  width: 2.25rem;
+  height: 2.25rem;
+  font-size: 1.1rem;
+  cursor: pointer;
+}
+
+.app-sidebar-backdrop {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, .45);
+  z-index: 90;
+}
+
+@media (max-width: 960px) {
+  .app-shell-toggle { display: grid; place-items: center; }
+  body.has-app-shell { padding-left: 0; }
+  .app-sidebar {
+    transform: translateX(-105%);
+    transition: transform .2s ease;
+  }
+  body.app-shell-open .app-sidebar { transform: translateX(0); }
+  body.app-shell-open .app-sidebar-backdrop { display: block; }
+  body.has-app-shell header,
+  body.has-app-shell .topbar {
+    padding-left: 3.25rem !important;
+  }
+}

@@ -37,12 +37,13 @@ def require_bearer(
 @router.get("/health", response_model=HealthResponse)
 def health(settings: Settings = Depends(get_settings)) -> HealthResponse:
     monitor_store.add_log("INFO", "health", "Health check OK")
+    base = (settings.public_base_url or "http://187.77.142.118:8000").rstrip("/")
     return HealthResponse(
         status="ok",
         service=settings.app_name,
         advisory_only=True,
         version="1.0.0",
-        monitor_url="http://127.0.0.1:8000/monitor",
+        monitor_url=f"{base}/monitor",
     )
 
 
@@ -52,19 +53,31 @@ def heartbeat(
     _: None = Depends(require_bearer),
 ) -> HeartbeatResponse:
     monitor_store.record_heartbeat(req.model_dump())
+    from app.signal_ledger import maybe_accept_from_monitor
     from app.ws_hub import push_monitor_update
 
+    accepted = maybe_accept_from_monitor(monitor_store.status())
     push_monitor_update("heartbeat")
+    if accepted:
+        monitor_store.add_log(
+            "INFO",
+            "signals",
+            f"Accepted {accepted.get('side')} {accepted.get('symbol')} score={accepted.get('score')}",
+            signal_id=accepted.get("id"),
+        )
+        push_monitor_update("signal")
     cy, cm = monitor_store.calendar_request()
     # Default request to whatever month EA just sent if UI has not chosen yet
     if cy <= 0 and req.pl_calendar and req.pl_calendar.get("year") and req.pl_calendar.get("month"):
         cy = int(req.pl_calendar["year"])
         cm = int(req.pl_calendar["month"])
         monitor_store.set_calendar_month(cy, cm)
+    settings = get_settings()
+    base = (settings.public_base_url or "http://187.77.142.118:8000").rstrip("/")
     return HeartbeatResponse(
         status="ok",
         received_utc=datetime.now(timezone.utc).isoformat(),
-        monitor_url="http://127.0.0.1:8000/monitor",
+        monitor_url=f"{base}/monitor",
         calendar_year=cy,
         calendar_month=cm,
     )
@@ -218,6 +231,61 @@ def dashboard_status() -> dict:
     from app.strategy_desk import build_dashboard
 
     return build_dashboard(monitor_store.status())
+
+
+@router.get("/api/v1/signals")
+def list_accepted_signals(
+    limit: int = Query(default=50, ge=1, le=200),
+    symbol: str | None = Query(default=None),
+) -> dict:
+    """Accepted Signal Ledger — advisory BUY/SELL history from M5 desk."""
+    from app.signal_ledger import list_signals
+
+    items = list_signals(limit=limit, symbol=(symbol.strip().upper() if symbol else None))
+    return {
+        "advisory_only": True,
+        "count": len(items),
+        "items": items,
+    }
+
+
+@router.get("/api/v1/analyzer/status")
+def analyzer_status(
+    mode: str = Query(default="STANDARD"),
+    timeframe: str | None = Query(default=None),
+) -> dict:
+    """Smart Analyzer composite — desk + active signal + votes (advisory)."""
+    from app.signal_ledger import build_analyzer_status
+
+    return build_analyzer_status(monitor_store.status(), mode=mode, timeframe=timeframe)
+
+
+@router.post("/api/v1/signals/{signal_id}/decision")
+def signal_decision(signal_id: str, body: dict) -> dict:
+    """Record TAKE or IGNORE — does not send any MT5 order."""
+    from app.signal_ledger import record_decision
+    from app.ws_hub import push_monitor_update
+
+    decision = str((body or {}).get("decision") or "").upper()
+    try:
+        updated = record_decision(signal_id, decision)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if not updated:
+        raise HTTPException(status_code=404, detail="Signal not found")
+    monitor_store.add_log(
+        "INFO",
+        "signals",
+        f"User {decision} on {updated.get('side')} {updated.get('symbol')}",
+        signal_id=signal_id,
+    )
+    push_monitor_update("signal_decision")
+    return {
+        "advisory_only": True,
+        "ok": True,
+        "caption": "Records your decision only — no MT5 order is sent.",
+        "signal": updated,
+    }
 
 
 @router.get("/api/v1/monitor/logs")

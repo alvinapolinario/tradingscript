@@ -11,6 +11,8 @@ class Settings(BaseSettings):
     app_name: str = "Vantage MT5 AI Decision Assistant Backend"
     host: str = "127.0.0.1"
     port: int = 8000
+    # Public URL used in health/heartbeat links + CORS (no trailing slash)
+    public_base_url: str = "http://187.77.142.118:8000"
     local_api_token: str = "local-dev-token-change-me"
     max_response_age_seconds: int = 120
     openai_api_key: str | None = None
