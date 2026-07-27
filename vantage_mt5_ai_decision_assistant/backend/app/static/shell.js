@@ -20,11 +20,11 @@
   const WORKSPACE = [
     { id: "monitor", href: "/monitor", label: "Market Overview", icon: "grid" },
     { id: "analyzer", href: "/analyzer", label: "Smart Analyzer", icon: "target" },
-    { id: "signals", href: "/signals", label: "Signal Center", icon: "signal" },
-    { id: "radar", href: "/dashboard", label: "Opportunity Radar", icon: "radar", badgeId: "sbRadarBadge" },
+    { id: "signals", href: "/signals", label: "Signal Center", icon: "signal", badgeId: "sbRadarBadge" },
+    { id: "radar", href: "/dashboard", label: "Opportunity Radar", icon: "radar" },
     { id: "patterns", href: "/coming-soon?t=Pattern%20Strategy", label: "Pattern Strategy", icon: "shapes" },
     { id: "scanner", href: "/coming-soon?t=Strategy%20Scanner", label: "Strategy Scanner", icon: "search" },
-    { id: "lab", href: "/dashboard?view=lab", label: "Strategy Lab", icon: "flask" },
+    { id: "lab", href: "/coming-soon?t=Strategy%20Lab", label: "Strategy Lab", icon: "flask" },
   ];
 
   const TOOLS = [

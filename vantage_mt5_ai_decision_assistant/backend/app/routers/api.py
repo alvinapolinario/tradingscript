@@ -36,13 +36,12 @@ def require_bearer(
 
 @router.get("/health", response_model=HealthResponse)
 def health(settings: Settings = Depends(get_settings)) -> HealthResponse:
-    monitor_store.add_log("INFO", "health", "Health check OK")
     base = (settings.public_base_url or "http://187.77.142.118:8000").rstrip("/")
     return HealthResponse(
         status="ok",
         service=settings.app_name,
         advisory_only=True,
-        version="1.0.0",
+        version="1.2.0",
         monitor_url=f"{base}/monitor",
     )
 
@@ -56,7 +55,12 @@ def heartbeat(
     from app.signal_ledger import maybe_accept_from_monitor
     from app.ws_hub import push_monitor_update
 
-    accepted = maybe_accept_from_monitor(monitor_store.status())
+    accepted = None
+    try:
+        mode = monitor_store.analyzer_mode()
+        accepted = maybe_accept_from_monitor(monitor_store.status(), mode=mode)
+    except Exception as exc:  # never fail EA heartbeat on ledger issues
+        monitor_store.add_log("ERROR", "signals", f"Ledger accept failed: {exc}")
     push_monitor_update("heartbeat")
     if accepted:
         monitor_store.add_log(
@@ -257,6 +261,7 @@ def analyzer_status(
     """Smart Analyzer composite — desk + active signal + votes (advisory)."""
     from app.signal_ledger import build_analyzer_status
 
+    monitor_store.set_analyzer_mode(mode)
     return build_analyzer_status(monitor_store.status(), mode=mode, timeframe=timeframe)
 
 

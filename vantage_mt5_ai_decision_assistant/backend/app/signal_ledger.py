@@ -143,6 +143,58 @@ def _score_from_gates(gates: list[dict[str, Any]]) -> tuple[int, list[str]]:
     return score, contributors
 
 
+def _safe_float(v: Any, default: float = 0.0) -> float:
+    try:
+        if v is None or v == "":
+            return default
+        return float(v)
+    except (TypeError, ValueError):
+        return default
+
+
+def _safe_int(v: Any, default: int = 0) -> int:
+    try:
+        if v is None or v == "":
+            return default
+        return int(v)
+    except (TypeError, ValueError):
+        return default
+
+
+def _desk_timeframe(mode: str) -> str:
+    return "M5"
+
+
+def _levels_from_strategy(
+    st: dict[str, Any],
+    side: str,
+    mid: float,
+    atr: float,
+    digits: int,
+    mode: str,
+) -> tuple[float, float, float, float]:
+    """Prefer EA entry/stop/target when present; else ATR geometry."""
+    ea_entry = _safe_float(st.get("entry") or st.get("entry_price"))
+    ea_stop = _safe_float(st.get("stop") or st.get("sl"))
+    ea_target = _safe_float(st.get("target") or st.get("tp"))
+    if ea_entry > 0 and ea_stop > 0 and ea_target > 0:
+        band = max(atr * (0.08 if mode == "SCALPING" else 0.12), mid * 0.0001)
+        if side == "BUY":
+            return (
+                round(ea_entry - band, digits),
+                round(ea_entry + band * 0.25, digits),
+                round(ea_stop, digits),
+                round(ea_target, digits),
+            )
+        return (
+            round(ea_entry - band * 0.25, digits),
+            round(ea_entry + band, digits),
+            round(ea_stop, digits),
+            round(ea_target, digits),
+        )
+    return _levels_for_side(side, mid, atr, digits, mode=mode)
+
+
 def _levels_for_side(
     side: str,
     mid: float,
@@ -273,29 +325,26 @@ def maybe_accept_from_monitor(
     if not symbol:
         return None
 
-    bid = float(ea.get("bid") or 0)
-    ask = float(ea.get("ask") or 0)
+    bid = _safe_float(ea.get("bid"))
+    ask = _safe_float(ea.get("ask"))
     mid = (bid + ask) / 2.0 if bid > 0 and ask > 0 else bid or ask
-    atr = float(st.get("atr14") or st.get("atr") or 0)
-    digits = int(ea.get("digits") or 5)
+    atr = _safe_float(st.get("atr14") or st.get("atr"))
+    digits = _safe_int(ea.get("digits"), 5)
     if digits <= 0:
         digits = 5
 
-    entry_low, entry_high, stop, target = _levels_for_side(side, mid, atr, digits, mode=mode)
+    entry_low, entry_high, stop, target = _levels_from_strategy(st, side, mid, atr, digits, mode)
     gates = dash.get("gates") or evaluate_gates(monitor_status)
     score, contributors, details = _score_details_from_gates(gates)
 
-    try:
-        age = int(st.get("setup_age_m5") if st.get("setup_age_m5") is not None else 99)
-    except (TypeError, ValueError):
-        age = 99
+    age = _safe_int(st.get("setup_age_m5"), 99)
     if age > int(STRATEGY_SPEC["setup"]["max_age_completed_m5"]):
         return None
 
     bars_left = _bars_left(age)
     fp = f"{symbol}|{side}|{st.get('h1_bias')}|{st.get('m15_structure')}|{round(mid, digits)}|{mode}"
     note = str(st.get("note") or "M5 Alignment Desk accepted")
-    tf = "M5" if mode == "SCALPING" else "H4"
+    tf = _desk_timeframe(mode)
 
     with _lock:
         conn = _connect()
@@ -404,24 +453,14 @@ def get_signal(signal_id: str) -> Optional[dict[str, Any]]:
 
 
 def latest_pending_for_symbol(symbol: str) -> Optional[dict[str, Any]]:
+    """Return latest PENDING signal only (no fallback to decided rows)."""
     with _lock:
         conn = _connect()
         try:
             row = conn.execute(
                 """
                 SELECT * FROM signals
-                WHERE symbol = ? AND user_decision = 'PENDING'
-                ORDER BY created_utc DESC
-                LIMIT 1
-                """,
-                (symbol.upper(),),
-            ).fetchone()
-            if row:
-                return _row_to_dict(row)
-            row = conn.execute(
-                """
-                SELECT * FROM signals
-                WHERE symbol = ?
+                WHERE symbol = ? AND COALESCE(user_decision, 'PENDING') = 'PENDING'
                 ORDER BY created_utc DESC
                 LIMIT 1
                 """,
@@ -433,7 +472,7 @@ def latest_pending_for_symbol(symbol: str) -> Optional[dict[str, Any]]:
 
 
 def record_decision(signal_id: str, decision: str) -> Optional[dict[str, Any]]:
-    """Record TAKE or IGNORE — advisory only, no MT5 order."""
+    """Record TAKE or IGNORE — advisory only, no MT5 order. Rejects re-decide."""
     decision = str(decision or "").upper().strip()
     if decision not in {"TAKE", "IGNORE"}:
         raise ValueError("decision must be TAKE or IGNORE")
@@ -443,6 +482,10 @@ def record_decision(signal_id: str, decision: str) -> Optional[dict[str, Any]]:
             row = conn.execute("SELECT * FROM signals WHERE id = ?", (signal_id,)).fetchone()
             if not row:
                 return None
+            keys = set(row.keys())
+            current = row["user_decision"] if "user_decision" in keys else "PENDING"
+            if current and current != "PENDING":
+                raise ValueError(f"signal already decided as {current}")
             decided = _utc_now()
             conn.execute(
                 """
@@ -509,12 +552,12 @@ def _preview_plan(
     if not side:
         return None
     symbol = str(ea.get("symbol") or monitor_status.get("selected_symbol") or "").upper()
-    bid = float(ea.get("bid") or 0)
-    ask = float(ea.get("ask") or 0)
+    bid = _safe_float(ea.get("bid"))
+    ask = _safe_float(ea.get("ask"))
     mid = (bid + ask) / 2.0 if bid > 0 and ask > 0 else bid or ask
-    atr = float(st.get("atr14") or st.get("atr") or 0)
-    digits = int(ea.get("digits") or 5) or 5
-    entry_low, entry_high, stop, target = _levels_for_side(side, mid, atr, digits, mode=mode)
+    atr = _safe_float(st.get("atr14") or st.get("atr"))
+    digits = _safe_int(ea.get("digits"), 5) or 5
+    entry_low, entry_high, stop, target = _levels_from_strategy(st, side, mid, atr, digits, mode)
     gates = dash.get("gates") or []
     score, contributors, details = _score_details_from_gates(gates)
     age = st.get("setup_age_m5")
@@ -524,7 +567,7 @@ def _preview_plan(
         "status": "PREVIEW",
         "side": side,
         "symbol": symbol,
-        "timeframe": "M5" if mode == "SCALPING" else "H4",
+        "timeframe": _desk_timeframe(mode),
         "score": score,
         "contributing_count": len(contributors),
         "contributors": contributors,
@@ -533,7 +576,7 @@ def _preview_plan(
         "entry_high": entry_high,
         "stop": stop,
         "target": target,
-        "reward_risk": float(st.get("reward_risk_ratio") or 0) or None,
+        "reward_risk": _safe_float(st.get("reward_risk_ratio")) or None,
         "adx14": st.get("adx14"),
         "atr14": atr if atr > 0 else None,
         "h1_bias": st.get("h1_bias"),
@@ -598,7 +641,7 @@ def build_analyzer_status(
     votes = _vote_split(side, details)
 
     aligned = 0
-    total_tf = 5
+    total_tf = 3
     biases = [
         str(st.get("h1_bias") or "").upper(),
         str(st.get("m15_structure") or "").upper(),
@@ -608,9 +651,6 @@ def build_analyzer_status(
     for b in biases:
         if want and b == want:
             aligned += 1
-    gate_pass = sum(1 for g in (dash.get("gates") or []) if g.get("status") == "pass")
-    if gate_pass >= 5:
-        aligned = max(aligned, 1)
 
     decision_state = "NO_SIGNAL"
     if active:
@@ -622,15 +662,15 @@ def build_analyzer_status(
         else:
             decision_state = "IGNORED"
 
-    tf = timeframe or (active or {}).get("timeframe") or ("M5" if mode == "SCALPING" else "H4")
+    tf = timeframe or (active or {}).get("timeframe") or _desk_timeframe(mode)
     leading = None
     if details:
         passed = [d for d in details if d.get("status") == "pass"]
         if passed:
             leading = max(passed, key=lambda d: int(d.get("score") or 0))
 
-    bid = float(ea.get("bid") or 0)
-    ask = float(ea.get("ask") or 0)
+    bid = _safe_float(ea.get("bid"))
+    ask = _safe_float(ea.get("ask"))
     mid = (bid + ask) / 2.0 if bid > 0 and ask > 0 else bid or ask
 
     targets: list[dict[str, Any]] = []

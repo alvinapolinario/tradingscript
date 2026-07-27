@@ -201,11 +201,24 @@ class MonitorStore:
         self._connected_within_sec = connected_within_sec
         self._cal_req_year: int = 0
         self._cal_req_month: int = 0
+        # Analyzer STANDARD | SCALPING — used when persisting accepted signals
+        self._analyzer_mode: str = "STANDARD"
         # symbol -> "YYYY-MM" -> calendar payload
         self._calendar_cache: dict[str, dict[str, dict[str, Any]]] = {}
         for sym in DEFAULT_MONITOR_PAIRS:
             self._eas[sym] = EaSnapshot(symbol=sym)
         self.add_log("INFO", "backend", "Monitor store initialized")
+
+    def set_analyzer_mode(self, mode: str) -> str:
+        m = "SCALPING" if str(mode).upper() == "SCALPING" else "STANDARD"
+        with self._lock:
+            self._analyzer_mode = m
+            out = self._analyzer_mode
+        return out
+
+    def analyzer_mode(self) -> str:
+        with self._lock:
+            return self._analyzer_mode
 
     def _get_or_create(self, symbol: str) -> EaSnapshot:
         key = _norm_symbol(symbol)
@@ -448,6 +461,7 @@ class MonitorStore:
                     "now_utc": _iso(now),
                 },
                 "selected_symbol": selected,
+                "analyzer_mode": self._analyzer_mode,
                 "available_symbols": [x["symbol"] for x in symbols],
                 "symbols": symbols,
                 "vantage_ea": self._serialize_ea(

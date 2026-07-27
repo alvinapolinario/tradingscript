@@ -470,7 +470,8 @@
       ws.onmessage = (ev) => {
         try {
           const msg = JSON.parse(ev.data);
-          if (msg.type === "snapshot" || msg.type === "update" || msg.type === "tick") {
+          if (msg.type === "snapshot" || msg.type === "update" || msg.type === "tick" ||
+              msg.type === "heartbeat" || msg.type === "signal" || msg.type === "signal_decision") {
             refresh();
           }
         } catch (_) {}

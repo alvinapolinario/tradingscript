@@ -77,9 +77,37 @@ def test_record_take_decision(tmp_ledger):
     updated = ledger.record_decision(accepted["id"], "TAKE")
     assert updated["user_decision"] == "TAKE"
     assert updated["decided_utc"]
+    # Pending-only active: after TAKE, analyzer falls back to preview while SETUP_OK
     st = ledger.build_analyzer_status(_ok_status())
-    assert st["decision_state"] == "TAKEN"
-    assert st["active_signal"]["id"] == accepted["id"]
+    assert st["decision_state"] == "AWAITING_YOUR_DECISION"
+    assert st["active_signal"].get("preview") is True
+    assert ledger.latest_pending_for_symbol("XAUUSD") is None
+
+
+def test_reject_redecide(tmp_ledger):
+    accepted = ledger.maybe_accept_from_monitor(_ok_status())
+    ledger.record_decision(accepted["id"], "IGNORE")
+    with pytest.raises(ValueError, match="already decided"):
+        ledger.record_decision(accepted["id"], "TAKE")
+
+
+def test_prefers_ea_levels(tmp_ledger):
+    st = _ok_status()
+    st["vantage_ea"]["strategy"]["entry"] = 4100.0
+    st["vantage_ea"]["strategy"]["stop"] = 4080.0
+    st["vantage_ea"]["strategy"]["target"] = 4140.0
+    accepted = ledger.maybe_accept_from_monitor(st)
+    assert accepted is not None
+    items = ledger.list_signals()
+    assert items[0]["stop"] == 4080.0
+    assert items[0]["target"] == 4140.0
+    assert items[0]["timeframe"] == "M5"
+
+
+def test_alignment_total_is_three(tmp_ledger):
+    st = ledger.build_analyzer_status(_ok_status())
+    assert st["alignment"]["total"] == 3
+    assert st["alignment"]["aligned"] == 3
 
 
 def test_decision_api(tmp_ledger, monkeypatch):

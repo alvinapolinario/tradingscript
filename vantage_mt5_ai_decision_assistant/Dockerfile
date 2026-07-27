@@ -1,5 +1,5 @@
 # Vantage MT5 AI Decision Assistant — FastAPI backend
-# Advisory API + /monitor + /dashboard + /signals (EA stays on Windows/MT5)
+# Advisory API + /monitor + /dashboard + /signals + /analyzer (EA stays on Windows/MT5)
 FROM python:3.12-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \

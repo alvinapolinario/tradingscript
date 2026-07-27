@@ -33,6 +33,9 @@ struct VantageM5DeskSnap
    int    minutes_to_high_impact;
    int    max_spread_points;
    string allowed_direction; // BUY | SELL | NONE
+   double entry;
+   double stop;
+   double target;
    string note;
   };
 
@@ -176,6 +179,9 @@ private:
      {
       snap.reward_risk_ratio = 0.0;
       snap.planned_equity_risk_pct = m_risk_pct;
+      snap.entry = 0.0;
+      snap.stop = 0.0;
+      snap.target = 0.0;
 
       if(atr <= 0.0 || mid <= 0.0 || !spec.valid)
          return;
@@ -207,6 +213,10 @@ private:
 
       if(sl <= 0.0 || tp <= 0.0)
          return;
+
+      snap.entry = entry;
+      snap.stop = sl;
+      snap.target = tp;
 
       // Geometric R:R from ATR multiples (authoritative for desk playbook)
       const double risk_dist = MathAbs(entry - sl);
@@ -473,6 +483,9 @@ public:
       j += "\"planned_equity_risk_pct\":" + DoubleToJson(snap.planned_equity_risk_pct, 4) + ",";
       j += "\"max_spread_points\":" + IntegerToString(snap.max_spread_points) + ",";
       j += "\"allowed_direction\":\"" + JsonEscape(snap.allowed_direction) + "\",";
+      j += "\"entry\":" + DoubleToJson(snap.entry, 8) + ",";
+      j += "\"stop\":" + DoubleToJson(snap.stop, 8) + ",";
+      j += "\"target\":" + DoubleToJson(snap.target, 8) + ",";
       j += "\"news_available\":" + (snap.news_available ? "true" : "false") + ",";
       if(snap.news_available)
         {

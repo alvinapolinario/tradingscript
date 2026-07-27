@@ -136,13 +136,14 @@
       root.innerHTML = items.map((s) => {
         const cls = (s.side || "").toLowerCase() === "buy" ? "buy" : "sell";
         const n = s.contributing_count ?? (s.contributors || []).length;
+        const decision = (s.user_decision || "PENDING").toUpperCase();
         return `<article class="card ${cls}">
           <div class="side-block">
             <div class="arrow">${arrow(s.side)}</div>
             <div>
-              <div class="status">${s.status || "ACCEPTED"}</div>
+              <div class="status">${decision}</div>
               <div class="side">${s.side || "—"}</div>
-              <div class="pair">${s.symbol || "—"} · ${s.timeframe || "M5"}</div>
+              <div class="pair">${s.symbol || "—"} · ${s.timeframe || "M5"} · ${s.mode || "STANDARD"}</div>
             </div>
           </div>
           <div class="col score">
@@ -155,7 +156,7 @@
             <div class="v">${fmtEntry(s.entry_low, s.entry_high)}</div>
           </div>
           <div class="col">
-            <div class="k">Stop / T2</div>
+            <div class="k">Stop / TP</div>
             <div class="v">${fmtPx(s.stop)} / ${fmtPx(s.target)}</div>
           </div>
         </article>`;

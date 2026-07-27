@@ -248,10 +248,10 @@
     <div class="subbar">
       <div class="tf-tabs" id="tfTabs">
         <button type="button" data-tf="M1">M1</button>
-        <button type="button" data-tf="M5">M5</button>
+        <button type="button" data-tf="M5" class="active">M5</button>
         <button type="button" data-tf="M15">M15</button>
         <button type="button" data-tf="H1">H1</button>
-        <button type="button" data-tf="H4" class="active">H4</button>
+        <button type="button" data-tf="H4">H4</button>
       </div>
       <div id="brokerLine">MT5</div>
       <div id="alignLine">0/5 aligned</div>
@@ -265,6 +265,7 @@
           <span class="ema50">EMA 50</span>
           <span class="ema200">EMA 200</span>
           <span>Entry / SL / Targets</span>
+          <span style="color:#e8c547">Schematic (not live OHLC)</span>
         </div>
         <div class="chart-wrap" id="chart"></div>
         <div class="pattern-badge" id="patternBadge" hidden>
@@ -333,7 +334,7 @@
   <script>
     const state = {
       mode: "STANDARD",
-      timeframe: "H4",
+      timeframe: "M5",
       data: null,
       busy: false,
     };
@@ -352,8 +353,8 @@
       document.querySelectorAll("#modeToggle button").forEach((b) => {
         b.classList.toggle("active", b.dataset.mode === mode);
       });
-      if (mode === "SCALPING" && state.timeframe === "H4") setTf("M5", false);
-      if (mode === "STANDARD" && state.timeframe === "M5") setTf("H4", false);
+      if (mode === "SCALPING" && !["M1", "M5"].includes(state.timeframe)) setTf("M5", false);
+      if (mode === "STANDARD" && state.timeframe === "M1") setTf("M5", false);
       refresh();
     }
 

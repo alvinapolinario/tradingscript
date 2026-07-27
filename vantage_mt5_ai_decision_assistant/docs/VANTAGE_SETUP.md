@@ -241,8 +241,9 @@ Your Linux VPS can host the **FastAPI backend** in Docker. MetaTrader 5 still ru
 
 ### Deploy
 ```bash
-# on VPS
-cd /path/to/vantage_mt5_ai_decision_assistant
+# on VPS — this host uses:
+#   /var/www/tradingscript/vantage_mt5_ai_decision_assistant
+cd /var/www/tradingscript/vantage_mt5_ai_decision_assistant
 cp .env.docker.example .env
 nano .env   # set LOCAL_API_TOKEN (and OPENAI_* if needed)
 
@@ -251,6 +252,17 @@ curl http://127.0.0.1:8000/health
 ```
 
 Default publish port: **8000** (confirm it is free: `ss -tulnp | grep 8000`).
+
+### Web UI map
+| Sidebar | URL |
+|---------|-----|
+| Market Overview | `/monitor` |
+| Smart Analyzer | `/analyzer` |
+| Signal Center | `/signals` |
+| Opportunity Radar / Strategy Lab (desk) | `/dashboard` |
+| Other tools | `/coming-soon` |
+
+Left nav is shared (`/static/shell.js`). Analyzer chart is **schematic** until real OHLC is streamed from MT5.
 
 ### Firewall (if MT5 is remote)
 ```bash
@@ -272,6 +284,25 @@ docker compose logs -f vantage-api
 docker compose restart vantage-api
 docker compose down
 ```
+
+### Update from GitHub
+On this VPS the app lives at `/var/www/tradingscript/vantage_mt5_ai_decision_assistant`.
+
+```bash
+cd /var/www/tradingscript
+git fetch origin main && git checkout main && git pull --ff-only origin main
+cd vantage_mt5_ai_decision_assistant
+docker compose up -d --build
+curl -fsS http://127.0.0.1:8000/health
+```
+
+Or, after the helper script is on the server:
+
+```bash
+bash /var/www/tradingscript/vantage_mt5_ai_decision_assistant/deploy/update-from-github.sh
+```
+
+Keeps `.env` and the `vantage_signal_data` Docker volume (signal ledger). Rebuilds the image from `main`.
 
 ## 15. Explicit warning — live automatic trading is disabled
 
