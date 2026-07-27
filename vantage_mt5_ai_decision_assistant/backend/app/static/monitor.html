@@ -1,0 +1,1437 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Vantage MT5 Trader Cockpit</title>
+  <style>
+    :root {
+      --bg: #0c1117;
+      --panel: #151c26;
+      --panel2: #1a2330;
+      --line: #2a3542;
+      --text: #e7eef7;
+      --muted: #8b9bb0;
+      --ok: #3dd68c;
+      --warn: #f5a524;
+      --bad: #f31260;
+      --accent: #66d3fa;
+      --mono: "Cascadia Code", "Consolas", ui-monospace, monospace;
+      --sans: "Segoe UI", system-ui, sans-serif;
+    }
+    * { box-sizing: border-box; }
+    html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+    body {
+      margin: 0;
+      font-family: var(--sans);
+      background:
+        radial-gradient(900px 420px at 8% -8%, #1a2a3a 0%, transparent 55%),
+        radial-gradient(700px 380px at 100% 0%, #1a2430 0%, transparent 45%),
+        var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      min-height: 100dvh;
+      overflow-x: clip;
+    }
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 1rem;
+      padding: .85rem 1.25rem;
+      padding-left: max(1.25rem, env(safe-area-inset-left));
+      padding-right: max(1.25rem, env(safe-area-inset-right));
+      border-bottom: 1px solid var(--line);
+      background: rgba(12,17,23,.9);
+      backdrop-filter: blur(10px);
+      position: sticky;
+      top: 0;
+      z-index: 5;
+    }
+    header h1 { margin: 0; font-size: 1.05rem; font-weight: 700; letter-spacing: .01em; }
+    header .sub { color: var(--muted); font-size: .78rem; margin-top: .15rem; }
+    .actions { display: flex; gap: .45rem; flex-wrap: wrap; align-items: center; }
+    .pill {
+      display: inline-flex; align-items: center; gap: .4rem;
+      border: 1px solid var(--line); border-radius: 999px;
+      padding: .35rem .7rem; font-size: .78rem; background: var(--panel);
+      white-space: nowrap;
+    }
+    .pill.risk-critical { border-color: rgba(243,18,96,.55); color: #ffb3c7; background: rgba(243,18,96,.08); }
+    .pill.risk-high { border-color: rgba(245,165,36,.5); color: #ffd59a; background: rgba(245,165,36,.08); }
+    .pill.risk-ok { border-color: rgba(61,214,140,.4); color: #9af0c2; }
+    .pill.advisory { color: var(--muted); }
+    .dot {
+      width: .55rem; height: .55rem; border-radius: 50%; background: var(--muted);
+      box-shadow: 0 0 0 3px rgba(139,155,176,.15);
+    }
+    .dot.ok { background: var(--ok); box-shadow: 0 0 0 3px rgba(61,214,140,.18); }
+    .dot.warn { background: var(--warn); box-shadow: 0 0 0 3px rgba(245,165,36,.18); }
+    .dot.bad { background: var(--bad); box-shadow: 0 0 0 3px rgba(243,18,96,.18); }
+    main {
+      display: grid;
+      grid-template-columns: repeat(12, minmax(0, 1fr));
+      gap: .9rem;
+      padding: 1rem 1.25rem 2rem;
+      padding-left: max(1.25rem, env(safe-area-inset-left));
+      padding-right: max(1.25rem, env(safe-area-inset-right));
+      padding-bottom: max(2rem, env(safe-area-inset-bottom));
+      max-width: 1400px;
+      width: 100%;
+      margin: 0 auto;
+    }
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 1rem;
+      grid-column: span 12;
+      min-width: 0;
+      overflow-wrap: anywhere;
+    }
+    .card.half { grid-column: span 6; }
+    .card h2 {
+      margin: 0 0 .75rem;
+      font-size: .72rem;
+      text-transform: uppercase;
+      letter-spacing: .08em;
+      color: var(--muted);
+      font-weight: 650;
+    }
+    .pair-select {
+      display: inline-flex; align-items: center; gap: .45rem;
+      border: 1px solid var(--line); border-radius: 8px;
+      padding: .3rem .65rem; min-height: 2.4rem; background: #223040; font-size: .8rem;
+    }
+    .pair-select label { color: var(--muted); font-size: .7rem; text-transform: uppercase; letter-spacing: .04em; }
+    .pair-select select {
+      appearance: none; border: none; background: transparent; color: var(--text);
+      font-weight: 700; font-size: .9rem; min-width: 7rem; cursor: pointer;
+    }
+    .pair-select select:focus { outline: none; }
+    .pair-select .pair-dot { width: .45rem; height: .45rem; border-radius: 50%; background: var(--muted); }
+    .pair-select .pair-dot.ok { background: var(--ok); }
+    .pair-select .pair-dot.warn { background: var(--warn); }
+    button, a.btn {
+      appearance: none; border: 1px solid var(--line); background: #223040; color: var(--text);
+      border-radius: 8px; padding: .5rem .8rem; min-height: 2.4rem; font-size: .82rem;
+      cursor: pointer; text-decoration: none; display: inline-flex; align-items: center;
+      justify-content: center; touch-action: manipulation;
+    }
+    button:hover, a.btn:hover { border-color: var(--accent); }
+    button:disabled { opacity: .45; cursor: not-allowed; }
+    .muted { color: var(--muted); }
+
+    /* Decision strip */
+    .hero {
+      display: grid;
+      grid-template-columns: 1.3fr 1fr 1fr 1fr;
+      gap: .85rem;
+      align-items: stretch;
+    }
+    .hero-action {
+      padding: 1rem 1.1rem;
+      border-radius: 12px;
+      border: 1px solid var(--line);
+      background: var(--panel2);
+      min-height: 120px;
+    }
+    .hero-action.info { border-color: rgba(102,211,250,.35); }
+    .hero-action.warn { border-color: rgba(245,165,36,.45); background: rgba(245,165,36,.06); }
+    .hero-action.critical { border-color: rgba(243,18,96,.55); background: rgba(243,18,96,.08); }
+    .hero-action.ok { border-color: rgba(61,214,140,.4); background: rgba(61,214,140,.06); }
+    .hero-label { font-size: .68rem; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin-bottom: .35rem; }
+    .hero-action .big {
+      font-size: clamp(1.15rem, 2.2vw, 1.55rem);
+      font-weight: 800;
+      letter-spacing: .01em;
+      line-height: 1.25;
+      margin: 0 0 .45rem;
+      word-break: break-word;
+    }
+    .hero-sub { font-size: .84rem; color: var(--muted); line-height: 1.4; }
+    .hero-col {
+      padding: .85rem .9rem;
+      border-radius: 12px;
+      border: 1px solid var(--line);
+      background: #121a24;
+    }
+    .hero-col .val { font-size: 1.05rem; font-weight: 700; margin: .15rem 0 .35rem; }
+    .hero-col .meta { font-size: .8rem; color: var(--muted); line-height: 1.4; }
+    .chips { display: flex; flex-wrap: wrap; gap: .4rem; margin-top: .65rem; }
+    .chip {
+      font-size: .72rem; font-weight: 650; letter-spacing: .03em;
+      border-radius: 999px; padding: .25rem .55rem; border: 1px solid var(--line);
+      background: #121a24; color: var(--muted);
+    }
+    .chip.bad { color: #ffb3c7; border-color: rgba(243,18,96,.45); }
+    .chip.warn { color: #ffd59a; border-color: rgba(245,165,36,.45); }
+    .chip.ok { color: #9af0c2; border-color: rgba(61,214,140,.4); }
+
+    .kv {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: .45rem .75rem;
+      font-size: .9rem;
+    }
+    .kv div { display: flex; flex-direction: column; gap: .1rem; }
+    .kv span { color: var(--muted); font-size: .7rem; text-transform: uppercase; letter-spacing: .04em; }
+    .kv strong { font-weight: 650; word-break: break-word; }
+    .thesis-grid {
+      display: grid;
+      grid-template-columns: 1.2fr 1fr;
+      gap: 1rem;
+      align-items: start;
+    }
+    .level-list { display: flex; flex-direction: column; gap: .45rem; }
+    .level-row {
+      display: flex; justify-content: space-between; gap: .75rem;
+      padding: .55rem .7rem; border-radius: 8px; background: #121a24; border: 1px solid #243041;
+      font-size: .88rem;
+    }
+    .level-row .k { color: var(--muted); }
+    .level-row .v { font-weight: 650; text-align: right; }
+    .level-row.inv { border-color: rgba(243,18,96,.35); }
+    .level-row.inv .v { color: #ffb3c7; }
+    .bias-readout {
+      margin-top: .65rem; font-size: .88rem; color: #c9d6e5; line-height: 1.4;
+    }
+    .freshness {
+      display: flex; flex-wrap: wrap; gap: .5rem .85rem;
+      margin-top: .75rem; font-size: .8rem; color: var(--muted);
+    }
+    .pie-wrap {
+      display: grid;
+      grid-template-columns: 160px 1fr;
+      gap: 1rem;
+      align-items: center;
+    }
+    .pie-svg { width: 150px; height: 150px; }
+    .pie-legend { display: flex; flex-direction: column; gap: .4rem; font-size: .86rem; }
+    .pie-legend .row { display: flex; gap: .5rem; align-items: center; }
+    .swatch { width: .75rem; height: .75rem; border-radius: 2px; flex: 0 0 auto; }
+    .target-banner {
+      margin-top: .75rem; padding: .65rem .8rem; border-radius: 8px;
+      border: 1px solid var(--line); background: #121a24; font-size: .86rem; line-height: 1.4;
+    }
+    .target-banner.hit { border-color: rgba(61,214,140,.45); color: #9af0c2; }
+    .target-banner.warn-loss { border-color: rgba(245,165,36,.4); color: #ffd59a; }
+
+    .ai-actions { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; margin: .75rem 0; }
+    .ai-actions .hint { color: var(--muted); font-size: .78rem; }
+    .ai-out {
+      margin-top: .5rem; border: 1px solid var(--line); border-radius: 10px;
+      background: #121820; padding: .85rem 1rem; max-height: 380px; overflow: auto;
+      white-space: pre-wrap; font-family: var(--mono); font-size: .82rem; line-height: 1.45;
+    }
+    .ai-out.empty { color: var(--muted); }
+    .headline {
+      font-size: 1.05rem; line-height: 1.45; font-weight: 650; margin: 0 0 .75rem;
+      padding: .85rem 1rem; border-radius: 10px; border: 1px solid var(--line); background: #121a24;
+    }
+    .headline.critical { border-color: rgba(243,18,96,.45); color: #ffb3c7; }
+    .headline.warn { border-color: rgba(245,165,36,.4); color: #ffd59a; }
+    .headline.info { border-color: rgba(102,211,250,.35); }
+    .brief-grid {
+      display: grid;
+      grid-template-columns: 1.4fr 1fr 1fr;
+      gap: 1rem;
+      margin-top: .85rem;
+    }
+    .subh {
+      margin: 0 0 .5rem; font-size: .7rem; text-transform: uppercase;
+      letter-spacing: .07em; color: var(--muted); font-weight: 650;
+    }
+    ul.clean {
+      margin: 0; padding: 0; list-style: none;
+      display: flex; flex-direction: column; gap: .45rem;
+    }
+    ul.clean li {
+      font-size: .86rem; line-height: 1.4; padding: .55rem .7rem; border-radius: 8px;
+      background: #121a24; border: 1px solid #243041;
+    }
+    .rec { border-left: 3px solid var(--accent); }
+    .rec.critical { border-left-color: var(--bad); }
+    .rec.high { border-left-color: var(--warn); }
+    .rec.medium { border-left-color: var(--accent); }
+    .rec.low { border-left-color: var(--muted); }
+    .rec .title { font-weight: 650; margin-bottom: .2rem; }
+    .rec .detail { color: var(--muted); font-size: .82rem; }
+    .prio {
+      display: inline-block; font-size: .65rem; text-transform: uppercase;
+      letter-spacing: .06em; color: var(--muted); margin-bottom: .25rem;
+    }
+    .check li { display: flex; gap: .55rem; align-items: flex-start; }
+    .check .mark { width: 1rem; text-align: center; font-weight: 700; flex: 0 0 auto; }
+    .check .mark.ok { color: var(--ok); }
+    .check .mark.bad { color: var(--bad); }
+    .improve li { border-style: dashed; color: #c9d6e5; }
+
+    .cal-head {
+      display: flex; justify-content: space-between; align-items: baseline;
+      gap: 1rem; margin-bottom: .75rem; flex-wrap: wrap;
+    }
+    .cal-head .title { font-size: 1.1rem; font-weight: 700; }
+    .cal-head .meta { color: var(--muted); font-size: .85rem; }
+    .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: .35rem; }
+    .cal-dow {
+      text-align: center; font-size: .68rem; text-transform: uppercase;
+      letter-spacing: .06em; color: var(--muted); padding: .25rem 0;
+    }
+    .cal-cell {
+      min-height: 64px; border: 1px solid var(--line); border-radius: 8px;
+      padding: .35rem .4rem; background: #121a24;
+      display: flex; flex-direction: column; gap: .15rem;
+    }
+    .cal-cell.empty { background: transparent; border-color: transparent; }
+    .cal-cell .d { font-size: .75rem; color: var(--muted); }
+    .cal-cell .pct { font-size: .92rem; font-weight: 700; }
+    .cal-cell .pl { font-size: .72rem; color: var(--muted); }
+    .cal-cell.pos { border-color: rgba(61,214,140,.35); }
+    .cal-cell.pos .pct { color: var(--ok); }
+    .cal-cell.neg { border-color: rgba(243,18,96,.35); }
+    .cal-cell.neg .pct { color: var(--bad); }
+    .cal-cell.flat .pct { color: var(--muted); }
+    .cal-cell.today { box-shadow: inset 0 0 0 1px var(--accent); }
+    .cal-cell.privacy .pl { color: var(--muted); letter-spacing: .12em; font-weight: 650; }
+    .cal-privacy {
+      display: inline-flex; align-items: center; gap: .4rem;
+      font-size: .78rem; color: var(--muted);
+    }
+    .cal-privacy button.active {
+      border-color: rgba(102,211,250,.55);
+      color: var(--accent);
+    }
+    .cal-note { margin-top: .65rem; font-size: .78rem; color: var(--muted); }
+    .stats-layout {
+      display: grid; grid-template-columns: 200px 1fr; gap: 1.25rem; align-items: start;
+    }
+    .stats-kv {
+      display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .55rem .75rem;
+    }
+    .stats-kv div {
+      background: #121a24; border: 1px solid var(--line); border-radius: 8px; padding: .55rem .65rem;
+    }
+    .stats-kv span {
+      display: block; color: var(--muted); font-size: .68rem; text-transform: uppercase;
+      letter-spacing: .04em; margin-bottom: .2rem;
+    }
+    .stats-kv strong { font-size: .95rem; font-weight: 650; }
+    .stats-kv strong.pos { color: var(--ok); }
+    .stats-kv strong.neg { color: var(--bad); }
+
+    details.ops {
+      grid-column: span 12;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: var(--panel);
+      padding: 0;
+    }
+    details.ops > summary {
+      cursor: pointer; list-style: none; padding: .9rem 1rem;
+      font-size: .72rem; text-transform: uppercase; letter-spacing: .08em;
+      color: var(--muted); font-weight: 650; user-select: none;
+    }
+    details.ops > summary::-webkit-details-marker { display: none; }
+    details.ops > summary::after { content: " ▾"; color: var(--muted); }
+    details.ops[open] > summary::after { content: " ▴"; }
+    details.ops .ops-body { padding: 0 1rem 1rem; }
+    details.ops .ops-grid {
+      display: grid; grid-template-columns: 1fr 1fr; gap: .85rem;
+    }
+    footer.foot {
+      grid-column: span 12;
+      display: flex; flex-wrap: wrap; gap: .5rem; align-items: center;
+      justify-content: space-between; color: var(--muted); font-size: .78rem;
+      padding: .25rem 0 1rem;
+    }
+    footer.foot .links { display: flex; gap: .45rem; flex-wrap: wrap; }
+
+    @media (max-width: 1100px) {
+      .hero { grid-template-columns: 1fr 1fr; }
+      .hero-action { grid-column: span 2; }
+      .thesis-grid { grid-template-columns: 1fr; }
+      .brief-grid { grid-template-columns: 1fr; }
+      .stats-kv { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .card.half { grid-column: span 12; }
+    }
+    @media (max-width: 980px) {
+      header { flex-direction: column; align-items: stretch; gap: .7rem; }
+      .actions { width: 100%; }
+      .hero { grid-template-columns: 1fr; }
+      .hero-action { grid-column: auto; }
+      .pie-wrap { grid-template-columns: 1fr; justify-items: start; }
+      .stats-layout { grid-template-columns: 1fr; }
+      details.ops .ops-grid { grid-template-columns: 1fr; }
+      .cal-cell { min-height: 56px; }
+    }
+    @media (max-width: 640px) {
+      header h1 { font-size: .98rem; }
+      .pair-select { width: 100%; }
+      .pair-select select { flex: 1; min-width: 0; }
+      .kv { grid-template-columns: 1fr; }
+      .ai-actions button { flex: 1 1 auto; }
+      .ai-out { max-height: min(50vh, 340px); font-size: .78rem; }
+      .cal-cell { min-height: 48px; padding: .25rem .2rem; }
+      .cal-cell .pct { font-size: .72rem; }
+      .cal-cell .pl { display: none; }
+      .cal-dow { font-size: .6rem; }
+      .stats-kv { grid-template-columns: 1fr 1fr; }
+      .pie-svg { width: 140px; height: 140px; }
+    }
+    @media (max-width: 400px) {
+      .stats-kv { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <h1>Vantage Trader Cockpit</h1>
+      <div class="sub">Advisory decision desk · no auto-trading</div>
+    </div>
+    <div class="actions">
+      <div class="pair-select" title="Select chart pair to monitor">
+        <span class="pair-dot" id="pairDot"></span>
+        <label for="pairSelect">Pair</label>
+        <select id="pairSelect" aria-label="Monitor pair">
+          <option value="XAUUSD">XAUUSD</option>
+          <option value="BTCUSD">BTCUSD</option>
+        </select>
+      </div>
+      <span class="pill" id="overallPill"><span class="dot" id="overallDot"></span><span id="overallText">…</span></span>
+      <span class="pill" id="riskPill"><span class="dot" id="riskDot"></span><span id="riskPillText">Risk …</span></span>
+      <span class="pill" id="wsPill"><span class="dot" id="wsDot"></span><span id="wsText">WS …</span></span>
+      <span class="pill" style="cursor:pointer"><a href="/dashboard" style="color:inherit;text-decoration:none">M5 Desk →</a></span>
+      <span class="pill advisory">Advisory only</span>
+    </div>
+  </header>
+
+  <main>
+    <!-- B. Decision strip -->
+    <section class="card" id="decisionStrip">
+      <h2>Decision strip · what to do now</h2>
+      <div class="hero">
+        <div class="hero-action info" id="heroActionBox">
+          <div class="hero-label">Primary action</div>
+          <div class="big" id="action">—</div>
+          <div class="hero-sub" id="heroHeadline">Waiting for live EA data…</div>
+          <div class="chips" id="decisionChips"></div>
+        </div>
+        <div class="hero-col">
+          <div class="hero-label">New entry</div>
+          <div class="val" id="newEntry">—</div>
+          <div class="meta">Allowed: <strong id="newAllowed">—</strong></div>
+          <div class="meta">Market: <strong id="marketState">—</strong></div>
+        </div>
+        <div class="hero-col">
+          <div class="hero-label">Open position</div>
+          <div class="val" id="existingPos">—</div>
+          <div class="meta">Count: <strong id="positions">—</strong></div>
+          <div class="meta">Entry / SL: <strong id="entrySl">—</strong></div>
+        </div>
+        <div class="hero-col">
+          <div class="hero-label">Risk</div>
+          <div class="val" id="riskStatus">—</div>
+          <div class="meta">Equity at SL: <strong id="equityRisk">—</strong></div>
+          <div class="meta">Est. SL loss: <strong id="slLoss">—</strong></div>
+          <div class="meta" id="note" style="color:var(--bad);margin-top:.35rem">—</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- C. Trade thesis -->
+    <section class="card half">
+      <h2>Trade thesis · <span id="thesisSymbol" style="text-transform:none;letter-spacing:.02em;color:var(--text)">—</span>
+        <span class="chip" id="thesisLevelSource" style="margin-left:.35rem;text-transform:none;letter-spacing:0">—</span>
+      </h2>
+      <div class="level-list">
+        <div class="level-row"><span class="k">Nearest S / R</span><span class="v" id="sr">—</span></div>
+        <div class="level-row"><span class="k">Immediate support</span><span class="v" id="thesisSupport">—</span></div>
+        <div class="level-row"><span class="k">Recovery L1 / L2</span><span class="v" id="thesisRecovery">—</span></div>
+        <div class="level-row"><span class="k">Bullish confirmation</span><span class="v" id="thesisBullish">—</span></div>
+        <div class="level-row inv"><span class="k">Invalidation</span><span class="v" id="thesisInvalidation">—</span></div>
+      </div>
+      <div class="cal-note" id="thesisLevelNote" style="margin-top:.55rem">Levels follow the selected pair’s EA. BTC/other use AUTO (price+ATR); gold can use MANUAL inputs.</div>
+      <div class="chips" id="thesisChips" style="margin-top:.75rem"></div>
+    </section>
+
+    <section class="card half">
+      <h2>Floating P/L vs Equity</h2>
+      <div class="pie-wrap">
+        <svg class="pie-svg" id="equityPie" viewBox="0 0 120 120" aria-label="Floating P/L pie chart"></svg>
+        <div class="pie-legend" id="pieLegend">
+          <div class="muted">Waiting for equity data…</div>
+        </div>
+      </div>
+      <div class="target-banner" id="floatTargetBanner">Float profit target: 10% of equity</div>
+      <div class="kv" style="margin-top:.75rem">
+        <div><span>Floating P/L</span><strong id="floatPl">—</strong></div>
+        <div><span>Float % equity</span><strong id="floatPct">—</strong></div>
+        <div><span>Equity</span><strong id="equityBal">—</strong></div>
+        <div><span>Add allowed</span><strong id="addAllowed">—</strong></div>
+      </div>
+    </section>
+
+    <!-- D. Market context -->
+    <section class="card half">
+      <h2>Market context <span class="muted" id="pairHint" style="text-transform:none;letter-spacing:0;font-weight:500"></span></h2>
+      <div class="big" id="symbol" style="font-size:1.35rem;font-weight:800;margin:.1rem 0 .5rem">—</div>
+      <div class="kv">
+        <div><span>Bid / Ask</span><strong id="bidAsk">—</strong></div>
+        <div><span>Spread</span><strong id="spread">—</strong></div>
+        <div><span>Trend</span><strong id="trend">—</strong></div>
+        <div><span>Candle</span><strong id="candle">—</strong></div>
+        <div><span>Digits / Contract</span><strong id="digitsContract">—</strong></div>
+        <div><span>Stops level</span><strong id="stops">—</strong></div>
+        <div><span>Bullish %</span><strong id="bullPct" style="color:var(--ok)">—</strong></div>
+        <div><span>Bearish %</span><strong id="bearPct" style="color:var(--bad)">—</strong></div>
+      </div>
+      <div class="freshness">
+        <span>Last analyze: <strong id="lastAnalyze" style="color:var(--text)">—</strong></span>
+        <span>Candle: <strong id="freshnessCandle" style="color:var(--text)">—</strong></span>
+      </div>
+    </section>
+
+    <section class="card half">
+      <h2>Chart bias</h2>
+      <div class="pie-wrap">
+        <svg class="pie-svg" id="biasPie" viewBox="0 0 120 120" aria-label="Bullish vs bearish pie"></svg>
+        <div class="pie-legend" id="biasLegend"><div class="muted">Chart bias…</div></div>
+      </div>
+      <div class="bias-readout" id="biasReadout">Waiting for bias…</div>
+    </section>
+
+    <!-- E. AI desk -->
+    <section class="card">
+      <h2>Decision Brief · Analysis &amp; Recommendations</h2>
+      <div class="headline info" id="briefHeadline">Waiting for live EA data…</div>
+      <div class="ai-actions">
+        <button type="button" id="btnCopyBrief" title="Copy markdown snapshot">Copy AI brief</button>
+        <button type="button" id="btnAiAnalyze" title="Analyze via OpenAI (server-side key)">Analyze with AI</button>
+        <span class="hint" id="llmHint">LLM: …</span>
+      </div>
+      <div class="ai-out empty" id="aiAnalysisOut">ChatGPT analysis will appear here after you click Analyze. Key stays in backend .env only.</div>
+      <div class="brief-grid">
+        <div>
+          <div class="subh">Recommendations</div>
+          <ul class="clean" id="briefRecs"><li class="muted">—</li></ul>
+        </div>
+        <div>
+          <div class="subh">Situation</div>
+          <ul class="clean" id="briefSituation"><li class="muted">—</li></ul>
+          <div class="subh" style="margin-top:1rem">Decision checklist</div>
+          <ul class="clean check" id="briefCheck"><li class="muted">—</li></ul>
+        </div>
+        <div>
+          <div class="subh">Improve next decision</div>
+          <ul class="clean improve" id="briefImprove"><li class="muted">—</li></ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- F. History -->
+    <section class="card">
+      <h2>Account Performance · Wins vs Losses</h2>
+      <div class="stats-layout">
+        <div>
+          <svg class="pie-svg" id="wlPie" viewBox="0 0 120 120" aria-label="Wins vs losses pie"></svg>
+          <div class="pie-legend" id="wlLegend" style="margin-top:.5rem"><div class="muted">Waiting for trade history…</div></div>
+        </div>
+        <div class="stats-kv" id="tradeStatsKv"></div>
+      </div>
+      <div class="cal-note">
+        Closed exit deals only (profit + swap + commission), same style as MT5 Strategy Tester / MQL report.
+        Drawdown is peak-to-trough of cumulative closed P/L. Lookback controlled by EA <code>InpStatsLookbackDays</code> (0 = all history).
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Trading History Calendar · Daily Closed P/L %</h2>
+      <div class="cal-head">
+        <div style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap">
+          <button type="button" id="calPrev" title="Previous month">‹ Prev</button>
+          <div class="title" id="calTitle">—</div>
+          <button type="button" id="calNext" title="Next month">Next ›</button>
+          <button type="button" id="calToday" title="Current month">This month</button>
+          <span class="cal-privacy">
+            <button type="button" id="calHidePl" title="Hide P/L amounts for privacy">Hide P/L</button>
+          </span>
+        </div>
+        <div class="meta" id="calMeta">Waiting for EA history…</div>
+      </div>
+      <div class="cal-grid" id="calGrid"></div>
+      <div class="cal-note" id="calNote">
+        Closed deals only (profit + swap + commission) ÷ current equity. Floating P/L is not included.
+        Use Prev/Next to change month — EA loads that month on the next heartbeat if not cached.
+        Use <strong>Hide P/L</strong> to mask dollar amounts — daily/month % stay visible.
+      </div>
+    </section>
+
+    <!-- G. Ops drawer -->
+    <details class="ops">
+      <summary>Ops / link diagnostics (API · EA · counts)</summary>
+      <div class="ops-body">
+        <div class="ops-grid">
+          <div>
+            <h2 style="margin-top:0">API Backend</h2>
+            <div class="big" id="apiStatus" style="font-size:1.2rem;font-weight:700;margin:.2rem 0 .5rem">—</div>
+            <div class="kv">
+              <div><span>Uptime</span><strong id="uptime">—</strong></div>
+              <div><span>Started (UTC)</span><strong id="started">—</strong></div>
+              <div><span>Mode</span><strong>Advisory only</strong></div>
+              <div><span>Now (UTC)</span><strong id="now">—</strong></div>
+            </div>
+          </div>
+          <div>
+            <h2 style="margin-top:0">Vantage EA Link</h2>
+            <div class="big" id="eaStatus" style="font-size:1.2rem;font-weight:700;margin:.2rem 0 .5rem">—</div>
+            <div class="kv">
+              <div><span>Last seen</span><strong id="eaSeen">—</strong></div>
+              <div><span>Age</span><strong id="eaAge">—</strong></div>
+              <div><span>Company</span><strong id="eaCompany">—</strong></div>
+              <div><span>Server</span><strong id="eaServer">—</strong></div>
+              <div><span>Account</span><strong id="eaAccount">—</strong></div>
+              <div><span>Mode</span><strong id="eaMode">—</strong></div>
+              <div><span>Analyze count</span><strong id="analyzeCount">—</strong></div>
+              <div><span>Heartbeat count</span><strong id="hbCount">—</strong></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </details>
+
+    <footer class="foot">
+      <div>Local advisory monitor · never auto-trades</div>
+      <div class="links">
+        <a class="btn" href="/docs" target="_blank">API docs</a>
+        <a class="btn" href="/health" target="_blank">/health</a>
+      </div>
+    </footer>
+  </main>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+
+    function fmtAge(sec) {
+      if (sec == null) return "never";
+      if (sec < 60) return sec + "s ago";
+      if (sec < 3600) return Math.floor(sec / 60) + "m " + (sec % 60) + "s ago";
+      return Math.floor(sec / 3600) + "h ago";
+    }
+
+    function setDot(el, kind) {
+      el.className = "dot " + (kind || "");
+    }
+
+    function esc(s) {
+      return String(s ?? "")
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;");
+    }
+
+    function polar(cx, cy, r, angleDeg) {
+      const a = (angleDeg - 90) * Math.PI / 180;
+      return [cx + r * Math.cos(a), cy + r * Math.sin(a)];
+    }
+
+    function donutSlice(cx, cy, rOuter, rInner, startDeg, endDeg) {
+      const large = (endDeg - startDeg) > 180 ? 1 : 0;
+      const [x1, y1] = polar(cx, cy, rOuter, startDeg);
+      const [x2, y2] = polar(cx, cy, rOuter, endDeg);
+      const [x3, y3] = polar(cx, cy, rInner, endDeg);
+      const [x4, y4] = polar(cx, cy, rInner, startDeg);
+      return `M ${x1} ${y1} A ${rOuter} ${rOuter} 0 ${large} 1 ${x2} ${y2}
+              L ${x3} ${y3} A ${rInner} ${rInner} 0 ${large} 0 ${x4} ${y4} Z`;
+    }
+
+    function actionTone(action, risk, exceeds) {
+      const a = (action || "").toUpperCase();
+      const r = (risk || "").toUpperCase();
+      if (r === "CRITICAL" || exceeds || a.includes("CRITICAL")) return "critical";
+      if (r === "HIGH" || r === "VERY_HIGH" || a.includes("CAUTION") || a.includes("WARNING") || a.includes("HIGH_SPREAD"))
+        return "warn";
+      if (a.includes("BUY") || a.includes("SELL") || a === "HOLD") return "ok";
+      return "info";
+    }
+
+    function riskTone(risk, exceeds) {
+      const r = (risk || "").toUpperCase();
+      if (r === "CRITICAL" || exceeds) return "critical";
+      if (r === "HIGH" || r === "VERY_HIGH") return "high";
+      if (r === "LOW" || r === "MODERATE" || r === "NONE") return "ok";
+      return "";
+    }
+
+    function renderTradeStats(st) {
+      const pie = $("wlPie");
+      const legend = $("wlLegend");
+      const kv = $("tradeStatsKv");
+      if (!st || !st.ok) {
+        pie.innerHTML = `<circle cx="60" cy="60" r="48" fill="none" stroke="#2a3542" stroke-width="16"/>`;
+        legend.innerHTML = `<div class="muted">No closed trades in lookback yet</div>`;
+        kv.innerHTML = "";
+        return;
+      }
+      const wins = Number(st.wins || 0);
+      const losses = Number(st.losses || 0);
+      const be = Number(st.breakeven || 0);
+      const total = wins + losses + be;
+      const cx = 60, cy = 60, rO = 48, rI = 28;
+      let paths = "";
+      if (total <= 0) {
+        paths = `<circle cx="${cx}" cy="${cy}" r="${(rO+rI)/2}" fill="none" stroke="#2a3542" stroke-width="${rO-rI}"/>`;
+      } else {
+        let a0 = 0;
+        const slices = [
+          { n: wins, color: "#3dd68c" },
+          { n: losses, color: "#f31260" },
+          { n: be, color: "#8b9bb0" },
+        ].filter((s) => s.n > 0);
+        for (const s of slices) {
+          const deg = (s.n / total) * 360;
+          const a1 = a0 + deg;
+          if (deg >= 359.5) {
+            paths += `<circle cx="${cx}" cy="${cy}" r="${(rO+rI)/2}" fill="none" stroke="${s.color}" stroke-width="${rO-rI}"/>`;
+          } else {
+            paths += `<path d="${donutSlice(cx, cy, rO, rI, a0, a1)}" fill="${s.color}"></path>`;
+          }
+          a0 = a1;
+        }
+      }
+      const wr = Number(st.win_rate_pct || 0);
+      paths += `<text x="${cx}" y="${cy - 2}" text-anchor="middle" fill="#e7eef7" font-size="12" font-weight="700">${wr.toFixed(0)}%</text>`;
+      paths += `<text x="${cx}" y="${cy + 12}" text-anchor="middle" fill="#8b9bb0" font-size="7">win rate</text>`;
+      pie.innerHTML = paths;
+
+      legend.innerHTML = `
+        <div class="row"><span class="swatch" style="background:#3dd68c"></span><span>Wins: <strong>${wins}</strong></span></div>
+        <div class="row"><span class="swatch" style="background:#f31260"></span><span>Losses: <strong>${losses}</strong></span></div>
+        ${be ? `<div class="row"><span class="swatch" style="background:#8b9bb0"></span><span>Breakeven: <strong>${be}</strong></span></div>` : ""}
+        <div class="muted">Total trades: ${Number(st.total_trades || 0)}</div>
+      `;
+
+      const ccy = st.currency || "USD";
+      const net = Number(st.net_profit || 0);
+      const dd = Number(st.max_drawdown || 0);
+      const pf = Number(st.profit_factor || 0);
+      const rows = [
+        ["Total trades", String(st.total_trades ?? 0)],
+        ["Win rate", `${wr.toFixed(1)}%`],
+        ["Net profit", `${net.toFixed(2)} ${ccy}`, net >= 0 ? "pos" : "neg"],
+        ["Profit factor", pf >= 100 ? "∞" : pf.toFixed(2), pf >= 1 ? "pos" : "neg"],
+        ["Gross profit", `${Number(st.gross_profit || 0).toFixed(2)} ${ccy}`, "pos"],
+        ["Gross loss", `${Number(st.gross_loss || 0).toFixed(2)} ${ccy}`, "neg"],
+        ["Avg win", `${Number(st.avg_win || 0).toFixed(2)} ${ccy}`, "pos"],
+        ["Avg loss", `${Number(st.avg_loss || 0).toFixed(2)} ${ccy}`, "neg"],
+        ["Largest win", `${Number(st.largest_win || 0).toFixed(2)} ${ccy}`, "pos"],
+        ["Largest loss", `${Number(st.largest_loss || 0).toFixed(2)} ${ccy}`, "neg"],
+        ["Max drawdown", `${dd.toFixed(2)} ${ccy} (${Number(st.max_drawdown_pct || 0).toFixed(1)}%)`, "neg"],
+        ["Recovery factor", Number(st.recovery_factor || 0) >= 100 ? "∞" : Number(st.recovery_factor || 0).toFixed(2)],
+        ["Payoff ratio", Number(st.payoff_ratio || 0).toFixed(2)],
+        ["Expected payoff", `${Number(st.expected_payoff || 0).toFixed(2)} ${ccy}`],
+        ["Max consec. wins", String(st.max_consec_wins ?? 0)],
+        ["Max consec. losses", String(st.max_consec_losses ?? 0)],
+        ["Current streak", `${st.current_streak_type || "NONE"} ${st.current_streak || 0}`],
+        ["Sharpe (approx)", Number(st.sharpe_approx || 0).toFixed(2)],
+        ["Lookback", st.lookback_days > 0 ? `${st.lookback_days} days` : "All history"],
+        ["Scope", st.symbol_filter ? st.symbol_filter : "All symbols"],
+      ];
+      kv.innerHTML = rows.map(([label, val, cls]) => `
+        <div><span>${esc(label)}</span><strong class="${cls || ""}">${esc(val)}</strong></div>
+      `).join("");
+    }
+
+    let calViewYear = 0;
+    let calViewMonth = 0;
+    let calServerNow = { year: 0, month: 0 };
+    let lastCalPayload = null;
+    let lastCalOpts = null;
+    const CAL_PRIVACY_KEY = "vantage_cal_hide_pl";
+
+    function isCalPrivacyOn() {
+      try { return localStorage.getItem(CAL_PRIVACY_KEY) === "1"; }
+      catch (_) { return false; }
+    }
+
+    function setCalPrivacy(on) {
+      try { localStorage.setItem(CAL_PRIVACY_KEY, on ? "1" : "0"); }
+      catch (_) {}
+      syncCalPrivacyBtn();
+      if (lastCalPayload) renderPlCalendar(lastCalPayload, lastCalOpts || {});
+    }
+
+    function syncCalPrivacyBtn() {
+      const btn = $("calHidePl");
+      if (!btn) return;
+      const on = isCalPrivacyOn();
+      btn.classList.toggle("active", on);
+      btn.textContent = on ? "Show P/L" : "Hide P/L";
+      btn.title = on ? "Show dollar P/L amounts" : "Hide dollar P/L (keep % visible)";
+    }
+
+    function shiftMonth(y, m, delta) {
+      let yy = y;
+      let mm = m + delta;
+      while (mm < 1) { mm += 12; yy -= 1; }
+      while (mm > 12) { mm -= 12; yy += 1; }
+      return { year: yy, month: mm };
+    }
+
+    async function requestCalendarMonth(year, month) {
+      try {
+        const r = await fetch("/api/v1/monitor/calendar-month", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ year, month }),
+        });
+        const data = await r.json();
+        calViewYear = year;
+        calViewMonth = month;
+        if (data.calendar) {
+          renderPlCalendar(data.calendar, { pending: false });
+        } else {
+          $("calMeta").textContent = `Loading ${year}-${String(month).padStart(2,"0")} from EA history… (wait for next heartbeat)`;
+          $("calGrid").innerHTML = "";
+          $("calTitle").textContent = `${year}-${String(month).padStart(2,"0")}`;
+        }
+      } catch (err) {
+        console.error(err);
+        $("calMeta").textContent = "Failed to request calendar month";
+      }
+    }
+
+    function daysInMonth(year, month) {
+      return new Date(year, month, 0).getDate();
+    }
+
+    function renderPlCalendar(cal, opts) {
+      const title = $("calTitle");
+      const meta = $("calMeta");
+      const grid = $("calGrid");
+      const pending = opts && opts.pending;
+      lastCalPayload = cal || null;
+      lastCalOpts = opts || null;
+      const hidePl = isCalPrivacyOn();
+      if (!cal || !cal.ok) {
+        if (calViewYear > 0) {
+          title.textContent = `${calViewYear}-${String(calViewMonth).padStart(2,"0")}`;
+          meta.textContent = pending
+            ? "Waiting for EA to load this month…"
+            : "No closed deals for this month (or still loading)";
+        } else {
+          title.textContent = "No history yet";
+          meta.textContent = "Attach EA and wait for heartbeat with deal history";
+        }
+        grid.innerHTML = "";
+        return;
+      }
+      const year = Number(cal.year);
+      const month = Number(cal.month);
+      calViewYear = year;
+      calViewMonth = month;
+      const names = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+      title.textContent = `${names[month - 1] || month} ${year}`;
+      const ccy = cal.currency || "USD";
+      const monthPct = Number(cal.month_pct || 0);
+      const monthPl = Number(cal.month_pl || 0);
+      const deals = cal.month_deals || 0;
+      if (hidePl) {
+        meta.textContent = `Month ${monthPct.toFixed(2)}% of equity · P/L $ hidden · ${deals} exit deals`;
+      } else {
+        meta.textContent = `Month P/L ${monthPl.toFixed(2)} ${ccy} (${monthPct.toFixed(2)}% of equity ${Number(cal.equity_ref || 0).toFixed(2)}) · ${deals} exit deals`;
+      }
+
+      const byDay = {};
+      (cal.days || []).forEach((row) => { byDay[Number(row.d)] = row; });
+
+      const first = new Date(year, month - 1, 1);
+      let startDow = first.getDay();
+      startDow = (startDow + 6) % 7;
+      const dim = daysInMonth(year, month);
+      const today = new Date();
+      const isThisMonth = today.getFullYear() === year && (today.getMonth() + 1) === month;
+      const todayD = today.getDate();
+
+      const dows = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
+      let html = dows.map((d) => `<div class="cal-dow">${d}</div>`).join("");
+      for (let i = 0; i < startDow; i++) html += `<div class="cal-cell empty"></div>`;
+      for (let d = 1; d <= dim; d++) {
+        const row = byDay[d];
+        const pct = row ? Number(row.pct) : null;
+        const pl = row ? Number(row.pl) : null;
+        let cls = "cal-cell flat";
+        if (pct != null && pct > 0.0001) cls = "cal-cell pos";
+        else if (pct != null && pct < -0.0001) cls = "cal-cell neg";
+        if (isThisMonth && d === todayD) cls += " today";
+        if (hidePl && pl != null) cls += " privacy";
+        const pctTxt = pct == null ? "—" : ((pct > 0 ? "+" : "") + pct.toFixed(2) + "%");
+        const plTxt = pl == null ? "" : (hidePl
+          ? (row.deals ? `••• · ${row.deals}d` : "•••")
+          : `${pl.toFixed(2)} ${ccy}${row.deals ? ` · ${row.deals}d` : ""}`);
+        const tip = hidePl
+          ? (pct == null ? "P/L $ hidden" : `${pctTxt} · $ hidden`)
+          : plTxt;
+        html += `<div class="${cls}" title="${esc(tip)}">
+          <div class="d">${d}</div>
+          <div class="pct">${pctTxt}</div>
+          <div class="pl">${esc(plTxt)}</div>
+        </div>`;
+      }
+      grid.innerHTML = html;
+
+      const nextBtn = $("calNext");
+      if (calServerNow.year > 0) {
+        const atCurrent = year > calServerNow.year || (year === calServerNow.year && month >= calServerNow.month);
+        nextBtn.disabled = atCurrent;
+      }
+    }
+
+    $("calPrev").onclick = () => {
+      if (calViewYear <= 0) return;
+      const t = shiftMonth(calViewYear, calViewMonth, -1);
+      requestCalendarMonth(t.year, t.month);
+    };
+    $("calNext").onclick = () => {
+      if (calViewYear <= 0) return;
+      const t = shiftMonth(calViewYear, calViewMonth, 1);
+      if (calServerNow.year > 0) {
+        if (t.year > calServerNow.year || (t.year === calServerNow.year && t.month > calServerNow.month))
+          return;
+      }
+      requestCalendarMonth(t.year, t.month);
+    };
+    $("calToday").onclick = () => {
+      if (calServerNow.year > 0)
+        requestCalendarMonth(calServerNow.year, calServerNow.month);
+      else if (calViewYear > 0) {
+        const now = new Date();
+        requestCalendarMonth(now.getFullYear(), now.getMonth() + 1);
+      }
+    };
+    $("calHidePl").onclick = () => setCalPrivacy(!isCalPrivacyOn());
+    syncCalPrivacyBtn();
+
+    function renderBiasPie(ea, brief) {
+      const b = (brief && brief.chart_bias) || {};
+      const bull = Number(b.bullish_pct ?? ea.bullish_pct ?? 0);
+      const bear = Number(b.bearish_pct ?? ea.bearish_pct ?? 0);
+      const flat = Number(b.neutral_pct ?? ea.neutral_pct ?? 0);
+      const lookback = Number(b.lookback ?? ea.bias_lookback ?? 20);
+      const indBull = Number(b.indicator_bullish_pct ?? ea.indicator_bullish_pct ?? 0);
+      const indBear = Number(b.indicator_bearish_pct ?? ea.indicator_bearish_pct ?? 0);
+      const svg = $("biasPie");
+      const legend = $("biasLegend");
+      const total = bull + bear + flat;
+      if (!total || total < 0.01) {
+        svg.innerHTML = `<circle cx="60" cy="60" r="48" fill="none" stroke="#2a3542" stroke-width="16"/>`;
+        legend.innerHTML = `<div class="muted">Waiting for chart bias…</div>`;
+        $("biasReadout").textContent = "Waiting for bias…";
+        return;
+      }
+      const cx = 60, cy = 60, rO = 48, rI = 28;
+      let a0 = 0;
+      const slices = [
+        { pct: bull, color: "#3dd68c", label: "Bullish" },
+        { pct: bear, color: "#f31260", label: "Bearish" },
+        { pct: flat, color: "#8b9bb0", label: "Flat" },
+      ].filter((s) => s.pct > 0.05);
+      let paths = "";
+      for (const s of slices) {
+        const deg = (s.pct / total) * 360;
+        const a1 = a0 + deg;
+        if (deg >= 359.5) {
+          paths += `<circle cx="${cx}" cy="${cy}" r="${(rO+rI)/2}" fill="none" stroke="${s.color}" stroke-width="${rO-rI}"/>`;
+        } else {
+          paths += `<path d="${donutSlice(cx, cy, rO, rI, a0, a1)}" fill="${s.color}"></path>`;
+        }
+        a0 = a1;
+      }
+      paths += `<text x="${cx}" y="${cy - 2}" text-anchor="middle" fill="#e7eef7" font-size="10" font-weight="700">${lookback}</text>`;
+      paths += `<text x="${cx}" y="${cy + 11}" text-anchor="middle" fill="#8b9bb0" font-size="7">bars</text>`;
+      svg.innerHTML = paths;
+      legend.innerHTML = `
+        <div class="row"><span class="swatch" style="background:#3dd68c"></span><span>Bullish candles: <strong>${bull.toFixed(1)}%</strong></span></div>
+        <div class="row"><span class="swatch" style="background:#f31260"></span><span>Bearish candles: <strong>${bear.toFixed(1)}%</strong></span></div>
+        ${flat > 0.05 ? `<div class="row"><span class="swatch" style="background:#8b9bb0"></span><span>Flat: <strong>${flat.toFixed(1)}%</strong></span></div>` : ""}
+        <div class="muted">Indicator votes: Bull ${indBull.toFixed(0)}% · Bear ${indBear.toFixed(0)}%</div>
+      `;
+      if (bear >= bull + 5) {
+        $("biasReadout").textContent = `Bearish pressure ${bear.toFixed(0)}% over last ${lookback} bars — favor defense / sell setups, not chase longs.`;
+      } else if (bull >= bear + 5) {
+        $("biasReadout").textContent = `Bullish pressure ${bull.toFixed(0)}% over last ${lookback} bars — longs need confirmation; avoid fading blindly.`;
+      } else {
+        $("biasReadout").textContent = `Mixed tape over last ${lookback} bars (bull ${bull.toFixed(0)}% / bear ${bear.toFixed(0)}%) — wait for clearer structure.`;
+      }
+    }
+
+    function renderEquityPie(ea, brief) {
+      const pie = brief.equity_pie || {};
+      const equity = Number(pie.equity ?? ea.equity ?? 0);
+      const floatPl = Number(pie.floating_pl ?? ea.floating_pl ?? 0);
+      let pct = Number(pie.floating_pl_pct ?? ea.floating_pl_pct_of_equity ?? 0);
+      if ((!pct || !isFinite(pct)) && equity > 0) pct = (floatPl / equity) * 100;
+      const target = Number(pie.target_pct ?? ea.float_profit_target_pct ?? 10);
+      const hit = Boolean(pie.target_hit ?? ea.float_profit_target_hit);
+      const currency = pie.currency || ea.currency || "USD";
+
+      const svg = $("equityPie");
+      const legend = $("pieLegend");
+      const banner = $("floatTargetBanner");
+
+      if (!equity || equity <= 0) {
+        svg.innerHTML = `<circle cx="60" cy="60" r="48" fill="none" stroke="#2a3542" stroke-width="16"/>`;
+        legend.innerHTML = `<div class="muted">No equity from EA yet</div>`;
+        banner.className = "target-banner";
+        banner.textContent = `Float profit target: ${target}% of equity`;
+        return;
+      }
+
+      const absPct = Math.min(100, Math.abs(pct));
+      const sliceDeg = Math.max(0.5, (absPct / 100) * 360);
+      const isProfit = pct >= 0;
+      const sliceColor = isProfit ? "#3dd68c" : "#f31260";
+      const restColor = "#2a3542";
+      const cx = 60, cy = 60, rO = 48, rI = 28;
+
+      let paths = "";
+      if (absPct >= 99.5) {
+        paths = `<circle cx="${cx}" cy="${cy}" r="${(rO+rI)/2}" fill="none" stroke="${sliceColor}" stroke-width="${rO-rI}"/>`;
+      } else if (absPct < 0.05) {
+        paths = `<circle cx="${cx}" cy="${cy}" r="${(rO+rI)/2}" fill="none" stroke="${restColor}" stroke-width="${rO-rI}"/>`;
+      } else {
+        paths = `
+          <path d="${donutSlice(cx, cy, rO, rI, 0, sliceDeg)}" fill="${sliceColor}"></path>
+          <path d="${donutSlice(cx, cy, rO, rI, sliceDeg, 360)}" fill="${restColor}"></path>`;
+      }
+
+      const tDeg = Math.min(359, (Math.max(0, target) / 100) * 360);
+      const [tx, ty] = polar(cx, cy, rO + 4, tDeg);
+      paths += `<circle cx="${tx}" cy="${ty}" r="3" fill="#f5a524"></circle>`;
+      paths += `<text x="${cx}" y="${cy - 2}" text-anchor="middle" fill="#e7eef7" font-size="11" font-weight="700">${pct.toFixed(1)}%</text>`;
+      paths += `<text x="${cx}" y="${cy + 12}" text-anchor="middle" fill="#8b9bb0" font-size="7">of equity</text>`;
+      svg.innerHTML = paths;
+
+      const restPct = Math.max(0, 100 - absPct);
+      legend.innerHTML = `
+        <div class="row"><span class="swatch" style="background:${sliceColor}"></span>
+          <span>${isProfit ? "Floating profit" : "Floating loss"}: <strong>${floatPl.toFixed(2)} ${currency}</strong> (${pct.toFixed(2)}%)</span></div>
+        <div class="row"><span class="swatch" style="background:${restColor}"></span>
+          <span>Remaining equity share: <strong>${restPct.toFixed(2)}%</strong></span></div>
+        <div class="row"><span class="swatch" style="background:#f5a524"></span>
+          <span>Profit target marker: <strong>${target.toFixed(1)}%</strong></span></div>
+        <div><span class="muted">Equity</span> <strong>${equity.toFixed(2)} ${currency}</strong></div>
+      `;
+
+      if (hit) {
+        banner.className = "target-banner hit";
+        banner.textContent = `TARGET HIT: floating profit is ${pct.toFixed(2)}% of equity (≥ ${target.toFixed(1)}%). Consider taking/limiting profit — advisory only.`;
+      } else if (pct < 0) {
+        banner.className = "target-banner warn-loss";
+        banner.textContent = `Floating loss ${pct.toFixed(2)}% of equity. Profit target ${target.toFixed(1)}% not reached.`;
+      } else {
+        banner.className = "target-banner";
+        banner.textContent = `Floating profit ${pct.toFixed(2)}% of equity · target ${target.toFixed(1)}% (${Math.max(0, target - pct).toFixed(2)}% to go)`;
+      }
+    }
+
+    function renderBrief(brief) {
+      const b = brief || {};
+      const hl = $("briefHeadline");
+      hl.textContent = b.headline || "No analysis yet — waiting for EA heartbeat.";
+      hl.className = "headline " + (b.severity || "info");
+      $("heroHeadline").textContent = b.headline || "Waiting for live EA data…";
+
+      const recs = b.recommendations || [];
+      $("briefRecs").innerHTML = recs.length
+        ? recs.slice(0, 5).map((r) => `<li class="rec ${esc(r.priority || "medium")}">
+            <div class="prio">${esc(r.priority || "medium")}</div>
+            <div class="title">${esc(r.title)}</div>
+            <div class="detail">${esc(r.detail)}</div>
+          </li>`).join("")
+        : '<li class="muted">No recommendations yet</li>';
+
+      const sit = b.situation || [];
+      $("briefSituation").innerHTML = sit.length
+        ? sit.map((x) => `<li>${esc(x)}</li>`).join("")
+        : '<li class="muted">—</li>';
+
+      const checks = b.checklist || [];
+      $("briefCheck").innerHTML = checks.length
+        ? checks.map((c) => `<li>
+            <span class="mark ${c.ok ? "ok" : "bad"}">${c.ok ? "✓" : "✗"}</span>
+            <span>${esc(c.label)}</span>
+          </li>`).join("")
+        : '<li class="muted">—</li>';
+
+      const improve = b.improvements || [];
+      $("briefImprove").innerHTML = improve.length
+        ? improve.map((x) => `<li>${esc(x)}</li>`).join("")
+        : '<li class="muted">—</li>';
+
+      const levels = b.levels || {};
+      $("thesisSupport").textContent = levels.support || "—";
+      $("thesisRecovery").textContent =
+        (levels.recovery_1 || "—") + " / " + (levels.recovery_2 || "—");
+      $("thesisBullish").textContent = levels.bullish_confirmation || "—";
+      $("thesisInvalidation").textContent = levels.invalidation || "—";
+    }
+
+    function looksLikeGoldLevels(supportText, symbol) {
+      const sym = (symbol || "").toUpperCase();
+      if (sym.includes("BTC") || sym.includes("ETH") || sym.includes("CRYPTO")) {
+        const m = String(supportText || "").match(/(\d+(?:\.\d+)?)/);
+        if (m) {
+          const v = Number(m[1]);
+          // Gold map leftover on a crypto pair
+          if (v > 1000 && v < 20000) return true;
+        }
+      }
+      return false;
+    }
+
+    function updateThesisMeta(ea, brief) {
+      const levels = (brief && brief.levels) || {};
+      const sym = ea.symbol || levels.symbol || "—";
+      const src = (ea.level_source || levels.source || "").toUpperCase() || "—";
+      $("thesisSymbol").textContent = sym;
+      const srcEl = $("thesisLevelSource");
+      srcEl.textContent = src === "AUTO" ? "AUTO · ATR" : (src === "MANUAL" ? "MANUAL" : src);
+      srcEl.className = "chip " + (src === "AUTO" ? "ok" : (src === "MANUAL" ? "warn" : ""));
+      const note = $("thesisLevelNote");
+      if (looksLikeGoldLevels(levels.support || ea.immediate_support, sym)) {
+        note.textContent = "These look like gold (~4xxx) levels on " + sym +
+          ". Recompile EA with InpLevelSource=AUTO (or AUTO_NON_GOLD) on the BTCUSD chart and wait for the next heartbeat.";
+        note.style.color = "var(--warn)";
+      } else if (src === "AUTO") {
+        note.textContent = "AUTO levels from " + sym + " mid-price + ATR (updates each heartbeat / closed M30).";
+        note.style.color = "var(--muted)";
+      } else if (src === "MANUAL") {
+        note.textContent = "MANUAL levels from EA inputs on " + sym + ". For BTCUSD set InpLevelSource=AUTO.";
+        note.style.color = "var(--muted)";
+      } else {
+        note.textContent = "Levels follow the selected pair’s EA. Switch Pair above; attach EA on that chart.";
+        note.style.color = "var(--muted)";
+      }
+    }
+
+    function renderChips(ea) {
+      const chips = [];
+      if (ea.exceeds_max_position_risk || (ea.risk_status || "").toUpperCase() === "CRITICAL")
+        chips.push('<span class="chip bad">Do not add size</span>');
+      if (!ea.new_position_allowed)
+        chips.push('<span class="chip warn">New entry blocked</span>');
+      else
+        chips.push('<span class="chip ok">New entry watch open</span>');
+      if (!ea.add_position_allowed)
+        chips.push('<span class="chip warn">No averaging</span>');
+      if (ea.high_spread)
+        chips.push('<span class="chip bad">High spread</span>');
+      if (ea.float_profit_target_hit)
+        chips.push('<span class="chip ok">Float target hit</span>');
+      $("decisionChips").innerHTML = chips.join("");
+      $("thesisChips").innerHTML = chips.slice(0, 3).join("");
+    }
+
+    const PAIR_STORAGE_KEY = "vantage_monitor_pair";
+    let selectingPair = false;
+
+    function preferredPair() {
+      try { return (localStorage.getItem(PAIR_STORAGE_KEY) || "").toUpperCase(); }
+      catch (_) { return ""; }
+    }
+
+    function rememberPair(symbol) {
+      try { localStorage.setItem(PAIR_STORAGE_KEY, symbol); } catch (_) {}
+    }
+
+    function syncPairSelect(status) {
+      const sel = $("pairSelect");
+      const symbols = status.symbols || [];
+      const names = (status.available_symbols && status.available_symbols.length)
+        ? status.available_symbols.slice()
+        : ["XAUUSD", "BTCUSD"];
+      ["XAUUSD", "BTCUSD"].forEach((p) => { if (!names.includes(p)) names.unshift(p); });
+      const byName = Object.fromEntries(symbols.map((x) => [x.symbol, x]));
+      const current = sel.value;
+      sel.innerHTML = names.map((name) => {
+        const meta = byName[name] || {};
+        const live = meta.connected ? " ●" : "";
+        return `<option value="${esc(name)}">${esc(name)}${live}</option>`;
+      }).join("");
+      const selected = status.selected_symbol || preferredPair() || "XAUUSD";
+      if (names.includes(selected)) sel.value = selected;
+      else if (names.includes(current)) sel.value = current;
+      else sel.value = names[0];
+      const meta = byName[sel.value] || {};
+      const dot = $("pairDot");
+      dot.className = "pair-dot " + (meta.connected ? "ok" : "warn");
+      $("pairHint").textContent = meta.connected ? "" : "(waiting for EA on this pair)";
+    }
+
+    async function requestSelectSymbol(symbol) {
+      if (!symbol || selectingPair) return;
+      selectingPair = true;
+      rememberPair(symbol);
+      try {
+        const r = await fetch("/api/v1/monitor/select-symbol", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ symbol }),
+        });
+        if (!r.ok) throw new Error("select failed");
+        const body = await r.json();
+        if (body.vantage_ea || body.backend) applyPayload({ status: body, decision_brief: body.decision_brief });
+      } catch (err) {
+        console.error(err);
+      } finally {
+        selectingPair = false;
+      }
+    }
+
+    function applyPayload(payload) {
+      const s = payload.status || payload;
+      const ea = s.vantage_ea || {};
+      const backend = s.backend || {};
+      const stats = s.stats || {};
+      const link = s.link_health || {};
+      const brief = s.decision_brief || payload.decision_brief || {};
+
+      if (!selectingPair) syncPairSelect(s);
+
+      $("apiStatus").textContent = "ONLINE";
+      $("apiStatus").style.color = "var(--text)";
+      $("uptime").textContent = fmtAge(backend.uptime_seconds).replace(" ago", "");
+      $("started").textContent = (backend.started_utc || "—").replace("T", " ").slice(0, 19);
+      $("now").textContent = (backend.now_utc || "—").replace("T", " ").slice(0, 19);
+
+      $("eaStatus").textContent = ea.connected ? "CONNECTED" : "WAITING";
+      $("eaStatus").style.color = ea.connected ? "var(--ok)" : "var(--warn)";
+      $("eaSeen").textContent = ea.last_seen_utc ? ea.last_seen_utc.replace("T", " ").slice(0, 19) : "—";
+      $("eaAge").textContent = fmtAge(ea.seconds_since_seen);
+      $("eaCompany").textContent = ea.company || "—";
+      $("eaServer").textContent = ea.server || "—";
+      $("eaAccount").textContent = ea.account_masked || "—";
+      $("eaMode").textContent = (ea.margin_mode || "—") + (ea.currency ? " · " + ea.currency : "");
+
+      $("symbol").textContent = ea.symbol || s.selected_symbol || "—";
+      $("bidAsk").textContent = (ea.bid && ea.ask) ? (ea.bid + " / " + ea.ask) : "—";
+      $("spread").textContent = ea.spread_points != null ? (ea.spread_points + " pts" + (ea.high_spread ? " · HIGH" : "")) : "—";
+      $("spread").style.color = ea.high_spread ? "var(--bad)" : "var(--text)";
+      $("digitsContract").textContent = (ea.digits || "—") + " / " + (ea.contract_size || "—");
+      $("stops").textContent = ea.stops_level != null ? ea.stops_level : "—";
+      $("trend").textContent = ea.trend || "—";
+      $("candle").textContent = ea.candle_status || "—";
+      $("freshnessCandle").textContent = ea.candle_status || "—";
+      $("bullPct").textContent = ea.bullish_pct != null ? Number(ea.bullish_pct).toFixed(1) + "%" : "—";
+      $("bearPct").textContent = ea.bearish_pct != null ? Number(ea.bearish_pct).toFixed(1) + "%" : "—";
+
+      const action = ea.action || stats.last_action || "—";
+      $("action").textContent = action;
+      const tone = actionTone(action, ea.risk_status, ea.exceeds_max_position_risk);
+      $("heroActionBox").className = "hero-action " + tone;
+
+      $("marketState").textContent = ea.market_state || "—";
+      $("newEntry").textContent = ea.new_entry_decision || "—";
+      $("existingPos").textContent = ea.existing_position_decision || "—";
+      $("riskStatus").textContent = ea.risk_status || "—";
+      const riskColor = (ea.risk_status === "CRITICAL" || ea.exceeds_max_position_risk)
+        ? "var(--bad)" : (ea.risk_status === "HIGH" || ea.risk_status === "VERY_HIGH")
+        ? "var(--warn)" : "var(--text)";
+      $("riskStatus").style.color = riskColor;
+      $("equityRisk").textContent = ea.equity_risk_pct != null && ea.position_count
+        ? Number(ea.equity_risk_pct).toFixed(2) + "%" : "—";
+      $("equityRisk").style.color = riskColor;
+      $("slLoss").textContent = ea.estimated_sl_loss != null && ea.position_count
+        ? Number(ea.estimated_sl_loss).toFixed(2) + " USD" : "—";
+      $("entrySl").textContent = (ea.entry || ea.sl)
+        ? ((ea.entry || "—") + " / " + (ea.sl || "—")) : "—";
+      $("newAllowed").textContent = ea.new_position_allowed ? "YES" : "NO";
+      $("addAllowed").textContent = ea.add_position_allowed ? "YES" : "NO";
+      $("positions").textContent = ea.position_count != null ? String(ea.position_count) : "—";
+      $("floatPl").textContent = ea.floating_pl != null ? Number(ea.floating_pl).toFixed(2) : "—";
+      const fpct = ea.floating_pl_pct_of_equity;
+      $("floatPct").textContent = (fpct != null && ea.position_count)
+        ? Number(fpct).toFixed(2) + "%" : "—";
+      $("floatPct").style.color = ea.float_profit_target_hit
+        ? "var(--ok)"
+        : (Number(fpct) < 0 ? "var(--warn)" : "var(--text)");
+      $("equityBal").textContent = ea.equity != null && ea.equity > 0
+        ? Number(ea.equity).toFixed(2) : "—";
+      $("sr").textContent = (ea.nearest_support || "—") + " / " + (ea.nearest_resistance || "—");
+      $("analyzeCount").textContent = stats.analyze_count ?? "—";
+      $("hbCount").textContent = stats.heartbeat_count ?? "—";
+      $("lastAnalyze").textContent = stats.last_analyze_utc
+        ? stats.last_analyze_utc.replace("T", " ").slice(0, 19) + " (" + fmtAge(stats.seconds_since_analyze) + ")"
+        : "—";
+      $("note").textContent = ea.risk_warning || ea.note || "—";
+
+      const overall = link.overall || "UNKNOWN";
+      const ageTxt = ea.connected ? fmtAge(ea.seconds_since_seen).replace(" ago", "") : "offline";
+      $("overallText").textContent = ea.connected ? ("LIVE · " + ageTxt) : overall.replaceAll("_", " ");
+      if (overall === "CONNECTED") setDot($("overallDot"), "ok");
+      else if (overall === "WAITING_FOR_EA") setDot($("overallDot"), "warn");
+      else setDot($("overallDot"), "bad");
+
+      const rt = riskTone(ea.risk_status, ea.exceeds_max_position_risk);
+      $("riskPill").className = "pill" + (rt ? (" risk-" + rt) : "");
+      $("riskPillText").textContent = "Risk " + (ea.risk_status || "—");
+      if (rt === "critical") setDot($("riskDot"), "bad");
+      else if (rt === "high") setDot($("riskDot"), "warn");
+      else if (rt === "ok") setDot($("riskDot"), "ok");
+      else setDot($("riskDot"), "");
+
+      renderChips(ea);
+      updateLlmHint(s.llm);
+      renderBrief(brief);
+      updateThesisMeta(ea, brief);
+      renderEquityPie(ea, brief);
+      renderBiasPie(ea, brief);
+      renderTradeStats(ea.trade_stats);
+      if (ea.server_year > 0 && ea.server_month > 0)
+        calServerNow = { year: Number(ea.server_year), month: Number(ea.server_month) };
+      const creq = ea.calendar_request || {};
+      renderPlCalendar(ea.pl_calendar || brief.pl_calendar, { pending: !!creq.pending });
+    }
+
+    function markWs(state) {
+      if (state === "open") {
+        $("wsText").textContent = "WS LIVE";
+        setDot($("wsDot"), "ok");
+      } else if (state === "connecting") {
+        $("wsText").textContent = "WS …";
+        setDot($("wsDot"), "warn");
+      } else {
+        $("wsText").textContent = "WS DOWN";
+        setDot($("wsDot"), "bad");
+      }
+    }
+
+    let socket = null;
+    let retryMs = 1000;
+    let pingTimer = null;
+
+    function connectWs() {
+      markWs("connecting");
+      const proto = location.protocol === "https:" ? "wss" : "ws";
+      const url = `${proto}://${location.host}/ws/monitor`;
+      socket = new WebSocket(url);
+
+      socket.onopen = () => {
+        markWs("open");
+        retryMs = 1000;
+        if (pingTimer) clearInterval(pingTimer);
+        pingTimer = setInterval(() => {
+          if (socket && socket.readyState === WebSocket.OPEN) socket.send("ping");
+        }, 20000);
+      };
+
+      socket.onmessage = (evt) => {
+        try {
+          const payload = JSON.parse(evt.data);
+          if (payload.type === "pong") return;
+          applyPayload(payload);
+        } catch (err) {
+          console.error(err);
+        }
+      };
+
+      socket.onclose = () => {
+        markWs("closed");
+        $("apiStatus").textContent = "RECONNECTING";
+        $("apiStatus").style.color = "var(--warn)";
+        if (pingTimer) clearInterval(pingTimer);
+        setTimeout(connectWs, retryMs);
+        retryMs = Math.min(retryMs * 1.5, 10000);
+      };
+
+      socket.onerror = () => {
+        try { socket.close(); } catch (_) {}
+      };
+    }
+
+    function updateLlmHint(llm) {
+      const L = llm || {};
+      const hint = $("llmHint");
+      const btn = $("btnAiAnalyze");
+      if (L.ready) {
+        hint.textContent = "LLM: ready · " + (L.model || "gpt");
+        hint.style.color = "var(--ok)";
+        btn.disabled = false;
+      } else {
+        hint.textContent = "LLM: " + (L.detail || "off — use Copy AI brief");
+        hint.style.color = "var(--warn)";
+        btn.disabled = true;
+      }
+    }
+
+    async function copyAiBrief() {
+      const btn = $("btnCopyBrief");
+      btn.disabled = true;
+      try {
+        const r = await fetch("/api/v1/monitor/ai-brief");
+        const body = await r.json();
+        if (!r.ok) throw new Error(body.detail || "brief failed");
+        await navigator.clipboard.writeText(body.markdown || "");
+        btn.textContent = "Copied!";
+        setTimeout(() => { btn.textContent = "Copy AI brief"; }, 1500);
+      } catch (err) {
+        console.error(err);
+        btn.textContent = "Copy failed";
+        setTimeout(() => { btn.textContent = "Copy AI brief"; }, 2000);
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
+    async function runAiAnalyze() {
+      const btn = $("btnAiAnalyze");
+      const out = $("aiAnalysisOut");
+      btn.disabled = true;
+      out.classList.remove("empty");
+      out.textContent = "Calling OpenAI…";
+      try {
+        const r = await fetch("/api/v1/monitor/ai-analyze", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ bypass_cache: false }),
+        });
+        const body = await r.json();
+        if (!r.ok) throw new Error(body.detail || "analyze failed");
+        const usage = body.usage || {};
+        const meta = [
+          body.model || "",
+          body.cached ? "cached" : "fresh",
+          usage.total_tokens != null ? (usage.total_tokens + " tokens") : "",
+        ].filter(Boolean).join(" · ");
+        out.textContent = (meta ? meta + "\n\n" : "") + (body.analysis_markdown || "(empty)");
+        updateLlmHint(body.llm);
+      } catch (err) {
+        console.error(err);
+        out.textContent = "Analyze failed: " + (err.message || err);
+        out.classList.add("empty");
+      } finally {
+        fetch("/api/v1/monitor/llm-status")
+          .then((r) => r.json())
+          .then((b) => updateLlmHint(b.llm))
+          .catch(() => { btn.disabled = false; });
+      }
+    }
+
+    $("pairSelect").addEventListener("change", () => {
+      requestSelectSymbol($("pairSelect").value);
+    });
+
+    $("btnCopyBrief").onclick = () => copyAiBrief();
+    $("btnAiAnalyze").onclick = () => runAiAnalyze();
+
+    (async () => {
+      const pref = preferredPair();
+      if (pref) await requestSelectSymbol(pref);
+    })();
+
+    connectWs();
+  </script>
+</body>
+</html>

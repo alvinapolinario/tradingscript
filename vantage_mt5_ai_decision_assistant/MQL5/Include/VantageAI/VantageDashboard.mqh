@@ -1,0 +1,175 @@
+//+------------------------------------------------------------------+
+//| VantageDashboard.mqh                                             |
+//| Compact on-chart advisory panel                                  |
+//+------------------------------------------------------------------+
+#ifndef VANTAGE_DASHBOARD_MQH
+#define VANTAGE_DASHBOARD_MQH
+
+#include "VantageTypes.mqh"
+#include "VantageAccount.mqh"
+#include "VantageDecision.mqh"
+#include "VantageHistory.mqh"
+
+class CVantageDashboard
+  {
+private:
+   string m_prefix;
+   int    m_x;
+   int    m_y;
+
+   void SetLabel(const string name, const int row, const string text, const color clr)
+     {
+      string id = m_prefix + name;
+      if(ObjectFind(0, id) < 0)
+        {
+         ObjectCreate(0, id, OBJ_LABEL, 0, 0, 0);
+         ObjectSetInteger(0, id, OBJPROP_CORNER, CORNER_LEFT_UPPER);
+         ObjectSetInteger(0, id, OBJPROP_SELECTABLE, false);
+         ObjectSetInteger(0, id, OBJPROP_HIDDEN, true);
+         ObjectSetInteger(0, id, OBJPROP_FONTSIZE, 8);
+        }
+      ObjectSetInteger(0, id, OBJPROP_XDISTANCE, m_x);
+      ObjectSetInteger(0, id, OBJPROP_YDISTANCE, m_y + row * 14);
+      ObjectSetString(0, id, OBJPROP_TEXT, text);
+      ObjectSetInteger(0, id, OBJPROP_COLOR, clr);
+     }
+
+public:
+   CVantageDashboard(void) : m_prefix("VAI_"), m_x(8), m_y(18) {}
+
+   void Clear(void)
+     {
+      int total = ObjectsTotal(0, 0, -1);
+      for(int i = total - 1; i >= 0; i--)
+        {
+         string name = ObjectName(0, i, 0, -1);
+         if(StringFind(name, m_prefix) == 0)
+            ObjectDelete(0, name);
+        }
+     }
+
+   void Render(const VantageAccountInfo &acct,
+               const VantageSymbolSpec &spec,
+               const VantagePriceSnap &px,
+               const string backend_status,
+               const string candle_status,
+               const VantageDecisionState &dec,
+               const VantagePositionSummary &pos,
+               const VantageRiskEstimate &risk,
+               const string resp_ts,
+               const string resp_age,
+               const double equity,
+               const double floating_pl_pct,
+               const double float_profit_target_pct,
+               const bool float_profit_target_hit,
+               const int cal_year,
+               const int cal_month,
+               const double month_pl,
+               const double month_pct,
+               const int month_deals,
+               const VantageTradeStats &stats)
+     {
+      int r = 0;
+      color riskCol = clrSilver;
+      if(dec.risk_status == "CRITICAL" || dec.exceeds_max_position_risk)
+         riskCol = clrRed;
+      else if(dec.risk_status == "VERY_HIGH" || dec.risk_status == "HIGH")
+         riskCol = clrOrange;
+      else if(dec.risk_status == "MODERATE")
+         riskCol = clrGold;
+      else if(dec.risk_status == "LOW")
+         riskCol = clrLime;
+
+      color floatCol = clrSilver;
+      if(float_profit_target_hit)
+         floatCol = clrLime;
+      else if(floating_pl_pct < 0.0)
+         floatCol = clrOrange;
+
+      SetLabel("t0", r++, "Vantage MT5 AI Decision Assistant (ADVISORY)", clrAqua);
+      SetLabel("t1", r++, "Broker: " + acct.company + " | " + acct.server, clrSilver);
+      SetLabel("t2", r++, "Account: " + acct.login_masked + " | " + VantageMarginModeName(acct.margin_mode) + " | " + acct.currency, clrSilver);
+      SetLabel("t3", r++, "Symbol: " + spec.symbol + " Digits:" + IntegerToString(spec.digits) +
+               " Contract:" + DoubleToString(spec.contract_size, 0) +
+               " Spread:" + IntegerToString(px.spread_points) + (px.high_spread ? " HIGH" : ""),
+               px.high_spread ? clrOrange : clrWhite);
+      SetLabel("t4", r++, "Backend: " + backend_status + " | Candle: " + candle_status, clrSilver);
+      SetLabel("t5", r++, "Trend: " + dec.trend + " | Market State: " + dec.market_state, clrYellow);
+      SetLabel("tbias", r++, "Chart Bias (" + IntegerToString(dec.bias_lookback) + " bars): Bullish " +
+               DoubleToString(dec.bullish_pct, 1) + "% | Bearish " + DoubleToString(dec.bearish_pct, 1) + "%" +
+               (dec.neutral_pct > 0.05 ? " | Flat " + DoubleToString(dec.neutral_pct, 1) + "%" : ""),
+               (dec.bullish_pct >= dec.bearish_pct) ? clrLime : clrOrange);
+      SetLabel("tind", r++, "Indicator Bias: Bullish " + DoubleToString(dec.indicator_bullish_pct, 1) +
+               "% | Bearish " + DoubleToString(dec.indicator_bearish_pct, 1) + "%",
+               (dec.indicator_bullish_pct >= dec.indicator_bearish_pct) ? clrLime : clrOrange);
+
+      SetLabel("t6", r++, "New Entry Decision: " + dec.new_entry_decision, clrAqua);
+      SetLabel("t7", r++, "Existing Position Decision: " + dec.existing_position_decision,
+               (dec.existing_position_decision == "CRITICAL_RISK" || dec.existing_position_decision == "HOLD_WITH_CAUTION") ? clrOrange : clrWhite);
+
+      string posline = "Positions: " + IntegerToString(pos.count);
+      if(pos.has_position)
+         posline += " | FloatPL=" + DoubleToString(pos.total_floating_pl, 2) +
+                    " | BuyVol=" + DoubleToString(pos.total_buy_volume, 2);
+      SetLabel("t8", r++, posline, clrSilver);
+
+      SetLabel("teq", r++, "Equity: " + DoubleToString(equity, 2) +
+               " | Floating P/L of Equity: " + DoubleToString(floating_pl_pct, 2) + "%", floatCol);
+      SetLabel("tft", r++, "Float Profit Target: " + DoubleToString(float_profit_target_pct, 1) + "%" +
+               (float_profit_target_hit ? "  << TARGET HIT — consider taking profit" : ""),
+               float_profit_target_hit ? clrLime : clrSilver);
+
+      SetLabel("t9", r++, "Position Risk Status: " + dec.risk_status, riskCol);
+      if(risk.available && pos.has_position)
+        {
+         SetLabel("t10", r++, "Entry: " + DoubleToString(risk.entry, spec.digits) +
+                  " | SL: " + DoubleToString(risk.sl, spec.digits), clrWhite);
+         SetLabel("t11", r++, "Estimated SL Loss: " + DoubleToString(risk.money_at_risk, 2) + " USD", riskCol);
+         SetLabel("t12", r++, "Equity Risk %: " + DoubleToString(risk.equity_risk_pct, 2) + "%", riskCol);
+        }
+      else
+         SetLabel("t10", r++, "Risk: " + risk.status, clrOrange);
+
+      SetLabel("t13", r++, "Immediate Support: " + dec.immediate_support, clrLime);
+      SetLabel("t14", r++, "Recovery Level 1: " + dec.recovery_level_1 + " | Level 2: " + dec.recovery_level_2, clrSilver);
+      SetLabel("t15", r++, "Bullish Confirmation: " + dec.bullish_confirmation, clrSilver);
+      SetLabel("t16", r++, "Technical Invalidation: " + dec.technical_invalidation, clrOrange);
+      SetLabel("t17", r++, "New Position Allowed: " + (dec.new_position_allowed ? "YES" : "NO") +
+               " | Add Position Allowed: " + (dec.add_position_allowed ? "YES" : "NO"),
+               (dec.new_position_allowed || dec.add_position_allowed) ? clrLime : clrRed);
+
+      if(dec.exceeds_max_position_risk || dec.risk_status == "CRITICAL")
+         SetLabel("twarn", r++, "WARNING: " + dec.risk_warning, clrRed);
+      if(float_profit_target_hit)
+         SetLabel("tfpwarn", r++, "PROFIT TARGET: Floating P/L reached " +
+                  DoubleToString(float_profit_target_pct, 1) + "% of equity. Limit/take profit manually.", clrLime);
+
+      color mCol = (month_pct > 0.0) ? clrLime : ((month_pct < 0.0) ? clrOrange : clrSilver);
+      SetLabel("tcal", r++, "History " + IntegerToString(cal_year) + "." +
+               (cal_month < 10 ? "0" : "") + IntegerToString(cal_month) + ": Month P/L " + DoubleToString(month_pl, 2) +
+               " (" + DoubleToString(month_pct, 2) + "% eq) | Deals " + IntegerToString(month_deals) +
+               " | See monitor calendar", mCol);
+
+      if(stats.ok)
+        {
+         color wrCol = (stats.win_rate_pct >= 50.0) ? clrLime : clrOrange;
+         SetLabel("tstat1", r++, "Trades: " + IntegerToString(stats.total_trades) +
+                  " | W " + IntegerToString(stats.wins) + " / L " + IntegerToString(stats.losses) +
+                  " / BE " + IntegerToString(stats.breakeven) +
+                  " | WinRate " + DoubleToString(stats.win_rate_pct, 1) + "%", wrCol);
+         SetLabel("tstat2", r++, "Net " + DoubleToString(stats.net_profit, 2) +
+                  " | PF " + DoubleToString(stats.profit_factor, 2) +
+                  " | MaxDD " + DoubleToString(stats.max_drawdown, 2) +
+                  " (" + DoubleToString(stats.max_drawdown_pct, 1) + "%)" +
+                  " | AvgWin " + DoubleToString(stats.avg_win, 2) +
+                  " / AvgLoss " + DoubleToString(stats.avg_loss, 2), clrSilver);
+        }
+
+      SetLabel("t18", r++, "Primary Action: " + dec.primary_action + " | Resp: " + resp_ts + " (" + resp_age + ")", clrYellow);
+      SetLabel("t19", r++, "Mode: ADVISORY ONLY — never closes/modifies positions", clrGray);
+      ChartRedraw(0);
+     }
+  };
+
+#endif
+//+------------------------------------------------------------------+

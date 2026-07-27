@@ -1,0 +1,35 @@
+# Deploy FastAPI backend on Linux VPS (port 8000 is free on your host).
+# MT5 EA cannot run inside this container — attach EA on Windows MT5 and
+# point InpBackendUrl to http://<VPS_IP>:8000 (or nginx HTTPS URL).
+#
+# Usage:
+#   cp .env.docker.example .env   # edit secrets
+#   docker compose up -d --build
+#   curl http://127.0.0.1:8000/health
+
+services:
+  vantage-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: vantage-mt5-ai-api:1.2
+    container_name: vantage-mt5-ai-api
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    environment:
+      HOST: "0.0.0.0"
+      PORT: "8000"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"

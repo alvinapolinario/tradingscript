@@ -1,0 +1,1251 @@
+// This work is copyright © 2026 of the author.
+//
+// RISK DISCLAIMER:
+// This indicator is a decision-support tool only. It does NOT guarantee profit.
+// Users must manage risk, position sizing, and verify all signals with broader
+// market context, news, liquidity, and their own trading plan before acting.
+// Past performance of any signal pattern does not imply future results.
+// Technical Entry / Invalidation / Reward-to-Risk estimates do NOT execute trades.
+//
+//@version=6
+indicator(
+     title            = "XAUUSD M30 Market Structure and Alert System",
+     shorttitle       = "XAU Alert System",
+     overlay          = true,
+     max_labels_count = 500,
+     max_lines_count  = 500,
+     max_boxes_count  = 100
+ )
+
+// =============================================================================
+// 1. HEADER / USAGE NOTES
+// =============================================================================
+// HOW TO USE:
+// 1. Add this script to a TradingView chart (recommended: XAUUSD, 30-minute).
+// 2. Adjust Important Price Levels for the current session / day.
+// 3. Prefer actionable RETEST SELL alerts over oversized breakout candles.
+// 4. Enable desired alert conditions via TradingView's Alert dialog.
+// 5. Prefer "Once Per Bar Close" unless you intentionally enable Intrabar mode.
+//
+// NON-REPAINTING RULES:
+// - Default alerts fire only when barstate.isconfirmed is true.
+// - request.security() uses barmerge.lookahead_off (HTF values delayed until HTF close).
+// - Pivot structure uses confirmed ta.pivothigh / ta.pivotlow only.
+// - Alerts fire once per state transition with cooldown protection.
+// - Alerts never offset backward onto historical swing bars.
+// =============================================================================
+
+// =============================================================================
+// 2. INPUTS
+// =============================================================================
+
+// --- A. General Settings ---
+grpGeneral         = "A. General Settings"
+i_useConfirmTF     = input.bool(false, "Use confirmation timeframe", group = grpGeneral,
+     tooltip = "When enabled, core indicators are read from the selected TF via request.security (lookahead_off). HTF data is delayed until that TF bar closes.")
+i_confirmTF        = input.timeframe("", "Signal / confirmation timeframe", group = grpGeneral,
+     tooltip = "Leave blank to use the chart timeframe.")
+i_confirmClose     = input.bool(true, "Confirm signals only at candle close", group = grpGeneral)
+i_intrabarMode     = input.bool(false, "Enable intrabar alert mode", group = grpGeneral,
+     tooltip = "When true, signals may fire before bar close (more timely; can change within the bar).")
+i_dynAlerts        = input.bool(true, "Enable dynamic alert() messages", group = grpGeneral)
+i_multiAlertPerBar = input.bool(false, "Allow multiple alert() calls per bar", group = grpGeneral)
+
+// --- B. Important Price Levels ---
+grpLevels          = "B. Important Price Levels"
+i_lvl4112          = input.float(4112.00, "Support / resist ladder 4112", group = grpLevels, step = 0.01)
+i_immSupHi         = input.float(4105.00, "Support ladder 4105", group = grpLevels, step = 0.01)
+i_immSupLo         = input.float(4103.00, "Support ladder 4103", group = grpLevels, step = 0.01)
+i_majBuyHi         = input.float(4100.00, "Support ladder 4100", group = grpLevels, step = 0.01)
+i_majBuyLo         = input.float(4095.00, "Support ladder 4095", group = grpLevels, step = 0.01)
+i_secSupport       = input.float(4085.00, "Support ladder 4085", group = grpLevels, step = 0.01)
+i_immResist        = input.float(4112.00, "Immediate resistance (display)", group = grpLevels, step = 0.01)
+i_dailyPivot       = input.float(4124.29, "Daily pivot", group = grpLevels, step = 0.01)
+i_secResist        = input.float(4133.00, "Secondary resistance", group = grpLevels, step = 0.01)
+i_upperResist      = input.float(4143.00, "Upper resistance", group = grpLevels, step = 0.01)
+i_breakRetestTol   = input.float(1.50, "Support break / retest tolerance", group = grpLevels, minval = 0.01, step = 0.01,
+     tooltip = "Tolerance used for retest touch zone and invalidation / reset above broken support.")
+
+// --- C. Moving Average Settings ---
+grpMA              = "C. Moving Average Settings"
+i_maType           = input.string("EMA", "MA type", options = ["EMA", "SMA"], group = grpMA)
+i_maLen            = input.int(20, "MA length", minval = 1, group = grpMA)
+i_maSrc            = input.source(close, "MA source", group = grpMA)
+
+// --- D. Bollinger Band Settings ---
+grpBB              = "D. Bollinger Band Settings"
+i_bbLen            = input.int(20, "BB length", minval = 1, group = grpBB)
+i_bbMult           = input.float(2.0, "BB stdev multiplier", minval = 0.1, step = 0.1, group = grpBB)
+
+// --- E. RSI Settings ---
+grpRSI             = "E. RSI Settings"
+i_rsiLen           = input.int(14, "RSI length", minval = 1, group = grpRSI)
+i_rsiSrc           = input.source(close, "RSI source", group = grpRSI)
+i_rsiOS            = input.float(30.0, "Oversold level", group = grpRSI)
+i_rsiBearMom       = input.float(40.0, "Bearish momentum level", group = grpRSI)
+i_rsiMid           = input.float(50.0, "Midline", group = grpRSI)
+i_rsiBullMom       = input.float(60.0, "Bullish momentum level", group = grpRSI)
+i_rsiOB            = input.float(70.0, "Overbought level", group = grpRSI)
+i_rsiExhaust       = input.float(32.0, "Suppress fresh sell entries below RSI", group = grpRSI, step = 0.1,
+     tooltip = "When RSI is at or below this value, fresh market-sell entries are blocked.")
+i_rsiRetestMin     = input.float(35.0, "Minimum RSI for bearish retest", group = grpRSI, step = 0.1,
+     tooltip = "After RSI exhaustion, bearish retest entries require RSI to recover above this value, then turn down.")
+
+// --- F. Volume Settings ---
+grpVol             = "F. Volume Settings"
+i_volLen           = input.int(20, "Volume MA length", minval = 1, group = grpVol)
+i_volMult          = input.float(1.20, "High-volume multiplier", minval = 0.1, step = 0.05, group = grpVol)
+i_reqVol           = input.bool(true, "Require volume confirmation", group = grpVol)
+
+// --- G. Candle Pattern Settings ---
+grpCandle          = "G. Candle Pattern Settings"
+i_useBullEngulf    = input.bool(true, "Detect bullish engulfing", group = grpCandle)
+i_useBearEngulf    = input.bool(true, "Detect bearish engulfing", group = grpCandle)
+i_useHammer        = input.bool(true, "Detect hammer", group = grpCandle)
+i_useShootingStar  = input.bool(true, "Detect shooting star", group = grpCandle)
+i_useBullReject    = input.bool(true, "Detect bullish rejection wick", group = grpCandle)
+i_useBearReject    = input.bool(true, "Detect bearish rejection wick", group = grpCandle)
+i_wickBodyRatio    = input.float(2.0, "Wick-to-body ratio", minval = 0.1, step = 0.1, group = grpCandle)
+i_minBodyPct       = input.float(20.0, "Min body % of range", minval = 0.0, maxval = 100.0, step = 1.0, group = grpCandle)
+
+// --- H. Market Structure / Trend ---
+grpStruct          = "H. Market Structure & Trend"
+i_pivotLeft        = input.int(3, "Pivot left bars", minval = 1, group = grpStruct)
+i_pivotRight       = input.int(3, "Pivot right bars", minval = 1, group = grpStruct)
+i_trendScoreNeed   = input.int(3, "Trend score threshold (of 5)", minval = 1, maxval = 5, group = grpStruct)
+i_revConfirmMode   = input.string("Any one pattern", "Reversal pattern requirement",
+     options = ["Any one pattern", "At least two confirmations"], group = grpStruct)
+i_pivotRetestTol   = input.float(1.50, "Daily pivot retest tolerance", minval = 0.01, step = 0.01, group = grpStruct)
+
+// --- I. Signal Filters ---
+grpFilters         = "I. Signal Filters"
+i_useSession       = input.bool(false, "Enable session filter", group = grpFilters)
+i_session          = input.session("0000-2359", "Trading session", group = grpFilters)
+i_useDow           = input.bool(false, "Enable day-of-week filter", group = grpFilters)
+i_allowMon         = input.bool(true,  "Mon", group = grpFilters, inline = "dow")
+i_allowTue         = input.bool(true,  "Tue", group = grpFilters, inline = "dow")
+i_allowWed         = input.bool(true,  "Wed", group = grpFilters, inline = "dow")
+i_allowThu         = input.bool(true,  "Thu", group = grpFilters, inline = "dow")
+i_allowFri         = input.bool(true,  "Fri", group = grpFilters, inline = "dow")
+i_allowSat         = input.bool(false, "Sat", group = grpFilters, inline = "dow2")
+i_allowSun         = input.bool(false, "Sun", group = grpFilters, inline = "dow2")
+i_atrLen           = input.int(14, "ATR length", minval = 1, group = grpFilters)
+i_useMinATR        = input.bool(false, "Enable minimum ATR filter", group = grpFilters)
+i_minATR           = input.float(0.5, "Minimum ATR", minval = 0.0, step = 0.01, group = grpFilters)
+i_oversizedRangeMult = input.float(1.5, "Oversized candle range (× ATR)", minval = 0.1, step = 0.1, group = grpFilters,
+     tooltip = "Signal candle range greater than this × ATR suppresses actionable SELL entries.")
+i_oversizedBodyMult  = input.float(1.2, "Oversized candle body (× ATR)", minval = 0.1, step = 0.1, group = grpFilters,
+     tooltip = "Signal candle body greater than this × ATR suppresses actionable SELL entries.")
+i_minRewardRisk    = input.float(1.5, "Minimum reward-to-risk for sell entry", minval = 0.1, step = 0.1, group = grpFilters)
+i_cooldownBars     = input.int(3, "Alert cooldown (bars)", minval = 0, group = grpFilters)
+
+// --- J. Visual Display Toggles ---
+grpVisual          = "J. Visual Display Toggles"
+i_showSecondaryLvls = input.bool(true,  "Show secondary levels", group = grpVisual)
+i_showZoneFills     = input.bool(true,  "Show support-zone fills", group = grpVisual)
+i_showBB            = input.bool(true,  "Show Bollinger Bands", group = grpVisual)
+i_showMA            = input.bool(true,  "Show moving averages", group = grpVisual)
+i_showLabels        = input.bool(true,  "Show signal labels", group = grpVisual)
+i_showDashboard     = input.bool(true,  "Show dashboard", group = grpVisual)
+i_showHistSignals   = input.bool(true,  "Show historical signals", group = grpVisual)
+i_labelLookback     = input.int(300, "Signal labels lookback (bars)", minval = 1, group = grpVisual)
+i_levelLabelOffset  = input.int(8, "Level label offset (bars right)", minval = 1, maxval = 50, group = grpVisual)
+i_levelLabelMinGap  = input.float(2.0, "Min price gap to avoid label overlap", minval = 0.01, step = 0.1, group = grpVisual)
+i_showBgTrend       = input.bool(false, "Show background trend shading", group = grpVisual)
+i_showPrimaryLvls   = input.bool(true,  "Show primary support / resist lines", group = grpVisual)
+i_showDailyPivot    = input.bool(true,  "Show daily pivot", group = grpVisual)
+
+// =============================================================================
+// 3. HELPER FUNCTIONS
+// =============================================================================
+
+f_ma(simple string maType, series float src, simple int len) =>
+    maType == "SMA" ? ta.sma(src, len) : ta.ema(src, len)
+
+f_inZone(series float price, float lo, float hi) =>
+    price >= math.min(lo, hi) and price <= math.max(lo, hi)
+
+f_formatPrice(series float v) =>
+    str.tostring(v, format.mintick)
+
+f_safeDiv(series float num, series float den) =>
+    den == 0.0 ? 0.0 : num / den
+
+f_canAlert(int lastBar, int cooldown) =>
+    na(lastBar) or (bar_index - lastBar) >= cooldown
+
+f_bullishPattern(bool engulf, bool hamm, bool reject) =>
+    engulf or hamm or reject
+
+f_bearishPattern(bool engulf, bool star, bool reject) =>
+    engulf or star or reject
+
+// Place or refresh a right-side level label; returns updated label reference
+f_placeLevelLabel(label lbl, bool show, float price, string txt, color col, int xOff) =>
+    label out = lbl
+    if show
+        if na(out)
+            out := label.new(bar_index + xOff, price, txt, xloc = xloc.bar_index, style = label.style_label_left, color = color.new(col, 70), textcolor = col, size = size.small)
+        else
+            label.set_xy(out, bar_index + xOff, price)
+            label.set_text(out, txt)
+            label.set_textcolor(out, col)
+    else if not na(out)
+        label.delete(out)
+        out := na
+    out
+
+// Stagger label x-offset when two prices are closer than minGap
+f_staggerOff(float px, float prevPx, int baseOff, int staggerIn, float minGap) =>
+    int staggerOut = staggerIn
+    int o = baseOff
+    if not na(prevPx) and math.abs(px - prevPx) < minGap
+        staggerOut := staggerIn + 4
+        o := baseOff + staggerOut
+    else
+        staggerOut := 0
+        o := baseOff
+    [o, staggerOut, px]
+
+// Build sorted-descending unique support ladder from configured levels
+f_buildSupportLadder() =>
+    array<float> raw = array.new_float()
+    array.push(raw, i_lvl4112)
+    array.push(raw, i_immSupHi)
+    array.push(raw, i_immSupLo)
+    array.push(raw, i_majBuyHi)
+    array.push(raw, i_majBuyLo)
+    array.push(raw, i_secSupport)
+    array.sort(raw, order.descending)
+    array<float> out = array.new_float()
+    for i = 0 to array.size(raw) - 1
+        float v = array.get(raw, i)
+        if array.size(out) == 0 or array.get(out, array.size(out) - 1) != v
+            array.push(out, v)
+    out
+
+f_nearestSupportBelow(series float px, array<float> lvls) =>
+    float best = na
+    float gap = 1e20
+    int n = array.size(lvls)
+    if n > 0
+        for i = 0 to n - 1
+            float lv = array.get(lvls, i)
+            if lv < px
+                float g = px - lv
+                if g < gap
+                    gap := g
+                    best := lv
+    best
+
+f_nearestSupportAtOrBelow(series float px, array<float> lvls) =>
+    float best = na
+    float gap = 1e20
+    int n = array.size(lvls)
+    if n > 0
+        for i = 0 to n - 1
+            float lv = array.get(lvls, i)
+            if lv <= px
+                float g = px - lv
+                if g < gap
+                    gap := g
+                    best := lv
+    best
+
+f_nearestResistanceAbove(series float px, float a, float b, float c, float d) =>
+    float best = na
+    float gap = 1e20
+    if a >= px
+        float g = a - px
+        if g < gap
+            gap := g
+            best := a
+    if b >= px
+        float g = b - px
+        if g < gap
+            gap := g
+            best := b
+    if c >= px
+        float g = c - px
+        if g < gap
+            gap := g
+            best := c
+    if d >= px
+        float g = d - px
+        if g < gap
+            gap := g
+            best := d
+    best
+
+f_nextSupportBelowLevel(float brokenLvl, array<float> lvls) =>
+    float best = na
+    float gap = 1e20
+    int n = array.size(lvls)
+    if n > 0 and not na(brokenLvl)
+        for i = 0 to n - 1
+            float lv = array.get(lvls, i)
+            if lv < brokenLvl
+                float g = brokenLvl - lv
+                if g < gap
+                    gap := g
+                    best := lv
+    best
+
+f_countLevelsBroken(series float o, series float c, array<float> lvls) =>
+    int cnt = 0
+    string names = ""
+    float lowestBroken = na
+    int n = array.size(lvls)
+    if n > 0
+        for i = 0 to n - 1
+            float lv = array.get(lvls, i)
+            // Level crossed on this candle: opened at/above, closed below
+            if o >= lv and c < lv
+                cnt += 1
+                names := names == "" ? f_formatPrice(lv) : names + ", " + f_formatPrice(lv)
+                if na(lowestBroken) or lv < lowestBroken
+                    lowestBroken := lv
+    [cnt, names, lowestBroken]
+
+f_calcCore() =>
+    float maVal   = f_ma(i_maType, i_maSrc, i_maLen)
+    float basis   = ta.sma(close, i_bbLen)
+    float dev     = i_bbMult * ta.stdev(close, i_bbLen)
+    float upper   = basis + dev
+    float lower   = basis - dev
+    float width   = upper - lower
+    float rsiVal  = ta.rsi(i_rsiSrc, i_rsiLen)
+    float vSma    = ta.sma(volume, i_volLen)
+    float atrVal  = ta.atr(i_atrLen)
+    [maVal, basis, upper, lower, width, rsiVal, vSma, atrVal]
+
+// =============================================================================
+// 4. CORE CALCULATIONS
+// =============================================================================
+
+bool useSec = i_useConfirmTF and i_confirmTF != ""
+[ma, bbBasis, bbUpper, bbLower, bbWidth, rsi, volSma, atr] =
+     useSec ?
+     request.security(syminfo.tickerid, i_confirmTF, f_calcCore(), barmerge.gaps_off, barmerge.lookahead_off) :
+     f_calcCore()
+
+bool maRising   = not na(ma) and not na(ma[1]) and ma > ma[1]
+bool maFalling  = not na(ma) and not na(ma[1]) and ma < ma[1]
+bool rsiRising  = not na(rsi) and not na(rsi[1]) and rsi > rsi[1]
+bool rsiFalling = not na(rsi) and not na(rsi[1]) and rsi < rsi[1]
+
+bool volAvailable = not na(volume) and volume > 0 and not na(volSma) and volSma > 0
+bool isHighVol    = volAvailable and volume > volSma * i_volMult
+bool volOk        = not i_reqVol or isHighVol or not volAvailable
+string volState   = not volAvailable ? "N/A" : isHighVol ? "High" : "Normal"
+
+array<float> supportLadder = f_buildSupportLadder()
+
+// =============================================================================
+// 5. CANDLE PATTERNS
+// =============================================================================
+
+float cBody     = math.abs(close - open)
+float cRange    = high - low
+float upperWick = high - math.max(open, close)
+float lowerWick = math.min(open, close) - low
+float bodyPct   = f_safeDiv(cBody, cRange) * 100.0
+bool  isBullBar = close > open
+bool  isBearBar = close < open
+
+bool bullEngulf =
+     i_useBullEngulf and
+     isBullBar and
+     close[1] < open[1] and
+     close >= open[1] and
+     open <= close[1] and
+     bodyPct >= i_minBodyPct
+
+bool bearEngulf =
+     i_useBearEngulf and
+     isBearBar and
+     close[1] > open[1] and
+     close <= open[1] and
+     open >= close[1] and
+     bodyPct >= i_minBodyPct
+
+bool hammer =
+     i_useHammer and
+     cRange > 0 and
+     lowerWick >= cBody * i_wickBodyRatio and
+     upperWick <= cBody * 0.5 and
+     bodyPct >= i_minBodyPct * 0.5 and
+     close >= open
+
+bool shootingStar =
+     i_useShootingStar and
+     cRange > 0 and
+     upperWick >= cBody * i_wickBodyRatio and
+     lowerWick <= cBody * 0.5 and
+     bodyPct >= i_minBodyPct * 0.5 and
+     close <= open
+
+bool bullReject =
+     i_useBullReject and
+     cRange > 0 and
+     lowerWick > cBody and
+     lowerWick >= cBody * i_wickBodyRatio * 0.75 and
+     close > open
+
+bool bearReject =
+     i_useBearReject and
+     cRange > 0 and
+     upperWick > cBody and
+     upperWick >= cBody * i_wickBodyRatio * 0.75 and
+     close < open
+
+bool anyBullPat = f_bullishPattern(bullEngulf, hammer, bullReject)
+bool anyBearPat = f_bearishPattern(bearEngulf, shootingStar, bearReject)
+int  bullPatCount = (bullEngulf ? 1 : 0) + (hammer ? 1 : 0) + (bullReject ? 1 : 0)
+bool bullRevOk = i_revConfirmMode == "Any one pattern" ? anyBullPat : bullPatCount >= 2
+bool bearRejectPat = bearReject or shootingStar or bearEngulf
+
+// =============================================================================
+// 6. MARKET STRUCTURE (confirmed pivots only)
+// =============================================================================
+
+float ph = ta.pivothigh(high, i_pivotLeft, i_pivotRight)
+float pl = ta.pivotlow(low, i_pivotLeft, i_pivotRight)
+
+var float lastSwingHigh = na
+var float prevSwingHigh = na
+var float lastSwingLow  = na
+var float prevSwingLow  = na
+
+if not na(ph)
+    prevSwingHigh := lastSwingHigh
+    lastSwingHigh := ph
+if not na(pl)
+    prevSwingLow := lastSwingLow
+    lastSwingLow := pl
+
+bool higherHigh = not na(lastSwingHigh) and not na(prevSwingHigh) and lastSwingHigh > prevSwingHigh
+bool lowerHigh  = not na(lastSwingHigh) and not na(prevSwingHigh) and lastSwingHigh < prevSwingHigh
+bool higherLow  = not na(lastSwingLow)  and not na(prevSwingLow)  and lastSwingLow  > prevSwingLow
+bool lowerLow   = not na(lastSwingLow)  and not na(prevSwingLow)  and lastSwingLow  < prevSwingLow
+
+bool bullStructure = higherHigh and higherLow
+bool bearStructure = lowerHigh and lowerLow
+
+// =============================================================================
+// 7. TREND SCORING
+// =============================================================================
+
+int bullScore =
+     (close > ma ? 1 : 0) +
+     (maRising ? 1 : 0) +
+     (close > bbBasis ? 1 : 0) +
+     (rsi > i_rsiMid ? 1 : 0) +
+     (bullStructure ? 1 : 0)
+
+int bearScore =
+     (close < ma ? 1 : 0) +
+     (maFalling ? 1 : 0) +
+     (close < bbBasis ? 1 : 0) +
+     (rsi < i_rsiMid ? 1 : 0) +
+     (bearStructure ? 1 : 0)
+
+bool isBullTrend = bullScore >= i_trendScoreNeed and bullScore > bearScore
+bool isBearTrend = bearScore >= i_trendScoreNeed and bearScore > bullScore
+string trendName = isBullTrend ? "BULLISH" : isBearTrend ? "BEARISH" : "NEUTRAL"
+
+var string prevTrendName = "NEUTRAL"
+bool trendShiftBull = trendName == "BULLISH" and prevTrendName != "BULLISH"
+bool trendShiftBear = trendName == "BEARISH" and prevTrendName != "BEARISH"
+
+// =============================================================================
+// 8. FILTERS / OVERSIZED / MULTI-LEVEL BREAK
+// =============================================================================
+
+bool inSession =
+     not i_useSession or not na(time(timeframe.period, i_session))
+
+int dow = dayofweek(time)
+bool dowOk =
+     not i_useDow or
+     (dow == dayofweek.monday    and i_allowMon) or
+     (dow == dayofweek.tuesday   and i_allowTue) or
+     (dow == dayofweek.wednesday and i_allowWed) or
+     (dow == dayofweek.thursday  and i_allowThu) or
+     (dow == dayofweek.friday    and i_allowFri) or
+     (dow == dayofweek.saturday  and i_allowSat) or
+     (dow == dayofweek.sunday    and i_allowSun)
+
+bool atrOk = not i_useMinATR or (not na(atr) and atr >= i_minATR)
+
+[levelsBrokenCount, levelsBrokenNames, lowestBrokenThisBar] = f_countLevelsBroken(open, close, supportLadder)
+bool multiLevelBreak = levelsBrokenCount > 1
+
+bool oversizedRange = not na(atr) and atr > 0 and cRange > atr * i_oversizedRangeMult
+bool oversizedBody  = not na(atr) and atr > 0 and cBody > atr * i_oversizedBodyMult
+bool isOversizedCandle = oversizedRange or oversizedBody or multiLevelBreak
+
+// Base gate does NOT include oversized — oversized only suppresses actionable sells
+bool filtersPass = inSession and dowOk and atrOk
+bool signalReady = i_intrabarMode or not i_confirmClose or barstate.isconfirmed
+bool gate = signalReady and filtersPass
+
+float nearestSup = f_nearestSupportAtOrBelow(close, supportLadder)
+float nextSupBelow = f_nearestSupportBelow(close, supportLadder)
+float nearestRes = f_nearestResistanceAbove(close, i_immResist, i_dailyPivot, i_secResist, i_upperResist)
+
+float buyZoneMid = (i_majBuyLo + i_majBuyHi) / 2.0
+bool nearSupportZone =
+     f_inZone(low, i_majBuyLo, i_majBuyHi) or
+     f_inZone(low, i_immSupLo, i_immSupHi) or
+     f_inZone(close, i_majBuyLo, i_immSupHi) or
+     (not na(nearestSup) and not na(atr) and math.abs(close - nearestSup) <= atr)
+
+// =============================================================================
+// 9. SUPPORT-LEVEL STATE TRACKING (break → resistance → retest)
+// =============================================================================
+// Persistent cycle state:
+// - lastBrokenSupport: most recent confirmed broken ladder level
+// - retestPending: waiting for a quality retest entry
+// - retestAlertFired: only one retest alert per breakdown cycle
+// - rsiRecoveredForRetest: RSI recovered above min after exhaustion
+
+var float  lastBrokenSupport     = na
+var bool   retestPending         = false
+var bool   retestAlertFired      = false
+var bool   rsiRecoveredForRetest = false
+var string lastBrokenLevelsList  = ""
+var int    lastBrokenLevelsCnt   = 0
+var int    breakBarIndex         = na
+
+bool rsiExhausted = not na(rsi) and rsi <= i_rsiExhaust
+
+// Track RSI recovery above retest minimum after having been exhausted
+if barstate.isconfirmed or i_intrabarMode
+    if rsiExhausted
+        rsiRecoveredForRetest := false
+    else if not na(rsi) and rsi > i_rsiRetestMin
+        rsiRecoveredForRetest := true
+
+bool breakoutEvent = false
+bool multiImpulseEvent = false
+bool waitRetestInfoEvent = false
+bool supportBreakConfirm = false
+float brokenLevelThisEvent = na
+
+if gate
+    if levelsBrokenCount >= 1 and not na(lowestBrokenThisBar)
+        breakoutEvent := true
+        brokenLevelThisEvent := lowestBrokenThisBar
+        supportBreakConfirm := true
+
+        // Arm / refresh breakdown cycle (do not spam duplicate per-level alerts)
+        lastBrokenSupport    := lowestBrokenThisBar
+        lastBrokenLevelsList := levelsBrokenNames
+        lastBrokenLevelsCnt  := levelsBrokenCount
+        retestPending        := true
+        retestAlertFired     := false
+        breakBarIndex        := bar_index
+
+        if multiLevelBreak or isOversizedCandle
+            multiImpulseEvent   := multiLevelBreak
+            waitRetestInfoEvent := true
+        else
+            // Clean single-level break still confirms state only (not a fresh sell entry)
+            waitRetestInfoEvent := false
+
+// Reset cycle if price closes back above broken level by more than tolerance
+// (independent of session/ATR gate so invalidation always clears state)
+if signalReady and not na(lastBrokenSupport) and close > lastBrokenSupport + i_breakRetestTol
+    lastBrokenSupport    := na
+    retestPending        := false
+    retestAlertFired     := false
+    lastBrokenLevelsList := ""
+    lastBrokenLevelsCnt  := 0
+    breakBarIndex        := na
+
+// =============================================================================
+// 10. DISTANCE-TO-SUPPORT / REWARD-RISK ESTIMATE (technical only)
+// =============================================================================
+
+float estEntry = close
+float estInvalidation = na
+float estNextTarget = na
+float estReward = na
+float estRisk = na
+float estRR = na
+
+if not na(lastBrokenSupport)
+    estInvalidation := lastBrokenSupport + i_breakRetestTol
+    estNextTarget   := f_nextSupportBelowLevel(lastBrokenSupport, supportLadder)
+else if not na(nearestSup)
+    estInvalidation := nearestSup + i_breakRetestTol
+    estNextTarget   := f_nextSupportBelowLevel(nearestSup, supportLadder)
+else
+    estInvalidation := high
+    estNextTarget   := nextSupBelow
+
+if not na(estInvalidation)
+    estRisk := math.max(estInvalidation - estEntry, syminfo.mintick)
+if not na(estNextTarget) and not na(estEntry)
+    estReward := math.max(estEntry - estNextTarget, 0.0)
+if not na(estReward) and not na(estRisk) and estRisk > 0
+    estRR := estReward / estRisk
+
+bool rrOkForEntry =
+     not na(estReward) and not na(estRisk) and
+     estReward >= estRisk and
+     not na(estRR) and estRR >= i_minRewardRisk
+
+bool nearSupportBlocksEntry =
+     not na(estNextTarget) and not na(estRisk) and
+     (estReward < estRisk or na(estRR) or estRR < i_minRewardRisk)
+
+// =============================================================================
+// 11. BEARISH RETEST ENTRY (actionable)
+// =============================================================================
+
+bool retestTouch =
+     not na(lastBrokenSupport) and
+     high >= lastBrokenSupport - i_breakRetestTol and
+     high <= lastBrokenSupport + i_breakRetestTol * 2.0
+
+bool retestCloseBelow =
+     not na(lastBrokenSupport) and close < lastBrokenSupport
+
+bool retestRsiOk =
+     not na(rsi) and rsi < i_rsiMid and
+     (not rsiExhausted) and
+     (rsiRecoveredForRetest or rsi > i_rsiRetestMin) and
+     rsiFalling
+
+bool retestMaOk = close < ma
+bool retestNotOversized = not isOversizedCandle
+
+bool rawRetestSell =
+     retestPending and not retestAlertFired and not na(lastBrokenSupport) and
+     not na(breakBarIndex) and bar_index > breakBarIndex and
+     retestTouch and retestCloseBelow and bearRejectPat and
+     retestRsiOk and retestMaOk and retestNotOversized and rrOkForEntry
+
+// No [1]-edge here: if cooldown blocks the alert, keep pending and retry later
+bool sigRetestSell = gate and rawRetestSell
+
+// =============================================================================
+// 12. OTHER ALERT CONDITIONS
+// =============================================================================
+
+bool tradedInBuyZone =
+     f_inZone(low, i_majBuyLo, i_majBuyHi) or
+     low <= i_majBuyLo or
+     f_inZone(close[1], i_majBuyLo, i_majBuyHi)
+bool closedAboveZone = close > i_majBuyHi or close > buyZoneMid
+
+// Informational: multi-level / oversized impulse (NOT a fresh sell entry)
+bool rawImpulseWait =
+     waitRetestInfoEvent and (multiLevelBreak or isOversizedCandle)
+
+// Informational: clean support-break confirmation (market-state only)
+bool rawSupportBreakState =
+     supportBreakConfirm and levelsBrokenCount == 1 and not isOversizedCandle
+
+// Legacy-style single-level break context (state only; not sell entry)
+bool rawBearBreakState =
+     breakoutEvent and not isOversizedCandle and levelsBrokenCount == 1 and
+     close < ma and rsi < i_rsiBearMom and rsiFalling and volOk
+
+// Bullish alerts preserved
+bool rawA3 =
+     tradedInBuyZone and closedAboveZone and bullRevOk and
+     rsiRising and rsi > i_rsiOS and
+     (not i_reqVol or isHighVol or not volAvailable)
+
+bool rawA4 =
+     f_inZone(low, i_immSupLo, i_immSupHi) and
+     close > i_immSupHi and isBullBar and
+     lowerWick > cBody and rsiRising
+
+bool rsiOkRecovery =
+     ta.crossover(rsi, i_rsiMid) or (rsiRising and rsi > 45.0)
+bool rawA5 =
+     close > i_immResist and close[1] <= i_immResist and
+     rsiOkRecovery and (close > ma or close > bbBasis) and volOk
+
+bool rawA6 =
+     close > i_dailyPivot and close[1] <= i_dailyPivot and
+     isBullBar and rsi > i_rsiMid and close > ma and volOk
+
+// Daily pivot retest state machine
+var bool pivotBroken     = false
+var bool pivotRetestDone = false
+bool     pivotRetestFire = false
+
+if signalReady and filtersPass
+    if close > i_dailyPivot and not pivotBroken
+        pivotBroken     := true
+        pivotRetestDone := false
+
+    if pivotBroken and not pivotRetestDone
+        bool pivRetestTouch =
+             low <= i_dailyPivot + i_pivotRetestTol and
+             low >= i_dailyPivot - i_pivotRetestTol
+        bool closeAbove  = close > i_dailyPivot
+        bool bullishHold = isBullBar or bullReject or bullEngulf or hammer
+        if pivRetestTouch and closeAbove and bullishHold
+            pivotRetestFire := true
+            pivotRetestDone := true
+
+    if close < i_dailyPivot - i_pivotRetestTol
+        pivotBroken     := false
+        pivotRetestDone := false
+
+bool rawA7 = pivotRetestFire
+
+bool rawA8 =
+     high >= i_immResist and close < i_immResist and
+     (bearReject or bearEngulf or shootingStar) and rsi < i_rsiMid
+
+bool rawA9 =
+     high >= i_dailyPivot and close < i_dailyPivot and
+     anyBearPat and
+     (rsi < i_rsiMid or ta.crossunder(rsi, i_rsiMid)) and
+     (close < ma or (close[1] >= ma and close < ma))
+
+bool rawA10 =
+     low <= bbLower and close > bbLower and close < bbUpper and
+     anyBullPat and rsi < i_rsiBearMom and rsiRising
+
+bool bbExpanding = not na(bbWidth) and not na(bbWidth[1]) and bbWidth > bbWidth[1]
+bool rawA11 =
+     close < bbLower and bbExpanding and rsi < i_rsiBearMom and
+     (not i_reqVol or isHighVol or not volAvailable)
+
+bool rawA12 = ta.crossunder(rsi, i_rsiOS)
+bool rawA13 =
+     ta.crossover(rsi, i_rsiOS) and nearSupportZone and isBullBar
+
+bool rawA14 = trendShiftBear
+bool rawA15 = trendShiftBull
+
+// Fresh market-sell candidates (legacy continuation) — suppressed when oversized / RSI exhausted / poor RR
+bool rawFreshSellBlocked =
+     isOversizedCandle or rsiExhausted or nearSupportBlocksEntry or not rrOkForEntry
+
+bool rawBearContinuation =
+     close < i_majBuyLo and close[1] >= i_majBuyLo and
+     isBearTrend and rsi < i_rsiBearMom and
+     not rawFreshSellBlocked and not retestPending
+
+// Edge triggers
+bool sigImpulseWait   = gate and rawImpulseWait and not rawImpulseWait[1]
+bool sigSupportBreak  = gate and rawSupportBreakState and not rawSupportBreakState[1]
+bool sigBearBreakState = gate and rawBearBreakState and not rawBearBreakState[1]
+bool sigA3  = gate and rawA3  and not rawA3[1]
+bool sigA4  = gate and rawA4  and not rawA4[1]
+bool sigA5  = gate and rawA5  and not rawA5[1]
+bool sigA6  = gate and rawA6  and not rawA6[1]
+bool sigA7  = gate and rawA7
+bool sigA8  = gate and rawA8  and not rawA8[1] and not rawFreshSellBlocked
+bool sigA9  = gate and rawA9  and not rawA9[1] and not rawFreshSellBlocked
+bool sigA10 = gate and rawA10 and not rawA10[1]
+bool sigA11 = gate and rawA11 and not rawA11[1]
+bool sigA12 = gate and rawA12 and not rawA12[1]
+bool sigA13 = gate and rawA13 and not rawA13[1]
+bool sigA14 = gate and rawA14 and not rawA14[1]
+bool sigA15 = gate and rawA15 and not rawA15[1]
+bool sigBearCont = gate and rawBearContinuation and not rawBearContinuation[1]
+
+// =============================================================================
+// 13. ALERT COOLDOWN AND PRIORITY
+// =============================================================================
+
+var int lastAlertBar = na
+var int lastImpulse = na
+var int lastSupBrk  = na
+var int lastRetest  = na
+var int lastA3 = na
+var int lastA4 = na
+var int lastA5 = na
+var int lastA6 = na
+var int lastA7 = na
+var int lastA8 = na
+var int lastA9 = na
+var int lastA10 = na
+var int lastA11 = na
+var int lastA12 = na
+var int lastA13 = na
+var int lastA14 = na
+var int lastA15 = na
+var int lastBearCont = na
+
+bool cdOk = f_canAlert(lastAlertBar, i_cooldownBars)
+
+bool fireImpulseWait  = sigImpulseWait  and f_canAlert(lastImpulse, i_cooldownBars) and cdOk
+bool fireSupportBreak = (sigSupportBreak or sigBearBreakState) and f_canAlert(lastSupBrk, i_cooldownBars) and cdOk
+bool fireRetestSell   = sigRetestSell and f_canAlert(lastRetest, i_cooldownBars) and cdOk
+
+// Consume retest cycle only when the actionable alert actually fires
+if fireRetestSell
+    retestAlertFired := true
+    retestPending    := false
+
+bool fireA3  = sigA3  and f_canAlert(lastA3,  i_cooldownBars) and cdOk
+bool fireA4  = sigA4  and f_canAlert(lastA4,  i_cooldownBars) and cdOk
+bool fireA5  = sigA5  and f_canAlert(lastA5,  i_cooldownBars) and cdOk
+bool fireA6  = sigA6  and f_canAlert(lastA6,  i_cooldownBars) and cdOk
+bool fireA7  = sigA7  and f_canAlert(lastA7,  i_cooldownBars) and cdOk
+bool fireA8  = sigA8  and f_canAlert(lastA8,  i_cooldownBars) and cdOk
+bool fireA9  = sigA9  and f_canAlert(lastA9,  i_cooldownBars) and cdOk
+bool fireA10 = sigA10 and f_canAlert(lastA10, i_cooldownBars) and cdOk
+bool fireA11 = sigA11 and f_canAlert(lastA11, i_cooldownBars) and cdOk
+bool fireA12 = sigA12 and f_canAlert(lastA12, i_cooldownBars) and cdOk
+bool fireA13 = sigA13 and f_canAlert(lastA13, i_cooldownBars) and cdOk
+bool fireA14 = sigA14 and f_canAlert(lastA14, i_cooldownBars) and cdOk
+bool fireA15 = sigA15 and f_canAlert(lastA15, i_cooldownBars) and cdOk
+bool fireBearCont = sigBearCont and f_canAlert(lastBearCont, i_cooldownBars) and cdOk
+
+// Primary bearish chart label priority (one per candle):
+// 1 Multi-level bearish impulse
+// 2 Support break
+// 3 Bearish retest
+// 4 Trend shift
+// 5 RSI warning
+string primaryBearLabel = ""
+int    primaryBearPrio  = 99
+
+if fireImpulseWait and multiLevelBreak and 1 < primaryBearPrio
+    primaryBearLabel := "BEAR IMPULSE"
+    primaryBearPrio  := 1
+else if fireImpulseWait and 1 < primaryBearPrio
+    primaryBearLabel := "WAIT RETEST"
+    primaryBearPrio  := 1
+if fireSupportBreak and 2 < primaryBearPrio
+    primaryBearLabel := "SUPPORT BREAK"
+    primaryBearPrio  := 2
+if fireRetestSell and 3 < primaryBearPrio
+    primaryBearLabel := "RETEST SELL"
+    primaryBearPrio  := 3
+if fireA14 and 4 < primaryBearPrio
+    primaryBearLabel := "BEAR SHIFT"
+    primaryBearPrio  := 4
+if fireA12 and 5 < primaryBearPrio
+    primaryBearLabel := "RSI WARN"
+    primaryBearPrio  := 5
+
+// Dynamic alert top priority (includes bullish)
+string topSignal = ""
+int    topPrio   = 99
+
+if fireImpulseWait and 1 < topPrio
+    topSignal := multiLevelBreak ? "MULTI-LEVEL BEARISH IMPULSE" : "BEARISH IMPULSE – WAIT FOR RETEST"
+    topPrio   := 1
+if fireRetestSell and 1 < topPrio
+    topSignal := "Bearish Retest Entry"
+    topPrio   := 1
+if fireSupportBreak and 2 < topPrio
+    topSignal := "Bearish Breakout Confirmed"
+    topPrio   := 2
+if fireA14 and 2 < topPrio
+    topSignal := "Trend Shift to Bearish"
+    topPrio   := 2
+if fireA15 and 2 < topPrio
+    topSignal := "Trend Shift to Bullish"
+    topPrio   := 2
+if fireBearCont and 2 < topPrio
+    topSignal := "Bearish Continuation"
+    topPrio   := 2
+if fireA6 and 2 < topPrio
+    topSignal := "Daily Pivot Breakout"
+    topPrio   := 2
+if fireA3 and 3 < topPrio
+    topSignal := "Bullish Reversal"
+    topPrio   := 3
+if fireA4 and 3 < topPrio
+    topSignal := "Support Hold"
+    topPrio   := 3
+if fireA5 and 3 < topPrio
+    topSignal := "Bullish Recovery"
+    topPrio   := 3
+if fireA7 and 3 < topPrio
+    topSignal := "Daily Pivot Retest Hold"
+    topPrio   := 3
+if fireA8 and 3 < topPrio
+    topSignal := "Bearish Rejection at Resistance"
+    topPrio   := 3
+if fireA9 and 3 < topPrio
+    topSignal := "Bearish Rejection at Pivot"
+    topPrio   := 3
+if fireA10 and 3 < topPrio
+    topSignal := "Bullish Bollinger Reversal"
+    topPrio   := 3
+if fireA11 and 3 < topPrio
+    topSignal := "Bearish Bollinger Continuation"
+    topPrio   := 3
+if fireA12 and 4 < topPrio
+    topSignal := "RSI Oversold Warning"
+    topPrio   := 4
+if fireA13 and 4 < topPrio
+    topSignal := "RSI Recovery Signal"
+    topPrio   := 4
+
+bool anyFire = topSignal != ""
+
+if fireImpulseWait
+    lastImpulse := bar_index
+if fireSupportBreak
+    lastSupBrk := bar_index
+if fireRetestSell
+    lastRetest := bar_index
+if fireA3
+    lastA3 := bar_index
+if fireA4
+    lastA4 := bar_index
+if fireA5
+    lastA5 := bar_index
+if fireA6
+    lastA6 := bar_index
+if fireA7
+    lastA7 := bar_index
+if fireA8
+    lastA8 := bar_index
+if fireA9
+    lastA9 := bar_index
+if fireA10
+    lastA10 := bar_index
+if fireA11
+    lastA11 := bar_index
+if fireA12
+    lastA12 := bar_index
+if fireA13
+    lastA13 := bar_index
+if fireA14
+    lastA14 := bar_index
+if fireA15
+    lastA15 := bar_index
+if fireBearCont
+    lastBearCont := bar_index
+if anyFire
+    lastAlertBar := bar_index
+
+if barstate.isconfirmed
+    prevTrendName := trendName
+
+// =============================================================================
+// 14. DASHBOARD STATUS STRINGS
+// =============================================================================
+
+string rsiState =
+     rsi <= i_rsiOS ? "OVERSOLD" :
+     rsi <= i_rsiExhaust + 3.0 ? "NEAR OVERSOLD" :
+     rsi >= i_rsiOB ? "OVERBOUGHT" :
+     rsi > i_rsiBullMom ? "Bullish Mom" :
+     rsi < i_rsiBearMom ? "Bearish Mom" :
+     rsi >= i_rsiMid ? "Above Mid" : "Below Mid"
+
+string maStatus    = close > ma ? "Above" : "Below"
+string pivotStatus = close > i_dailyPivot ? "Above" : "Below"
+string confirmStatus = i_intrabarMode ? "Intrabar" : barstate.isconfirmed ? "Confirmed" : "Forming"
+
+string currentSupportStr = na(nearestSup) ? "—" : f_formatPrice(nearestSup)
+string lastBrokenStr     = na(lastBrokenSupport) ? "—" : f_formatPrice(lastBrokenSupport)
+string nextSupportStr    = na(estNextTarget) ? "—" : f_formatPrice(estNextTarget)
+
+string retestPendingStr = retestPending ? "YES" : "NO"
+string oversizedStr     = isOversizedCandle ? "YES" : "NO"
+
+string entryStatus = "Neutral"
+if fireRetestSell or (rawRetestSell and gate)
+    entryStatus := "Sell Allowed"
+else if retestPending or (isOversizedCandle and isBearTrend)
+    entryStatus := "WAIT FOR RETEST"
+else if rsiExhausted and isBearTrend
+    entryStatus := "No Sell – RSI Exhausted"
+else if nearSupportBlocksEntry and isBearTrend
+    entryStatus := "No Sell – Near Support"
+else if isBearTrend and not isOversizedCandle and not rsiExhausted and rrOkForEntry
+    entryStatus := "Sell Allowed"
+else
+    entryStatus := "Neutral"
+
+string activeSetup = "Neutral"
+if multiLevelBreak and gate and waitRetestInfoEvent
+    activeSetup := "MULTI-LEVEL BEARISH IMPULSE"
+else if waitRetestInfoEvent or retestPending
+    activeSetup := "BEARISH IMPULSE – WAIT FOR RETEST"
+else if rsiExhausted and isBearTrend
+    activeSetup := "Bearish – Wait for Pullback"
+else if fireRetestSell or (rawRetestSell and gate)
+    activeSetup := "Bearish Retest Entry"
+else if supportBreakConfirm and gate
+    activeSetup := "Bearish Breakout Confirmed"
+else if fireA8 or fireA9 or (rawA8 and gate) or (rawA9 and gate)
+    activeSetup := "Resistance Rejection"
+else if fireA7 or (rawA7 and gate)
+    activeSetup := "Pivot Retest"
+else if fireA6 or (rawA6 and gate)
+    activeSetup := "Pivot Breakout"
+else if fireA5 or (rawA5 and gate)
+    activeSetup := "Recovery Above " + f_formatPrice(i_immResist)
+else if fireA3 or (rawA3 and gate)
+    activeSetup := "Bullish Reversal Watch"
+else if fireA4 or (rawA4 and gate)
+    activeSetup := "Support Test"
+else if tradedInBuyZone and not closedAboveZone
+    activeSetup := "Bullish Reversal Watch"
+else if f_inZone(low, i_immSupLo, i_immSupHi)
+    activeSetup := "Support Test"
+else if isBearTrend
+    activeSetup := "Bearish – Wait for Pullback"
+
+string estEntryStr  = f_formatPrice(estEntry)
+string estInvStr    = na(estInvalidation) ? "—" : f_formatPrice(estInvalidation)
+string estTgtStr    = na(estNextTarget) ? "—" : f_formatPrice(estNextTarget)
+string estRRStr     = na(estRR) ? "—" : str.tostring(estRR, "#.##")
+string levelsBrkDash = lastBrokenLevelsCnt > 0 ? str.tostring(lastBrokenLevelsCnt) + " (" + lastBrokenLevelsList + ")" : "—"
+
+// =============================================================================
+// 15. VISUAL PLOTS
+// =============================================================================
+
+plot(i_showMA ? ma : na, "MA", color = color.new(color.orange, 0), linewidth = 2)
+pBBBasis = plot(i_showBB ? bbBasis : na, "BB Basis", color = color.new(color.teal, 30), linewidth = 1)
+pBBUpper = plot(i_showBB ? bbUpper : na, "BB Upper", color = color.new(color.blue, 50), linewidth = 1)
+pBBLower = plot(i_showBB ? bbLower : na, "BB Lower", color = color.new(color.blue, 50), linewidth = 1)
+fill(pBBUpper, pBBLower, color = i_showBB ? color.new(color.blue, 92) : na, title = "BB Fill")
+
+bool showSec = i_showSecondaryLvls
+plot(i_showPrimaryLvls ? i_immSupHi : na, "Sup 4105", color = color.new(color.green, 0), style = plot.style_linebr, linewidth = 1)
+plot(i_showPrimaryLvls ? i_immSupLo : na, "Sup 4103", color = color.new(color.green, 20), style = plot.style_linebr, linewidth = 1)
+plot(i_showPrimaryLvls ? i_majBuyHi : na, "Sup 4100", color = color.new(color.lime, 0), style = plot.style_linebr, linewidth = 1)
+plot(i_showPrimaryLvls ? i_majBuyLo : na, "Sup 4095", color = color.new(color.lime, 20), style = plot.style_linebr, linewidth = 1)
+plot(showSec ? i_secSupport : na, "Sup 4085", color = color.new(color.olive, 0), style = plot.style_linebr, linewidth = 1)
+plot(i_showPrimaryLvls ? i_lvl4112 : na, "Lvl 4112", color = color.new(color.red, 10), style = plot.style_linebr, linewidth = 1)
+plot(i_showPrimaryLvls ? i_immResist : na, "Imm Resistance", color = color.new(color.red, 0), style = plot.style_linebr, linewidth = 1)
+plot(i_showDailyPivot ? i_dailyPivot : na, "Daily Pivot", color = color.new(color.fuchsia, 0), style = plot.style_linebr, linewidth = 2)
+plot(showSec ? i_secResist : na, "Secondary Resist", color = color.new(color.maroon, 0), style = plot.style_linebr, linewidth = 1)
+plot(showSec ? i_upperResist : na, "Upper Resist", color = color.new(color.purple, 0), style = plot.style_linebr, linewidth = 1)
+
+pBuyHi = plot(i_showZoneFills ? i_majBuyHi : na, display = display.none)
+pBuyLo = plot(i_showZoneFills ? i_majBuyLo : na, display = display.none)
+fill(pBuyHi, pBuyLo, color = i_showZoneFills ? color.new(color.lime, 90) : na, title = "Buy Zone Shade")
+
+pImmHi = plot(i_showZoneFills ? i_immSupHi : na, display = display.none)
+pImmLo = plot(i_showZoneFills ? i_immSupLo : na, display = display.none)
+fill(pImmHi, pImmLo, color = i_showZoneFills ? color.new(color.green, 88) : na, title = "Imm Support Shade")
+
+// Broken support marked as resistance (horizontal ray from break bar)
+var line brokenResLine = na
+if barstate.islast and not na(lastBrokenSupport)
+    if not na(brokenResLine)
+        line.delete(brokenResLine)
+    brokenResLine := line.new(bar_index - 20, lastBrokenSupport, bar_index + i_levelLabelOffset, lastBrokenSupport,
+         xloc = xloc.bar_index, extend = extend.none, color = color.new(color.orange, 0), width = 2, style = line.style_dashed)
+
+// Level labels with configurable offset + overlap avoidance
+var label lblL4112 = na
+var label lbl4105  = na
+var label lbl4103  = na
+var label lbl4100  = na
+var label lbl4095  = na
+var label lbl4085  = na
+var label lblPivot = na
+var label lblSecR  = na
+var label lblUpR   = na
+
+if barstate.islast
+    // Stagger x-offset when adjacent prices are within min gap (chain results)
+    [off0, st0, px0] = f_staggerOff(i_lvl4112, na, i_levelLabelOffset, 0, i_levelLabelMinGap)
+    [off1, st1, px1] = f_staggerOff(i_immSupHi, px0, i_levelLabelOffset, st0, i_levelLabelMinGap)
+    [off2, st2, px2] = f_staggerOff(i_immSupLo, px1, i_levelLabelOffset, st1, i_levelLabelMinGap)
+    [off3, st3, px3] = f_staggerOff(i_majBuyHi, px2, i_levelLabelOffset, st2, i_levelLabelMinGap)
+    [off4, st4, px4] = f_staggerOff(i_majBuyLo, px3, i_levelLabelOffset, st3, i_levelLabelMinGap)
+    [off5, st5, px5] = f_staggerOff(i_secSupport, px4, i_levelLabelOffset, st4, i_levelLabelMinGap)
+    [offP, stP, pxP] = f_staggerOff(i_dailyPivot, na, i_levelLabelOffset, 0, i_levelLabelMinGap)
+    [offS, stS, pxS] = f_staggerOff(i_secResist, pxP, i_levelLabelOffset, stP, i_levelLabelMinGap)
+    [offU, stU, pxU] = f_staggerOff(i_upperResist, pxS, i_levelLabelOffset, stS, i_levelLabelMinGap)
+
+    lblL4112 := f_placeLevelLabel(lblL4112, i_showPrimaryLvls, i_lvl4112, "4112 " + f_formatPrice(i_lvl4112), color.red, off0)
+    lbl4105  := f_placeLevelLabel(lbl4105,  i_showPrimaryLvls, i_immSupHi, "4105 " + f_formatPrice(i_immSupHi), color.green, off1)
+    lbl4103  := f_placeLevelLabel(lbl4103,  i_showPrimaryLvls, i_immSupLo, "4103 " + f_formatPrice(i_immSupLo), color.green, off2)
+    lbl4100  := f_placeLevelLabel(lbl4100,  i_showPrimaryLvls, i_majBuyHi, "4100 " + f_formatPrice(i_majBuyHi), color.lime, off3)
+    lbl4095  := f_placeLevelLabel(lbl4095,  i_showPrimaryLvls, i_majBuyLo, "4095 " + f_formatPrice(i_majBuyLo), color.lime, off4)
+    lbl4085  := f_placeLevelLabel(lbl4085,  showSec, i_secSupport, "4085 " + f_formatPrice(i_secSupport), color.olive, off5)
+    lblPivot := f_placeLevelLabel(lblPivot, i_showDailyPivot, i_dailyPivot, "PP " + f_formatPrice(i_dailyPivot), color.fuchsia, offP)
+    lblSecR  := f_placeLevelLabel(lblSecR,  showSec, i_secResist, "Sec Res " + f_formatPrice(i_secResist), color.maroon, offS)
+    lblUpR   := f_placeLevelLabel(lblUpR,   showSec, i_upperResist, "Upper " + f_formatPrice(i_upperResist), color.purple, offU)
+
+bgcolor(i_showBgTrend ? (isBullTrend ? color.new(color.green, 92) : isBearTrend ? color.new(color.red, 92) : na) : na, title = "Trend BG")
+
+// Signal label window (plotshape is non-flooding across recalcs)
+bool inLabelWindow = (last_bar_index - bar_index) <= i_labelLookback
+bool allowSignalLbl = i_showLabels and inLabelWindow and (i_showHistSignals or barstate.islast)
+
+// One primary bearish label per candle (mutually exclusive by priority)
+plotshape(allowSignalLbl and primaryBearLabel == "BEAR IMPULSE", title = "BEAR IMPULSE", style = shape.labeldown, location = location.abovebar, color = color.orange, size = size.tiny, text = "BEAR IMPULSE")
+plotshape(allowSignalLbl and primaryBearLabel == "WAIT RETEST", title = "WAIT RETEST", style = shape.labeldown, location = location.abovebar, color = color.orange, size = size.tiny, text = "WAIT RETEST")
+plotshape(allowSignalLbl and primaryBearLabel == "SUPPORT BREAK", title = "SUPPORT BREAK", style = shape.labeldown, location = location.abovebar, color = color.red, size = size.tiny, text = "SUPPORT BREAK")
+plotshape(allowSignalLbl and primaryBearLabel == "RETEST SELL", title = "RETEST SELL", style = shape.labeldown, location = location.abovebar, color = color.maroon, size = size.tiny, text = "RETEST SELL")
+plotshape(allowSignalLbl and primaryBearLabel == "BEAR SHIFT", title = "BEAR SHIFT", style = shape.labeldown, location = location.abovebar, color = color.red, size = size.tiny, text = "BEAR SHIFT")
+plotshape(allowSignalLbl and primaryBearLabel == "RSI WARN", title = "RSI WARN", style = shape.labeldown, location = location.abovebar, color = color.teal, size = size.tiny, text = "RSI WARN")
+
+// Bullish / other labels only when no primary bearish label on the bar
+bool noPrimaryBear = primaryBearLabel == ""
+plotshape(allowSignalLbl and noPrimaryBear and fireA15, title = "BULL SHIFT", style = shape.labelup, location = location.belowbar, color = color.green, size = size.tiny, text = "BULL SHIFT")
+plotshape(allowSignalLbl and noPrimaryBear and (fireA3 or fireA4 or fireA10), title = "BUY REV", style = shape.triangleup, location = location.belowbar, color = color.lime, size = size.tiny, text = "BUY REV")
+plotshape(allowSignalLbl and noPrimaryBear and fireA5, title = "RECOVERY", style = shape.triangleup, location = location.belowbar, color = color.aqua, size = size.tiny, text = "RECOVERY")
+plotshape(allowSignalLbl and noPrimaryBear and fireA6, title = "PP BREAK", style = shape.triangleup, location = location.belowbar, color = color.fuchsia, size = size.tiny, text = "PP BREAK")
+plotshape(allowSignalLbl and noPrimaryBear and fireA7, title = "PP RETEST", style = shape.circle, location = location.belowbar, color = color.fuchsia, size = size.tiny, text = "PP RETEST")
+plotshape(allowSignalLbl and noPrimaryBear and (fireA8 or fireA9), title = "REJECTION", style = shape.triangledown, location = location.abovebar, color = color.orange, size = size.tiny, text = "REJECTION")
+
+// =============================================================================
+// 16. DASHBOARD
+// =============================================================================
+
+var table dash = table.new(position.top_right, 2, 22, bgcolor = color.new(color.black, 70), border_width = 1, border_color = color.gray)
+
+f_cell(int row, string k, string v, color vc) =>
+    table.cell(dash, 0, row, k, text_color = color.gray, text_size = size.small)
+    table.cell(dash, 1, row, v, text_color = vc, text_size = size.small)
+
+if i_showDashboard and barstate.islast
+    color trendCol = isBullTrend ? color.lime : isBearTrend ? color.red : color.yellow
+    color rsiCol   = rsi <= i_rsiOS ? color.aqua : rsi <= i_rsiExhaust + 3.0 ? color.aqua : rsi >= i_rsiOB ? color.orange : rsi >= i_rsiMid ? color.lime : color.red
+    color volCol   = volState == "High" ? color.orange : color.silver
+    color entryCol =
+         entryStatus == "Sell Allowed" ? color.red :
+         entryStatus == "WAIT FOR RETEST" ? color.orange :
+         str.contains(entryStatus, "No Sell") ? color.yellow :
+         color.silver
+
+    table.cell(dash, 0, 0, "XAU Alert", text_color = color.white, text_size = size.small, bgcolor = color.new(color.teal, 60))
+    table.cell(dash, 1, 0, "System", text_color = color.white, text_size = size.small, bgcolor = color.new(color.teal, 60))
+    f_cell(1,  "Trend",              trendName, trendCol)
+    f_cell(2,  "Price vs MA",        maStatus, close > ma ? color.lime : color.red)
+    f_cell(3,  "Price vs Pivot",     pivotStatus, close > i_dailyPivot ? color.lime : color.red)
+    f_cell(4,  "RSI",                str.tostring(rsi, "#.##"), rsiCol)
+    f_cell(5,  "RSI Status",         rsiState, rsiCol)
+    f_cell(6,  "Volume",             volState, volCol)
+    f_cell(7,  "Current Support",    currentSupportStr, color.lime)
+    f_cell(8,  "Last Broken Sup",    lastBrokenStr, color.orange)
+    f_cell(9,  "Next Support",       nextSupportStr, color.olive)
+    f_cell(10, "Levels Broken",      levelsBrkDash, color.orange)
+    f_cell(11, "Retest Pending",     retestPendingStr, retestPending ? color.orange : color.silver)
+    f_cell(12, "Oversized Candle",   oversizedStr, isOversizedCandle ? color.orange : color.silver)
+    f_cell(13, "Entry Status",       entryStatus, entryCol)
+    f_cell(14, "Active Setup",       activeSetup, entryCol)
+    f_cell(15, "Est. Entry",         estEntryStr, color.white)
+    f_cell(16, "Invalidation",       estInvStr, color.red)
+    f_cell(17, "Next Target",        estTgtStr, color.lime)
+    f_cell(18, "Est. R:R",           estRRStr, not na(estRR) and estRR >= i_minRewardRisk ? color.lime : color.yellow)
+    f_cell(19, "Confirmation",       confirmStatus, barstate.isconfirmed ? color.lime : color.yellow)
+    f_cell(20, "Note",               "Estimates only — no auto trade", color.gray)
+    f_cell(21, "Symbol / TF",        syminfo.ticker + " " + timeframe.period, color.white)
+
+// =============================================================================
+// 17. alertcondition() DECLARATIONS
+// =============================================================================
+
+alertcondition(fireImpulseWait, title = "Bearish Impulse – Wait for Retest",
+     message = "BEARISH IMPULSE – WAIT FOR RETEST. Oversized or multi-level support break. Not a fresh sell entry. Wait for retest of broken support.")
+alertcondition(fireImpulseWait and multiLevelBreak, title = "Multi-Level Bearish Impulse",
+     message = "MULTI-LEVEL BEARISH IMPULSE. One candle broke multiple support levels. Wait for retest. Do not chase the breakdown candle.")
+alertcondition(fireSupportBreak, title = "Bearish Breakout Confirmed",
+     message = "Bearish breakout confirmed: candle closed below support. Market-state confirmation only — prefer retest entry.")
+alertcondition(fireRetestSell, title = "Bearish Retest Entry",
+     message = "Bearish Retest Entry: broken support retested from below with rejection, RSI filter pass, and price below MA. Actionable sell setup.")
+alertcondition(fireBearCont, title = "Bearish Continuation (Filtered)",
+     message = "Filtered bearish continuation below major buy-zone. Oversized / RSI exhaustion / poor R:R already blocked.")
+alertcondition(fireA3,  title = "Bullish Reversal From Buy Zone",
+     message = "Bullish reversal detected from the major buy-zone support. Watch immediate resistance as first recovery target.")
+alertcondition(fireA4,  title = "Support Hold Immediate Zone",
+     message = "Immediate support held. Bullish recovery may target immediate resistance.")
+alertcondition(fireA5,  title = "Bullish Recovery Above Resistance",
+     message = "Bullish recovery above immediate resistance. Watch the daily pivot next.")
+alertcondition(fireA6,  title = "Daily Pivot Breakout",
+     message = "Bullish daily pivot breakout. Watch secondary and upper resistance.")
+alertcondition(fireA7,  title = "Daily Pivot Retest Hold",
+     message = "Daily pivot retest held. Bullish continuation remains valid above the pivot.")
+alertcondition(fireA8,  title = "Bearish Rejection At Resistance",
+     message = "Bearish rejection detected at immediate resistance. Prefer retest entries over chase sells.")
+alertcondition(fireA9,  title = "Bearish Rejection At Daily Pivot",
+     message = "Bearish rejection from the daily pivot. Sellers remain favored below the pivot.")
+alertcondition(fireA10, title = "Bullish Bollinger Reversal",
+     message = "Bullish lower Bollinger Band reversal detected.")
+alertcondition(fireA11, title = "Bearish Bollinger Continuation",
+     message = "Bearish Bollinger Band expansion. Downside momentum is strengthening.")
+alertcondition(fireA12, title = "RSI Oversold Warning",
+     message = "RSI entered oversold territory. Do not issue fresh market-sell entries — wait for pullback / retest quality.")
+alertcondition(fireA13, title = "RSI Recovery Signal",
+     message = "RSI recovered from oversold near support. Watch for bullish confirmation.")
+alertcondition(fireA14, title = "Trend Shift To Bearish",
+     message = "Trend shifted to bearish. If the shift candle is oversized, wait for retest rather than selling the impulse.")
+alertcondition(fireA15, title = "Trend Shift To Bullish",
+     message = "Trend shifted to bullish: buyers regained technical control.")
+
+// =============================================================================
+// 18. DYNAMIC alert() EXECUTION
+// =============================================================================
+
+f_dynMsg(string signalName) =>
+    "XAU Alert | Symbol: " + syminfo.ticker +
+     " | TF: " + timeframe.period +
+     " | Signal: " + signalName +
+     " | Close: " + f_formatPrice(close) +
+     " | RSI: " + str.tostring(rsi, "#.##") +
+     " | Trend: " + trendName +
+     " | Volume: " + volState +
+     " | Last Broken: " + lastBrokenStr +
+     " | Next Support: " + nextSupportStr +
+     " | Retest Pending: " + retestPendingStr +
+     " | Oversized: " + oversizedStr +
+     " | Entry Status: " + entryStatus +
+     " | Est Entry: " + estEntryStr +
+     " | Invalidation: " + estInvStr +
+     " | Target: " + estTgtStr +
+     " | Est R:R: " + estRRStr
+
+alertFreq = i_intrabarMode ? alert.freq_once_per_bar : alert.freq_once_per_bar_close
+
+if i_dynAlerts and signalReady
+    if i_multiAlertPerBar
+        if fireImpulseWait
+            alert(f_dynMsg(multiLevelBreak ? "MULTI-LEVEL BEARISH IMPULSE" : "BEARISH IMPULSE – WAIT FOR RETEST") +
+                 " | Levels: " + levelsBrokenNames, alertFreq)
+        if fireSupportBreak
+            alert(f_dynMsg("Bearish Breakout Confirmed") + " | State only — wait retest", alertFreq)
+        if fireRetestSell
+            alert(f_dynMsg("Bearish Retest Entry") + " | Actionable sell setup", alertFreq)
+        if fireBearCont
+            alert(f_dynMsg("Bearish Continuation"), alertFreq)
+        if fireA3
+            alert(f_dynMsg("Bullish Reversal") + " | Target: " + f_formatPrice(i_immResist), alertFreq)
+        if fireA4
+            alert(f_dynMsg("Support Hold") + " | Target: " + f_formatPrice(i_immResist), alertFreq)
+        if fireA5
+            alert(f_dynMsg("Bullish Recovery") + " | Watch pivot " + f_formatPrice(i_dailyPivot), alertFreq)
+        if fireA6
+            alert(f_dynMsg("Daily Pivot Breakout") + " | Watch " + f_formatPrice(i_secResist) + " / " + f_formatPrice(i_upperResist), alertFreq)
+        if fireA7
+            alert(f_dynMsg("Daily Pivot Retest Hold") + " | Valid above " + f_formatPrice(i_dailyPivot), alertFreq)
+        if fireA8
+            alert(f_dynMsg("Bearish Rejection at Resistance"), alertFreq)
+        if fireA9
+            alert(f_dynMsg("Bearish Rejection at Pivot"), alertFreq)
+        if fireA10
+            alert(f_dynMsg("Bullish Bollinger Reversal"), alertFreq)
+        if fireA11
+            alert(f_dynMsg("Bearish Bollinger Continuation"), alertFreq)
+        if fireA12
+            alert(f_dynMsg("RSI Oversold Warning"), alertFreq)
+        if fireA13
+            alert(f_dynMsg("RSI Recovery Signal"), alertFreq)
+        if fireA14
+            alert(f_dynMsg("Trend Shift to Bearish"), alertFreq)
+        if fireA15
+            alert(f_dynMsg("Trend Shift to Bullish"), alertFreq)
+    else if anyFire
+        alert(f_dynMsg(topSignal), alertFreq)
+
+// =============================================================================
+// END OF SCRIPT
+// =============================================================================

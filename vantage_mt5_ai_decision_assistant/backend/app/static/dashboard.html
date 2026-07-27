@@ -1,0 +1,485 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>M5 Alignment Desk · Vantage</title>
+  <style>
+    :root {
+      --bg: #0a1210;
+      --panel: #12201c;
+      --panel2: #183028;
+      --line: #2a4238;
+      --text: #e8f2ed;
+      --muted: #8aa399;
+      --ok: #3dd68c;
+      --warn: #e8b84a;
+      --bad: #f07575;
+      --accent: #5ee0b5;
+      --accent2: #7eb8ff;
+      --mono: "Cascadia Code", "Consolas", ui-monospace, monospace;
+      --sans: "Segoe UI", system-ui, sans-serif;
+    }
+    * { box-sizing: border-box; }
+    html { -webkit-text-size-adjust: 100%; }
+    body {
+      margin: 0;
+      font-family: var(--sans);
+      color: var(--text);
+      min-height: 100vh;
+      min-height: 100dvh;
+      background:
+        radial-gradient(800px 360px at 10% -10%, #16352c 0%, transparent 55%),
+        radial-gradient(640px 320px at 95% 0%, #1a2a38 0%, transparent 50%),
+        var(--bg);
+      overflow-x: clip;
+    }
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 1rem;
+      flex-wrap: wrap;
+      padding: .85rem 1.25rem;
+      padding-left: max(1.25rem, env(safe-area-inset-left));
+      padding-right: max(1.25rem, env(safe-area-inset-right));
+      border-bottom: 1px solid var(--line);
+      background: rgba(10,18,16,.92);
+      backdrop-filter: blur(10px);
+      position: sticky;
+      top: 0;
+      z-index: 5;
+    }
+    header h1 { margin: 0; font-size: 1.05rem; font-weight: 700; }
+    header .sub { color: var(--muted); font-size: .78rem; margin-top: .15rem; }
+    .actions { display: flex; gap: .45rem; flex-wrap: wrap; align-items: center; }
+    .pill {
+      display: inline-flex; align-items: center; gap: .4rem;
+      border: 1px solid var(--line); border-radius: 999px;
+      padding: .35rem .7rem; font-size: .78rem; background: var(--panel);
+      white-space: nowrap;
+    }
+    .pill a { color: inherit; text-decoration: none; }
+    .pill.linkish:hover { border-color: var(--accent); color: var(--accent); }
+    .dot {
+      width: .55rem; height: .55rem; border-radius: 50%; background: var(--muted);
+      box-shadow: 0 0 0 3px rgba(139,163,153,.15);
+    }
+    .dot.ok { background: var(--ok); box-shadow: 0 0 0 3px rgba(61,214,140,.18); }
+    .dot.warn { background: var(--warn); box-shadow: 0 0 0 3px rgba(232,184,74,.18); }
+    .dot.bad { background: var(--bad); box-shadow: 0 0 0 3px rgba(240,117,117,.18); }
+    .pair-select {
+      display: inline-flex; align-items: center; gap: .4rem;
+      border: 1px solid var(--line); border-radius: 999px;
+      padding: .25rem .55rem .25rem .65rem; background: var(--panel); font-size: .78rem;
+    }
+    .pair-select select {
+      background: transparent; border: 0; color: var(--text);
+      font: inherit; outline: none; cursor: pointer;
+    }
+    .pair-select option { background: var(--panel); color: var(--text); }
+    main {
+      display: grid;
+      grid-template-columns: repeat(12, minmax(0, 1fr));
+      gap: .9rem;
+      padding: 1rem 1.25rem 2rem;
+      padding-left: max(1.25rem, env(safe-area-inset-left));
+      padding-right: max(1.25rem, env(safe-area-inset-right));
+      padding-bottom: max(2rem, env(safe-area-inset-bottom));
+      max-width: 1400px;
+      width: 100%;
+      margin: 0 auto;
+    }
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 1rem;
+      grid-column: span 12;
+      min-width: 0;
+    }
+    .card.half { grid-column: span 6; }
+    .card.third { grid-column: span 4; }
+    .card h2 {
+      margin: 0 0 .75rem;
+      font-size: .72rem;
+      text-transform: uppercase;
+      letter-spacing: .08em;
+      color: var(--muted);
+      font-weight: 650;
+    }
+    .verdict {
+      display: grid;
+      grid-template-columns: 1.4fr 1fr;
+      gap: 1rem;
+      align-items: stretch;
+    }
+    .verdict-main {
+      border-radius: 12px;
+      padding: 1.1rem 1.2rem;
+      border: 1px solid var(--line);
+      background: linear-gradient(145deg, rgba(94,224,181,.08), rgba(18,48,40,.4));
+    }
+    .verdict-main.ok { border-color: rgba(61,214,140,.45); }
+    .verdict-main.warn { border-color: rgba(232,184,74,.45); background: linear-gradient(145deg, rgba(232,184,74,.08), rgba(40,32,16,.35)); }
+    .verdict-main.bad { border-color: rgba(240,117,117,.45); background: linear-gradient(145deg, rgba(240,117,117,.1), rgba(40,16,16,.35)); }
+    .verdict-label { font-size: .72rem; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }
+    .verdict-code {
+      font-family: var(--mono);
+      font-size: 1.55rem;
+      font-weight: 750;
+      margin: .35rem 0 .25rem;
+      letter-spacing: .02em;
+    }
+    .verdict-head { color: var(--text); font-size: .95rem; line-height: 1.35; }
+    .tf-stack {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: .55rem;
+    }
+    .tf-box {
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: .7rem .75rem;
+      background: var(--panel2);
+    }
+    .tf-box .role { font-size: .68rem; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); }
+    .tf-box .tf { font-size: 1.35rem; font-weight: 800; margin: .2rem 0; color: var(--accent); }
+    .tf-box .val { font-family: var(--mono); font-size: .85rem; color: var(--text); }
+    .playbook {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+      gap: .55rem;
+    }
+    .pb-item {
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: .65rem .7rem;
+      background: rgba(0,0,0,.15);
+    }
+    .pb-item .k { font-size: .68rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+    .pb-item .v { font-family: var(--mono); font-size: .92rem; margin-top: .25rem; font-weight: 650; }
+    .gates { display: flex; flex-direction: column; gap: .45rem; }
+    .gate {
+      display: grid;
+      grid-template-columns: 7.5rem 1fr auto;
+      gap: .65rem;
+      align-items: start;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: .65rem .75rem;
+      background: rgba(0,0,0,.12);
+    }
+    .gate .badge {
+      font-family: var(--mono);
+      font-size: .68rem;
+      font-weight: 700;
+      letter-spacing: .04em;
+      padding: .2rem .45rem;
+      border-radius: 6px;
+      text-align: center;
+      border: 1px solid var(--line);
+      color: var(--muted);
+    }
+    .gate.pass .badge { color: #9af0c2; border-color: rgba(61,214,140,.4); background: rgba(61,214,140,.1); }
+    .gate.fail .badge { color: #ffc0c0; border-color: rgba(240,117,117,.45); background: rgba(240,117,117,.1); }
+    .gate.warn .badge { color: #ffe0a0; border-color: rgba(232,184,74,.45); background: rgba(232,184,74,.1); }
+    .gate.unknown .badge { color: var(--muted); }
+    .gate .label { font-weight: 650; font-size: .9rem; }
+    .gate .detail { color: var(--muted); font-size: .8rem; margin-top: .15rem; line-height: 1.35; }
+    .gate .req { font-size: .68rem; color: var(--muted); white-space: nowrap; }
+    .kv {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: .55rem .75rem;
+    }
+    .kv div {
+      display: flex; flex-direction: column; gap: .15rem;
+      border-bottom: 1px solid rgba(42,66,56,.55);
+      padding-bottom: .4rem;
+    }
+    .kv span { font-size: .72rem; color: var(--muted); }
+    .kv strong { font-family: var(--mono); font-size: .92rem; font-weight: 650; }
+    .note {
+      margin-top: .75rem;
+      font-size: .78rem;
+      color: var(--muted);
+      line-height: 1.4;
+    }
+    .chip-row { display: flex; flex-wrap: wrap; gap: .4rem; margin-top: .65rem; }
+    .chip {
+      font-size: .72rem;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: .25rem .55rem;
+      color: var(--muted);
+      background: rgba(0,0,0,.15);
+    }
+    .chip.on { color: var(--accent); border-color: rgba(94,224,181,.4); }
+    @media (max-width: 900px) {
+      .card.half, .card.third { grid-column: span 12; }
+      .verdict { grid-template-columns: 1fr; }
+      .tf-stack { grid-template-columns: 1fr; }
+      .gate { grid-template-columns: 5.5rem 1fr; }
+      .gate .req { grid-column: 2; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <h1>M5 Alignment Desk</h1>
+      <div class="sub">Analysis M5 · Structure M15 · Bias H1 · advisory only</div>
+    </div>
+    <div class="actions">
+      <div class="pair-select" title="Select chart pair">
+        <label for="pairSelect">Pair</label>
+        <select id="pairSelect" aria-label="Dashboard pair">
+          <option value="XAUUSD">XAUUSD</option>
+          <option value="BTCUSD">BTCUSD</option>
+        </select>
+      </div>
+      <span class="pill" id="connPill"><span class="dot" id="connDot"></span><span id="connText">…</span></span>
+      <span class="pill" id="wsPill"><span class="dot" id="wsDot"></span><span id="wsText">WS …</span></span>
+      <span class="pill linkish"><a href="/monitor">M30 Cockpit →</a></span>
+      <span class="pill">Advisory only</span>
+    </div>
+  </header>
+
+  <main>
+    <section class="card">
+      <h2>Verdict · what this desk allows now</h2>
+      <div class="verdict">
+        <div class="verdict-main warn" id="verdictBox">
+          <div class="verdict-label">Desk verdict</div>
+          <div class="verdict-code" id="verdictCode">…</div>
+          <div class="verdict-head" id="verdictHead">Loading playbook…</div>
+          <div class="chip-row" id="blockedChips"></div>
+        </div>
+        <div class="tf-stack" id="tfStack">
+          <div class="tf-box">
+            <div class="role">Bias</div>
+            <div class="tf">H1</div>
+            <div class="val" id="h1Val">—</div>
+          </div>
+          <div class="tf-box">
+            <div class="role">Structure</div>
+            <div class="tf">M15</div>
+            <div class="val" id="m15Val">—</div>
+          </div>
+          <div class="tf-box">
+            <div class="role">Analysis / trigger</div>
+            <div class="tf">M5</div>
+            <div class="val" id="m5Val">—</div>
+          </div>
+        </div>
+      </div>
+      <p class="note" id="deskNote"></p>
+    </section>
+
+    <section class="card half">
+      <h2>Playbook · fixed rules</h2>
+      <div class="playbook" id="playbook"></div>
+    </section>
+
+    <section class="card half">
+      <h2>Live market · selected pair</h2>
+      <div class="kv">
+        <div><span>Symbol</span><strong id="mSymbol">—</strong></div>
+        <div><span>Bid / Ask</span><strong id="mBidAsk">—</strong></div>
+        <div><span>Spread</span><strong id="mSpread">—</strong></div>
+        <div><span>Pair max spread</span><strong id="mMaxSpread">—</strong></div>
+        <div><span>ADX (14)</span><strong id="mAdx">—</strong></div>
+        <div><span>ATR (14)</span><strong id="mAtr">—</strong></div>
+        <div><span>Reward:risk</span><strong id="mRr">—</strong></div>
+        <div><span>Setup age (M5)</span><strong id="mAge">—</strong></div>
+        <div><span>Equity risk %</span><strong id="mRisk">—</strong></div>
+        <div><span>M30 cockpit action</span><strong id="mAction">—</strong></div>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Gate board · must clear before direction</h2>
+      <div class="gates" id="gates"></div>
+    </section>
+  </main>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+    let lastDesk = null;
+
+    function fmt(n, d = 2) {
+      if (n === null || n === undefined || n === "" || Number.isNaN(Number(n))) return "—";
+      return Number(n).toLocaleString(undefined, { maximumFractionDigits: d });
+    }
+
+    function setConn(connected, age) {
+      const dot = $("connDot");
+      const text = $("connText");
+      if (connected) {
+        dot.className = "dot ok";
+        text.textContent = age != null ? `EA live · ${age}s` : "EA live";
+      } else {
+        dot.className = "dot bad";
+        text.textContent = "EA offline";
+      }
+    }
+
+    function setWs(ok) {
+      $("wsDot").className = "dot " + (ok ? "ok" : "warn");
+      $("wsText").textContent = ok ? "WS live" : "WS reconnect…";
+    }
+
+    function renderPlaybook(spec) {
+      const risk = spec.risk || {};
+      const ind = spec.indicators || {};
+      const news = spec.news_block || {};
+      const setup = spec.setup || {};
+      const tf = spec.timeframes || {};
+      const items = [
+        ["Analysis TF", tf.analysis || "M5"],
+        ["Structure TF", tf.structure || "M15"],
+        ["Bias TF", tf.bias || "H1"],
+        ["EMA fast", ind.ema_fast],
+        ["EMA medium", ind.ema_medium],
+        ["EMA trend", ind.ema_trend],
+        ["ATR period", ind.atr_period],
+        ["ADX period", ind.adx_period],
+        ["Min ADX", ind.min_adx],
+        ["Min R:R", risk.min_reward_risk],
+        ["Risk %", (risk.risk_pct != null ? risk.risk_pct.toFixed(2) : "0.50") + "%"],
+        ["Max spread", "pair-specific"],
+        ["News before", (news.minutes_before ?? 30) + " min"],
+        ["News after", (news.minutes_after ?? 15) + " min"],
+        ["Max setup age", (setup.max_age_completed_m5 ?? 3) + " M5"],
+        ["Confirmation", "candle close"],
+        ["Direction", "H1 + M15 only"],
+      ];
+      $("playbook").innerHTML = items.map(([k, v]) =>
+        `<div class="pb-item"><div class="k">${k}</div><div class="v">${v}</div></div>`
+      ).join("");
+    }
+
+    function renderGates(gates) {
+      const root = $("gates");
+      if (!gates || !gates.length) {
+        root.innerHTML = `<div class="gate unknown"><div class="badge">—</div><div><div class="label">No gates</div></div></div>`;
+        return;
+      }
+      root.innerHTML = gates.map((g) => {
+        const st = (g.status || "unknown").toLowerCase();
+        const badge = st.toUpperCase();
+        return `<div class="gate ${st}">
+          <div class="badge">${badge}</div>
+          <div>
+            <div class="label">${g.label || g.key}</div>
+            <div class="detail">${g.detail || ""}</div>
+          </div>
+          <div class="req">${g.required === false ? "optional" : "required"}</div>
+        </div>`;
+      }).join("");
+    }
+
+    function renderDesk(data) {
+      lastDesk = data;
+      const spec = data.spec || {};
+      const verdict = data.verdict || {};
+      const market = data.market || {};
+      const conn = data.connection || {};
+
+      renderPlaybook(spec);
+      renderGates(data.gates || []);
+
+      const tone = verdict.tone || "warn";
+      const box = $("verdictBox");
+      box.className = "verdict-main " + tone;
+      $("verdictCode").textContent = verdict.verdict || "—";
+      $("verdictHead").textContent = verdict.headline || "—";
+      const chips = $("blockedChips");
+      const blocked = verdict.blocked_by || [];
+      chips.innerHTML = blocked.length
+        ? blocked.map((k) => `<span class="chip on">${k}</span>`).join("")
+        : `<span class="chip">no blockers</span>`;
+
+      $("h1Val").textContent = market.h1_bias || "awaiting feed";
+      $("m15Val").textContent = market.m15_structure || "awaiting feed";
+      $("m5Val").textContent = market.m5_trigger || "awaiting feed";
+
+      $("mSymbol").textContent = market.symbol || conn.selected_symbol || "—";
+      $("mBidAsk").textContent = `${fmt(market.bid, 5)} / ${fmt(market.ask, 5)}`;
+      $("mSpread").textContent = market.spread_points != null ? `${market.spread_points} pts` : "—";
+      $("mMaxSpread").textContent = market.max_spread_points != null ? `${market.max_spread_points} pts` : "pair-specific";
+      $("mAdx").textContent = market.adx14 != null ? fmt(market.adx14, 1) : "—";
+      $("mAtr").textContent = market.atr14 != null ? fmt(market.atr14, 5) : "—";
+      $("mRr").textContent = market.reward_risk_ratio != null ? fmt(market.reward_risk_ratio, 2) : "—";
+      $("mAge").textContent = market.setup_age_m5 != null ? String(market.setup_age_m5) : "—";
+      $("mRisk").textContent = market.equity_risk_pct != null ? fmt(market.equity_risk_pct, 2) + "%" : "—";
+      $("mAction").textContent = market.new_entry_decision || market.trend || "—";
+
+      $("deskNote").textContent = data.note || "";
+      setConn(!!conn.ea_connected, conn.seconds_since_heartbeat);
+
+      const sel = $("pairSelect");
+      const avail = conn.available_symbols || [];
+      if (avail.length) {
+        const cur = sel.value;
+        sel.innerHTML = avail.map((s) => `<option value="${s}">${s}</option>`).join("");
+        const want = conn.selected_symbol || cur;
+        if ([...sel.options].some((o) => o.value === want)) sel.value = want;
+      } else if (conn.selected_symbol) {
+        sel.value = conn.selected_symbol;
+      }
+    }
+
+    async function refresh() {
+      try {
+        const r = await fetch("/api/v1/dashboard/status");
+        if (!r.ok) throw new Error("status " + r.status);
+        renderDesk(await r.json());
+      } catch (e) {
+        $("verdictCode").textContent = "ERROR";
+        $("verdictHead").textContent = "Could not load dashboard status";
+      }
+    }
+
+    $("pairSelect").addEventListener("change", async () => {
+      const symbol = $("pairSelect").value;
+      try {
+        await fetch("/api/v1/monitor/select-symbol", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ symbol }),
+        });
+        await refresh();
+      } catch (_) {}
+    });
+
+    function connectWs() {
+      const proto = location.protocol === "https:" ? "wss" : "ws";
+      const url = `${proto}://${location.host}/ws/monitor`;
+      let ws;
+      try { ws = new WebSocket(url); } catch (_) { setWs(false); return; }
+      ws.onopen = () => setWs(true);
+      ws.onclose = () => {
+        setWs(false);
+        setTimeout(connectWs, 2500);
+      };
+      ws.onerror = () => setWs(false);
+      ws.onmessage = (ev) => {
+        try {
+          const msg = JSON.parse(ev.data);
+          if (msg.type === "snapshot" || msg.type === "update" || msg.type === "tick") {
+            refresh();
+          }
+        } catch (_) {}
+      };
+    }
+
+    refresh();
+    connectWs();
+    setInterval(refresh, 15000);
+  </script>
+</body>
+</html>

@@ -1,0 +1,10 @@
+# Copy these into your MT5 data folder:
+#   Experts\VantageMT5AIDecisionAssistant.mq5
+#   Include\VantageAI\*.mqh  (includes VantageM5Desk.mqh for /dashboard)
+#
+# PowerShell helper (edit $MT5Data first if your terminal ID differs):
+#   $MT5Data = "$env:APPDATA\MetaQuotes\Terminal\725B72F25E46C780EF59F57016D58156\MQL5"
+#   Copy-Item -Recurse -Force "MQL5\Experts\*" "$MT5Data\Experts\"
+#   New-Item -ItemType Directory -Force "$MT5Data\Include\VantageAI" | Out-Null
+#   Copy-Item -Force "MQL5\Include\VantageAI\*" "$MT5Data\Include\VantageAI\"
+# Then MetaEditor → open EA → F7 Compile → re-attach to chart.

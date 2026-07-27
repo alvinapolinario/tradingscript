@@ -1,0 +1,47 @@
+# Secrets — never commit (repo is public)
+.env
+.env.*
+!.env.example
+!.env.docker.example
+**/.env
+**/backend/.env
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+.venv/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+*.egg-info/
+dist/
+build/
+
+# IDE / OS
+.idea/
+.vscode/
+.cursor/
+*.swp
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# MT5 / local runtime
+*.ex5
+*.ex4
+*.log
+*.csv
+**/Files/
+**/Tester/
+**/Logs/
+
+# Docker local overrides
+docker-compose.override.yml
+
+# Misc
+*.bak
+*.tmp
+agent-transcripts/

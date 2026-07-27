@@ -1,0 +1,287 @@
+# Vantage MT5 AI Decision Assistant — Setup Guide
+
+Advisory-only system for a **Vantage Markets MetaTrader 5** account.  
+It does **not** open, modify, partially close, or close any position.
+
+---
+
+## 1. Installing Vantage MT5 desktop
+
+1. Download the Vantage MetaTrader 5 terminal from your Vantage client portal / official site.
+2. Install on Windows (or your VPS Windows image).
+3. Launch **Vantage MT5** (not a different broker’s terminal if you intend to use Vantage pricing).
+
+## 2. Logging into a Vantage demo account
+
+1. File → Login to Trade Account.
+2. Enter demo login, password, and the **exact server** provided in the Vantage welcome email.
+3. Confirm the bottom-right status shows connected.
+
+## 3. Finding the exact broker server
+
+1. In MT5: Toolbox → Trade, or Account details.
+2. Note **AccountInfo server** string (example shapes only): `VantageInternational-Demo`, `VantageInternational-Live`, etc.
+3. Servers differ by region and account type — **never hard-code** one server in the EA.
+
+The EA displays company + server at init and warns only if neither contains a recognizable “Vantage” reference. It does **not** reject other names.
+
+## 4. Checking the exact gold symbol
+
+**Your verified Vantage symbol is `XAUUSD`** (Gold vs US Dollar).
+
+1. Open Market Watch (Ctrl+M).
+2. Confirm **XAUUSD** is visible (right-click → Show All if needed).
+3. Open an **XAUUSD M30** chart.
+4. Attach the EA to **that chart**. The EA always uses `_Symbol` and never auto-switches symbols.
+
+Other Vantage builds may show suffixes (`XAUUSD.`, `XAUUSD+`, `GOLD`). Use whatever appears in *your* Market Watch — but for this account, use plain **XAUUSD**.
+
+## 5. Viewing symbol specifications
+
+1. Market Watch → right-click **XAUUSD** → Specification.
+2. Your verified Vantage profile (screenshot reference):
+
+| Field | Value |
+|-------|--------|
+| Symbol | XAUUSD |
+| Digits | **2** |
+| Contract size | **100** |
+| Spread | Floating |
+| Stops level | **20** |
+| Volume min / step / max | **0.01 / 0.01 / 100** |
+| Filling | Immediate or Cancel |
+| Calculation | CFD Leverage |
+| Execution | Market |
+| Sessions | Mon–Thu ~01:00–23:58; Fri ends ~23:57 (server time) |
+
+3. The EA reads these live via `SymbolInfo*` on init and logs a comparison against this reference. It does **not** hard-fail if a future account differs slightly.
+
+## 6. Allowing the local FastAPI URL for WebRequest
+
+1. MT5 → Tools → Options → Expert Advisors.
+2. Enable **Allow WebRequest for listed URL**.
+3. Add exactly:
+   ```
+   http://127.0.0.1:8000
+   ```
+4. OK → restart the terminal if prompted.
+
+If this step is skipped, the EA logs clear setup guidance and sets action `BACKEND_OFFLINE`.
+
+## 7. Installing and compiling the EA
+
+1. Open MT5 → File → Open Data Folder.
+2. Copy project files:
+   - `MQL5/Experts/VantageMT5AIDecisionAssistant.mq5` → `MQL5/Experts/`
+   - `MQL5/Include/VantageAI/*` → `MQL5/Include/VantageAI/`
+3. In MetaEditor: open the EA → Compile (F7).
+4. Confirm zero errors. The build must **not** reference `CTrade` / `Trade.mqh`.
+
+## 8. Starting the FastAPI backend
+
+```powershell
+cd d:\2026_Projects\trading_scripts\vantage_mt5_ai_decision_assistant\backend
+python -m venv .venv
+.\.venv\Scripts\activate
+pip install -r requirements.txt
+copy .env.example .env
+python run.py
+```
+
+Defaults:
+
+- Monitor UI: **http://127.0.0.1:8000/monitor**
+- Health: `GET /health`
+- Heartbeat: `POST /api/v1/heartbeat`
+- Analyze: `POST /api/v1/analyze`
+- Auth: `Authorization: Bearer <LOCAL_API_TOKEN>`
+
+Open the monitor page in a browser to see:
+
+- API online / offline
+- Live **WebSocket** updates (`ws://127.0.0.1:8000/ws/monitor`) — no page refresh polling
+- Vantage EA connected (heartbeat within ~45s)
+- Symbol, spread, dual decisions (new entry + existing position), risk status
+- Equity risk %, estimated SL loss, add/new position allowed
+- **Decision Brief** (situation, prioritized recommendations, checklist — not raw logs)
+
+**Separate M5 Alignment Desk:** [http://127.0.0.1:8000/dashboard](http://127.0.0.1:8000/dashboard)  
+Playbook: M5 analysis / M15 structure / H1 bias · EMA 20/50/200 · ATR/ADX 14 (min ADX 20) · min R:R 2.0 · risk 0.50% · pair-specific max spread · news block 30m before / 15m after · setup age ≤ 3 completed M5 · candle-close confirmation · direction only with H1+M15 alignment.
+
+With EA input **H. M5 Alignment Desk** enabled (`InpM5DeskEnable=true`, default), each heartbeat includes a `strategy` object so the gate board can go PASS/FAIL. Requires: backend running, WebRequest allowed for `http://127.0.0.1:8000`, EA attached to the selected pair, MetaEditor recompile after sync.
+
+**Clear EA feed FAIL:** start backend (`python run.py`) → allow WebRequest URL → attach compiled EA → pick matching pair on `/dashboard` → wait ~15s.
+
+**Do not put OpenAI/cloud keys in the EA.** Optional cloud keys stay only in the backend `.env`.
+
+### Position risk (v1.2)
+
+EA input group **E. Position risk thresholds** (editable): LOW &lt;1%, MODERATE &lt;2%, HIGH &lt;5%, VERY_HIGH &lt;10%, CRITICAL ≥10%.  
+`InpMaxPositionRiskPct` default **2%**. Critical/over-max risk → red warning, one push per state change, suppress add/new exposure, never auto-close.
+
+`InpFloatProfitTargetPct` default **10%**. When floating profit ≥ this % of equity → green chart warning + one push (`FLOAT_PROFIT_TARGET`) so you can manually limit/take profit. Monitor shows a **Floating P/L vs Equity** pie chart.
+
+**Trading history calendar** (monitor): closed P/L by day as % of current equity (green/red cells). Use **Prev / Next / This month** to browse other months; the EA loads that month from MT5 deal history on the next heartbeat (~15s). Floating P/L is excluded.
+
+**Account performance** (monitor + chart): total trades, wins/losses pie, win rate, profit factor, max drawdown $, max drawdown %, recovery factor, avg win/loss, consecutive streaks — MQL report–style from closed exit deals (`trade_stats`). `InpStatsLookbackDays=0` means all history.
+
+Example (BUY @ 4090.67, SL 4062, ~34.68% equity risk): **CRITICAL** + Existing **HOLD_WITH_CAUTION** + New Entry **NO_NEW_TRADE**/**RISK_BLOCKED** + Add Position **NO**.
+
+## 9. Attaching the EA (XAUUSD and/or BTCUSD)
+
+The web monitor has a **Pair** selector (**XAUUSD** / **BTCUSD**). Each chart needs its own EA instance so both can heartbeat independently.
+
+**Trade thesis levels:** default `InpLevelSource=AUTO_NON_GOLD` — gold uses the editable MANUAL inputs (~4088…); **BTCUSD / other pairs use AUTO levels from mid-price + ATR** (so the thesis card is not stuck on gold prices). Use `AUTO` for ATR on every symbol, or `MANUAL` to force the input map.
+
+1. Open the symbol on **M30** (gold: **XAUUSD**, crypto: **BTCUSD** — use your broker’s exact name).
+2. Navigator → Expert Advisors → drag `VantageMT5AIDecisionAssistant`.
+3. Inputs:
+   - `InpBackendUrl` = `http://127.0.0.1:8000` (or your host if remote)
+   - `InpBearerToken` = same as backend `LOCAL_API_TOKEN`
+   - `InpAdvisoryOnly` = **true** (required)
+   - On BTCUSD: keep `InpLevelSource=AUTO_NON_GOLD` or `AUTO`; raise `InpMaxSpreadPoints` or set `0`
+4. Enable Algo Trading (for timers/WebRequest; the EA still never sends orders).
+5. Check Experts log for masked login, symbol specs, and backend health.
+
+## 10. Enabling MT5 push notifications
+
+1. MT5 → Tools → Options → Notifications.
+2. Configure MetaQuotes ID / push.
+3. In EA inputs: `InpPushNotify = true`.
+4. Notifications fire only on **state changes** with cooldown + one-per-closed-candle rules.
+
+## 11. Testing on demo
+
+1. Run with `InpRunDiagnostics = true`.
+2. Verify dashboard: broker, masked account, digits, contract, spread, backend, action.
+3. Wait for a newly closed M30 candle — only then should `/analyze` be called.
+4. Force-stop the backend → expect `BACKEND_OFFLINE`.
+5. Widen spread filter to a tiny value → expect `HIGH_SPREAD` and no fresh entry watches.
+
+## 11a. Trader cockpit monitor layout
+
+`/monitor` is organized as a **trader desk**, not a systems console:
+
+1. **Decision strip** — primary action, new-entry, open-position, risk (first viewport)
+2. **Trade thesis** — S/R, recovery levels, invalidation + floating P/L
+3. **Market context / bias** — bid/ask, spread, candle freshness, bias pie
+4. **Decision Brief + ChatGPT** — recommendations and Analyze
+5. **Account performance + P/L calendar**
+6. **Ops drawer** (collapsed) — API/EA link diagnostics
+
+Pair selector and risk/live badges stay in the sticky header. Advisory only — no trade execution buttons.
+
+## 11b. ChatGPT on the monitor (optional)
+
+The Decision Brief card has **Copy AI brief** and **Analyze with ChatGPT**.
+
+1. In `backend/.env` (never in the EA or browser):
+   ```env
+   OPENAI_API_KEY=sk-...
+   OPENAI_MODEL=gpt-5.6-sol
+   USE_LLM=true
+   ```
+2. Restart FastAPI.
+3. Open `/monitor` → select pair → **Analyze with ChatGPT** (server calls OpenAI with the snapshot).
+4. If LLM is off, use **Copy AI brief** and paste into ChatGPT manually.
+
+The API key never leaves the backend process. Analysis is advisory only.
+
+## 12. Signal backtest in Strategy Tester
+
+This EA is **advisory-only** — Strategy Tester will show **0 deals / empty equity curve**. Use it to journal **signals**, not P/L.
+
+1. MetaEditor: compile `VantageMT5AIDecisionAssistant.mq5` (F7).
+2. MT5 → **View → Strategy Tester** (Ctrl+R).
+3. Settings:
+   - Expert: `VantageMT5AIDecisionAssistant`
+   - Symbol: `XAUUSD` or `BTCUSD` (your broker name)
+   - Period: **M30**
+   - Model: **1 minute OHLC** or **Every tick**
+   - Date range with enough history (EMA200 needs ~220+ M30 bars)
+4. Inputs: leave `InpAdvisoryOnly=true`. Replay starts automatically in the tester (`InpBacktestMode` is optional on live charts). Set levels / `InpMaxSpreadPoints` for the symbol (BTC needs a higher spread limit or `0`).
+5. Start. Visual mode shows a Comment with the latest signal; Journal prints a summary at the end.
+6. Open the CSV:
+   - Strategy Tester: `Terminal\Tester\Agent-*\MQL5\Files\vantage_signals_<SYMBOL>.csv`
+   - Or copy from that agent folder into Excel
+
+Columns: `time,symbol,bid,spread,trend,market_state,bullish_pct,bearish_pct,rsi,action,new_entry,risk_status,note`
+
+No FastAPI / WebRequest is used in tester. A separate trading EA would be required for profit-factor style backtests.
+
+## 13. Troubleshooting common WebRequest errors
+
+| Symptom | Likely cause | Fix |
+|--------|---------------|-----|
+| err 4014 / 4060 | URL not allow-listed | Add `http://127.0.0.1:8000` |
+| Connection failure | Backend not running | Start `python run.py` |
+| HTTP 401 | Token mismatch | Align EA token and `.env` |
+| Timeout | Backend hung / firewall | Check localhost:8000 `/health` |
+| Malformed JSON | Proxy / wrong path | Confirm `/api/v1/analyze` |
+
+## 14. Moving to a Windows VPS
+
+1. Install Vantage MT5 on the VPS.
+2. Run the FastAPI backend on the **same** VPS (`127.0.0.1`).
+3. Keep WebRequest URL as localhost (preferred) or lock down any remote bind.
+4. Use VPS auto-login + startup script for the backend.
+5. Continue using **demo** until you fully understand advisory behaviour.
+
+## 14b. Linux VPS — Docker (API only)
+
+Your Linux VPS can host the **FastAPI backend** in Docker. MetaTrader 5 still runs on **Windows** (PC or Windows VPS); the EA calls the API over HTTP.
+
+### Files
+- `Dockerfile`
+- `docker-compose.yml`
+- `.env.docker.example` → copy to `.env`
+- Optional nginx sample: `deploy/nginx-vantage-api.example.conf`
+
+### Deploy
+```bash
+# on VPS
+cd /path/to/vantage_mt5_ai_decision_assistant
+cp .env.docker.example .env
+nano .env   # set LOCAL_API_TOKEN (and OPENAI_* if needed)
+
+docker compose up -d --build
+curl http://127.0.0.1:8000/health
+```
+
+Default publish port: **8000** (confirm it is free: `ss -tulnp | grep 8000`).
+
+### Firewall (if MT5 is remote)
+```bash
+# ufw example — lock to your home IP if possible
+sudo ufw allow from YOUR.HOME.IP to any port 8000 proto tcp
+sudo ufw reload
+```
+
+### MT5 EA settings
+1. `InpBackendUrl` = `http://YOUR_VPS_IP:8000` (or `https://trading.yourdomain.com` if proxied)
+2. `InpBearerToken` = same as `LOCAL_API_TOKEN` in `.env`
+3. Tools → Options → Expert Advisors → Allow WebRequest for that exact URL
+4. Open monitor: `http://YOUR_VPS_IP:8000/monitor` (or `/dashboard`)
+
+### Useful commands
+```bash
+docker compose ps
+docker compose logs -f vantage-api
+docker compose restart vantage-api
+docker compose down
+```
+
+## 15. Explicit warning — live automatic trading is disabled
+
+> **This release is advisory-only.**  
+> It must not call `OrderSend`, must not import `CTrade`, and must not modify positions.  
+> `InpAdvisoryOnly=false` causes init failure.  
+> Any future live-trading capability would be a separate, explicitly reviewed release.
+
+---
+
+## Privacy
+
+- Full account login is used **locally** for diagnostics only.
+- Dashboard/logs show **masked** login (last four digits).
+- Analyze payloads send `account_login_masked` only — never the raw login to any AI provider.
