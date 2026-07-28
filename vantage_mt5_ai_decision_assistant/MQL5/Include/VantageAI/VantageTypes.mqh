@@ -136,10 +136,14 @@ struct VantagePositionSummary
 struct VantagePendingOrderRow
   {
    ulong    ticket;
+   string   symbol;
+   int      digits;
    long     type;             // ORDER_TYPE_* pending
    double   volume;
    double   price_open;
    double   price_current;
+   double   bid;
+   double   ask;
    double   sl;
    double   tp;
    datetime time_setup;

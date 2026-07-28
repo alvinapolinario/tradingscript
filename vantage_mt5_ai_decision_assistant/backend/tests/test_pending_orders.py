@@ -39,6 +39,68 @@ def test_empty_list():
     assert out["advisory_only"] is True
     assert out["count"] == 0
     assert out["items"] == []
+    assert out["kpis"]["total_orders"] == 0
+
+
+def test_kpis_across_symbols():
+    out = build_pending_orders_status(
+        {
+            "selected_symbol": "XAUUSD",
+            "link_health": {"ea_online": True},
+            "vantage_ea": {
+                "connected": True,
+                "symbol": "XAUUSD",
+                "bid": 3300.0,
+                "ask": 3300.2,
+                "trend": "BULLISH",
+                "pending_orders": {
+                    "count": 2,
+                    "scope": "account",
+                    "items": [
+                        _base_order(
+                            ticket=1,
+                            symbol="XAUUSD",
+                            digits=2,
+                            type="BUY_LIMIT",
+                            volume=0.1,
+                            equity_risk_pct=0.5,
+                            money_at_risk=50.0,
+                        ),
+                        _base_order(
+                            ticket=2,
+                            symbol="BTCUSD",
+                            digits=2,
+                            type="SELL_STOP",
+                            volume=0.2,
+                            price_open=70000.0,
+                            bid=69000.0,
+                            ask=69010.0,
+                            sl=71000.0,
+                            equity_risk_pct=1.0,
+                            money_at_risk=120.0,
+                            distance_price=1000.0,
+                        ),
+                    ],
+                },
+                "strategy": {
+                    "h1_bias": "BULLISH",
+                    "m15_structure": "BULLISH",
+                    "m5_trigger": "BULLISH",
+                    "atr14": 12.0,
+                },
+            },
+        }
+    )
+    assert out["count"] == 2
+    assert out["scope"] == "account"
+    assert out["kpis"]["total_orders"] == 2
+    assert out["kpis"]["buy_orders"] == 1
+    assert out["kpis"]["sell_orders"] == 1
+    assert out["kpis"]["total_volume"] == 0.3
+    assert out["kpis"]["symbols"] == 2
+    assert set(out["kpis"]["symbol_list"]) == {"XAUUSD", "BTCUSD"}
+    assert out["items"][0]["symbol"] == "XAUUSD"
+    assert out["items"][1]["symbol"] == "BTCUSD"
 
 
 def test_missing_sl_suggests_add_sl():

@@ -178,10 +178,14 @@ class PositionsInfo(BaseModel):
 
 class PendingOrderItem(BaseModel):
     ticket: int = 0
+    symbol: str = ""
+    digits: int = 0
     type: str = ""
     volume: float = 0.0
     price_open: float = 0.0
     price_current: float = 0.0
+    bid: float = 0.0
+    ask: float = 0.0
     sl: float = 0.0
     tp: float = 0.0
     time_setup: str = ""

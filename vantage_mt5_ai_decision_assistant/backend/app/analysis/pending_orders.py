@@ -126,6 +126,8 @@ def analyze_pending_order(
 ) -> dict[str, Any]:
     order_type = str(raw.get("type") or "").upper()
     side = _side_from_type(order_type)
+    symbol = str(raw.get("symbol") or "").upper()
+    digits = int(raw.get("digits") or 0) or 5
     price_open = _f(raw.get("price_open"))
     sl = _f(raw.get("sl"))
     tp = _f(raw.get("tp"))
@@ -136,6 +138,11 @@ def analyze_pending_order(
     equity_pct = _f(raw.get("equity_risk_pct")) if risk_available else None
     money = _f(raw.get("money_at_risk")) if risk_available else None
     rr = _f(raw.get("reward_risk_ratio")) if risk_available else None
+
+    # Prefer per-order ticks from EA (account-wide pendings may be off-chart)
+    obid = _f(raw.get("bid")) or bid
+    oask = _f(raw.get("ask")) or ask
+    bid, ask = obid, oask
 
     mid = (bid + ask) / 2.0 if bid > 0 and ask > 0 else bid or ask
     if dist_price <= 0 and price_open > 0 and mid > 0:
@@ -218,10 +225,15 @@ def analyze_pending_order(
 
     return {
         "ticket": int(raw.get("ticket") or 0),
+        "symbol": symbol,
+        "digits": digits,
         "type": order_type,
         "side": side,
         "volume": volume,
         "price_open": price_open,
+        "price_current": mid if mid > 0 else _f(raw.get("price_current")),
+        "bid": bid,
+        "ask": ask,
         "sl": sl if sl > 0 else None,
         "tp": tp if tp > 0 else None,
         "time_setup": raw.get("time_setup") or "",
@@ -269,45 +281,101 @@ def build_pending_orders_status(monitor_status: dict[str, Any]) -> dict[str, Any
     open_sell = _f(ea.get("total_sell_volume"))
     pos_count = int(ea.get("position_count") or 0)
 
+    chart_symbol = str(ea.get("symbol") or monitor_status.get("selected_symbol") or "").upper()
     analyzed = [
         analyze_pending_order(
             item if isinstance(item, dict) else {},
             bid=bid,
             ask=ask,
-            atr=atr_f,
+            atr=atr_f if str((item or {}).get("symbol") or chart_symbol).upper() == chart_symbol else None,
             chart_trend=str(ea.get("trend") or ""),
             strategy=strategy if isinstance(strategy, dict) else {},
             max_position_risk_pct=max_risk_f,
-            open_buy_volume=open_buy,
-            open_sell_volume=open_sell,
+            open_buy_volume=open_buy
+            if str((item or {}).get("symbol") or chart_symbol).upper() == chart_symbol
+            else 0.0,
+            open_sell_volume=open_sell
+            if str((item or {}).get("symbol") or chart_symbol).upper() == chart_symbol
+            else 0.0,
         )
         for item in items_raw
     ]
+    # Ensure chart symbol is filled when EA omitted it (older builds)
+    for a, raw in zip(analyzed, items_raw):
+        if not a.get("symbol"):
+            a["symbol"] = chart_symbol
+        if isinstance(raw, dict) and not raw.get("symbol"):
+            a["symbol"] = chart_symbol
 
+    buy_n = sum(1 for a in analyzed if a.get("side") == "BUY")
+    sell_n = sum(1 for a in analyzed if a.get("side") == "SELL")
     with_trend = sum(1 for a in analyzed if a["trend"]["label"] == "WITH_TREND")
     counter = sum(1 for a in analyzed if a["trend"]["label"] == "COUNTER_TREND")
+    mixed = sum(1 for a in analyzed if a["trend"]["label"] == "MIXED")
     missing_sl_n = sum(1 for a in analyzed if a["risk"]["missing_sl"])
     oversize_n = sum(1 for a in analyzed if a["risk"]["label"] == "OVERSIZE")
+    stale_n = sum(1 for a in analyzed if a["risk"].get("stale_or_invalid"))
+    keep_n = sum(1 for a in analyzed if a.get("suggestions") == ["KEEP_WATCH"])
+    total_volume = sum(_f(a.get("volume")) for a in analyzed)
+    total_money_risk = sum(
+        _f(a["risk"].get("money_at_risk"))
+        for a in analyzed
+        if a["risk"].get("money_at_risk") is not None
+    )
+    total_equity_risk = sum(
+        _f(a["risk"].get("equity_risk_pct"))
+        for a in analyzed
+        if a["risk"].get("equity_risk_pct") is not None
+    )
+    symbols = sorted({str(a.get("symbol") or "").upper() for a in analyzed if a.get("symbol")})
 
     ea_online = bool(link.get("ea_online") or ea.get("connected"))
-    symbol = str(ea.get("symbol") or monitor_status.get("selected_symbol") or "").upper()
+    scope = "account"
+    if isinstance(raw_po, dict) and raw_po.get("scope"):
+        scope = str(raw_po.get("scope"))
+
+    kpis = {
+        "total_orders": len(analyzed),
+        "buy_orders": buy_n,
+        "sell_orders": sell_n,
+        "total_volume": round(total_volume, 4),
+        "total_money_at_risk": round(total_money_risk, 2),
+        "total_equity_risk_pct": round(total_equity_risk, 2),
+        "with_trend": with_trend,
+        "counter_trend": counter,
+        "mixed_trend": mixed,
+        "missing_sl": missing_sl_n,
+        "oversize": oversize_n,
+        "stale": stale_n,
+        "keep_watch": keep_n,
+        "symbols": len(symbols),
+        "symbol_list": symbols,
+    }
 
     return {
         "advisory_only": True,
         "caption": "Advisory only — never places, modifies, or cancels MT5 pending orders.",
         "ea_online": ea_online,
-        "symbol": symbol,
+        "scope": scope,
+        "symbol": chart_symbol,
         "bid": bid,
         "ask": ask,
         "digits": int(ea.get("digits") or 5) or 5,
         "open_position_count": pos_count,
         "count": len(analyzed),
         "items": analyzed,
+        "kpis": kpis,
         "summary": {
             "with_trend": with_trend,
             "counter_trend": counter,
             "missing_sl": missing_sl_n,
             "oversize": oversize_n,
+            "stale": stale_n,
+            "buy_orders": buy_n,
+            "sell_orders": sell_n,
+            "total_volume": round(total_volume, 4),
+            "total_money_at_risk": round(total_money_risk, 2),
+            "total_equity_risk_pct": round(total_equity_risk, 2),
         },
         "links": {
             "orders": "/orders",

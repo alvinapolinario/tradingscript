@@ -45,10 +45,34 @@
       border: 1px solid var(--line); border-radius: 999px;
       padding: .35rem .7rem; font-size: .78rem; background: var(--panel);
     }
-    main { max-width: 820px; margin: 0 auto; padding: 1rem 1.1rem 2.5rem; }
+    main { max-width: 960px; margin: 0 auto; padding: 1rem 1.1rem 2.5rem; }
+    .kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: .55rem;
+      margin-bottom: 1.1rem;
+    }
+    .kpi {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: .7rem .8rem;
+      min-width: 0;
+    }
+    .kpi .k {
+      font-size: .65rem; letter-spacing: .08em; text-transform: uppercase; color: var(--muted);
+    }
+    .kpi .v {
+      font-family: var(--mono); font-size: 1.25rem; font-weight: 750; margin-top: .2rem;
+    }
+    .kpi .s { font-size: .72rem; color: var(--muted); margin-top: .15rem; }
+    .kpi.buy .v { color: var(--buy); }
+    .kpi.sell .v { color: var(--sell); }
+    .kpi.warn .v { color: var(--warn); }
+    .kpi.bad .v { color: var(--sell); }
     .ledger-title {
       font-size: .72rem; letter-spacing: .1em; text-transform: uppercase;
-      color: var(--muted); margin: .4rem 0 1rem;
+      color: var(--muted); margin: .2rem 0 .85rem;
     }
     .empty {
       border: 1px dashed var(--line); border-radius: 14px;
@@ -114,7 +138,8 @@
     .col .v {
       font-family: var(--mono); font-size: .9rem; font-weight: 650; margin-top: .15rem;
     }
-    @media (max-width: 700px) {
+    @media (max-width: 800px) {
+      .kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .grid { grid-template-columns: 1fr 1fr; }
     }
   </style>
@@ -123,15 +148,16 @@
   <header>
     <div>
       <h1>Pending Orders</h1>
-      <div class="sub">Advisory risk &amp; trend desk · never modifies MT5 orders</div>
+      <div class="sub">All MT5 pendings on the account · advisory only · never modifies orders</div>
     </div>
     <div class="actions">
-      <span class="pill" id="symPill">—</span>
+      <span class="pill" id="scopePill">account</span>
       <span class="pill" id="countPill">0 orders</span>
     </div>
   </header>
   <main>
-    <div class="ledger-title">Suggestions first · then risk &amp; trend</div>
+    <div class="kpi-grid" id="kpiGrid" hidden></div>
+    <div class="ledger-title">All pending orders · suggestions first</div>
     <div id="list"><div class="empty">Loading…</div></div>
   </main>
   <script>
@@ -143,6 +169,10 @@
       const d = digits != null ? digits : (Number(n) >= 100 ? 2 : 5);
       return Number(n).toLocaleString(undefined, { minimumFractionDigits: d, maximumFractionDigits: d });
     }
+    function fmtNum(n, d = 2) {
+      if (n == null || Number.isNaN(Number(n))) return "—";
+      return Number(n).toLocaleString(undefined, { maximumFractionDigits: d });
+    }
     function sugClass(s) {
       if (BAD.has(s)) return "bad";
       if (WARN.has(s)) return "warn";
@@ -153,20 +183,54 @@
       if (label === "COUNTER_TREND") return "counter";
       return "mixed";
     }
+    function renderKpis(kpis) {
+      const grid = document.getElementById("kpiGrid");
+      if (!kpis) {
+        grid.hidden = true;
+        return;
+      }
+      grid.hidden = false;
+      const symList = (kpis.symbol_list || []).join(", ") || "—";
+      grid.innerHTML = `
+        <div class="kpi"><div class="k">Total orders</div><div class="v">${kpis.total_orders ?? 0}</div><div class="s">${kpis.symbols ?? 0} symbol(s)</div></div>
+        <div class="kpi buy"><div class="k">Buy side</div><div class="v">${kpis.buy_orders ?? 0}</div><div class="s">pending buy types</div></div>
+        <div class="kpi sell"><div class="k">Sell side</div><div class="v">${kpis.sell_orders ?? 0}</div><div class="s">pending sell types</div></div>
+        <div class="kpi"><div class="k">Total volume</div><div class="v">${fmtNum(kpis.total_volume, 4)}</div><div class="s">lots across book</div></div>
+        <div class="kpi warn"><div class="k">Money @ SL</div><div class="v">${fmtNum(kpis.total_money_at_risk, 2)}</div><div class="s">sum when SL set</div></div>
+        <div class="kpi warn"><div class="k">Equity risk</div><div class="v">${fmtNum(kpis.total_equity_risk_pct, 2)}%</div><div class="s">sum of order %</div></div>
+        <div class="kpi buy"><div class="k">With trend</div><div class="v">${kpis.with_trend ?? 0}</div><div class="s">aligned to bias</div></div>
+        <div class="kpi bad"><div class="k">Needs attention</div><div class="v">${(kpis.missing_sl || 0) + (kpis.oversize || 0) + (kpis.stale || 0)}</div><div class="s">no SL ${kpis.missing_sl || 0} · oversize ${kpis.oversize || 0} · stale ${kpis.stale || 0}</div></div>
+      `;
+      grid.title = `Symbols: ${symList}`;
+    }
     function render(payload) {
       const root = document.getElementById("list");
       const items = payload.items || [];
-      const digits = payload.digits || 2;
-      document.getElementById("symPill").textContent = payload.symbol || "—";
+      const kpis = payload.kpis || payload.summary || {};
+      document.getElementById("scopePill").textContent = payload.scope || "account";
       document.getElementById("countPill").textContent =
         `${items.length} order${items.length === 1 ? "" : "s"}`;
+      renderKpis({
+        total_orders: kpis.total_orders ?? items.length,
+        buy_orders: kpis.buy_orders ?? 0,
+        sell_orders: kpis.sell_orders ?? 0,
+        total_volume: kpis.total_volume ?? 0,
+        total_money_at_risk: kpis.total_money_at_risk ?? 0,
+        total_equity_risk_pct: kpis.total_equity_risk_pct ?? 0,
+        with_trend: kpis.with_trend ?? 0,
+        missing_sl: kpis.missing_sl ?? 0,
+        oversize: kpis.oversize ?? 0,
+        stale: kpis.stale ?? 0,
+        symbols: kpis.symbols ?? (kpis.symbol_list || []).length,
+        symbol_list: kpis.symbol_list || [],
+      });
 
       if (!payload.ea_online) {
-        root.innerHTML = `<div class="empty">EA offline.<br/>Start the Vantage EA on your chart so pending orders can sync.</div>`;
+        root.innerHTML = `<div class="empty">EA offline.<br/>Start the Vantage EA so all MT5 pending orders can sync.</div>`;
         return;
       }
       if (!items.length) {
-        root.innerHTML = `<div class="empty">No pending orders on <b>${payload.symbol || "chart"}</b>.<br/>Place a Buy/Sell Limit or Stop on MT5 — analysis appears here (advisory only).</div>`;
+        root.innerHTML = `<div class="empty">No pending orders on the MT5 account.<br/>Place Buy/Sell Limit or Stop orders — they appear here with KPIs (advisory only).</div>`;
         return;
       }
 
@@ -174,6 +238,7 @@
         const side = (o.side || "").toLowerCase();
         const trend = o.trend || {};
         const risk = o.risk || {};
+        const dig = o.digits || payload.digits || 2;
         const sugs = (o.suggestions || []).map((s) =>
           `<li class="${sugClass(s)}">${s.replaceAll("_", " ")}</li>`
         ).join("");
@@ -181,7 +246,7 @@
           <div class="card-head">
             <div>
               <div class="type">${o.type || "—"}</div>
-              <div class="meta">#${o.ticket || "—"} · ${o.volume ?? "—"} lots · ${payload.symbol || ""}</div>
+              <div class="meta">${o.symbol || "—"} · #${o.ticket || "—"} · ${o.volume ?? "—"} lots</div>
             </div>
             <span class="badge ${trendClass(trend.label)}">${(trend.label || "MIXED").replaceAll("_", " ")}</span>
           </div>
@@ -192,14 +257,14 @@
             <span class="chip">Equity @ SL <strong>${risk.equity_risk_pct != null ? risk.equity_risk_pct.toFixed(2) + "%" : "—"}</strong></span>
             <span class="chip">Money @ SL <strong>${risk.money_at_risk != null ? fmtPx(risk.money_at_risk, 2) : "—"}</strong></span>
             <span class="chip">R:R <strong>${risk.reward_risk_ratio != null ? risk.reward_risk_ratio.toFixed(2) : "—"}</strong></span>
-            <span class="chip">To fill <strong>${fmtPx(risk.distance_price, digits)}</strong></span>
+            <span class="chip">To fill <strong>${fmtPx(risk.distance_price, dig)}</strong></span>
             ${risk.missing_sl ? '<span class="chip"><strong>No SL</strong></span>' : ""}
             ${risk.stale_or_invalid ? '<span class="chip"><strong>Stale</strong></span>' : ""}
           </div>
           <div class="grid">
-            <div class="col"><div class="k">Entry</div><div class="v">${fmtPx(o.price_open, digits)}</div></div>
-            <div class="col"><div class="k">Stop</div><div class="v">${fmtPx(o.sl, digits)}</div></div>
-            <div class="col"><div class="k">Target</div><div class="v">${fmtPx(o.tp, digits)}</div></div>
+            <div class="col"><div class="k">Entry</div><div class="v">${fmtPx(o.price_open, dig)}</div></div>
+            <div class="col"><div class="k">Stop</div><div class="v">${fmtPx(o.sl, dig)}</div></div>
+            <div class="col"><div class="k">Target</div><div class="v">${fmtPx(o.tp, dig)}</div></div>
             <div class="col"><div class="k">Setup</div><div class="v" style="font-size:.75rem">${o.time_setup || "—"}</div></div>
           </div>
         </article>`;
