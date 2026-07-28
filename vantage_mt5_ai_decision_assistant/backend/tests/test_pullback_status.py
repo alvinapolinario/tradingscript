@@ -80,6 +80,9 @@ def test_pullback_status_passthrough_from_heartbeat():
     assert body["ea_online"] is True
     assert body["pullback_supported"] is True
     assert body["symbol"] == "XAUUSD"
+    assert body["selected_symbol"] == "XAUUSD"
+    assert "XAUUSD" in body["available_symbols"]
+    assert isinstance(body["symbols"], list)
     assert body["pullback"]["pullback_probability"] == 62.0
     assert body["pullback"]["market_state"] == "DO NOT CHASE – MARKET EXTENDED"
     assert "analyzer" in body["links"]
@@ -90,6 +93,7 @@ def test_pullback_page_served():
     r = client.get("/pullback")
     assert r.status_code == 200
     assert "Pullback Probability Desk" in r.text
+    assert 'id="symbolSelect"' in r.text
 
 
 def test_heartbeat_accepts_pullback_field():

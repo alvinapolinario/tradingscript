@@ -45,6 +45,28 @@
       border: 1px solid var(--line); border-radius: 999px;
       padding: .35rem .7rem; font-size: .78rem; background: var(--panel);
     }
+    .pair-select {
+      display: inline-flex; align-items: center; gap: .45rem;
+      border: 1px solid var(--line); border-radius: 999px;
+      padding: .3rem .55rem .3rem .65rem;
+      background: var(--panel);
+      font-size: .78rem;
+    }
+    .pair-select label {
+      color: var(--muted); font-size: .68rem; text-transform: uppercase; letter-spacing: .06em;
+    }
+    .pair-select select {
+      appearance: none;
+      border: 0; background: transparent; color: var(--text);
+      font-family: var(--mono); font-size: .85rem; font-weight: 650;
+      padding: .15rem .35rem; min-width: 6.5rem; cursor: pointer;
+    }
+    .pair-select select:focus { outline: none; }
+    .pair-select .pair-dot {
+      width: .45rem; height: .45rem; border-radius: 50%; background: var(--muted); flex-shrink: 0;
+    }
+    .pair-select .pair-dot.ok { background: var(--buy); }
+    .pair-select .pair-dot.warn { background: var(--warn); }
     main { max-width: 960px; margin: 0 auto; padding: 1rem 1.1rem 2.5rem; }
     .kpi-grid {
       display: grid;
@@ -119,6 +141,8 @@
     @media (max-width: 800px) {
       .kpi-grid, .kpi-grid.scores { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .grid { grid-template-columns: 1fr 1fr; }
+      .pair-select { width: 100%; }
+      .pair-select select { flex: 1; min-width: 0; }
     }
   </style>
 </head>
@@ -129,7 +153,11 @@
       <div class="sub">H1 / M15 / M5 scored on the EA · advisory only · never places orders</div>
     </div>
     <div class="actions">
-      <span class="pill" id="symPill">—</span>
+      <div class="pair-select" title="Select chart pair — same as Market Overview">
+        <span class="pair-dot" id="pairDot"></span>
+        <label for="symbolSelect">Symbol</label>
+        <select id="symbolSelect" aria-label="Pullback symbol"></select>
+      </div>
       <span class="pill" id="trendPill">—</span>
     </div>
   </header>
@@ -138,6 +166,8 @@
     <div id="body"><div class="empty">Loading…</div></div>
   </main>
   <script>
+    let selectingSymbol = false;
+
     function fmtPx(n, digits) {
       if (n == null || Number.isNaN(Number(n)) || Number(n) === 0) return "—";
       const d = digits != null ? digits : (Number(n) >= 100 ? 2 : 5);
@@ -151,29 +181,57 @@
       if (!s) return [];
       return String(s).split(";").map((x) => x.trim()).filter(Boolean);
     }
+    function syncSymbolSelect(payload) {
+      const sel = document.getElementById("symbolSelect");
+      if (!sel || selectingSymbol) return;
+      const current = payload.selected_symbol || payload.symbol || "";
+      const names = (payload.available_symbols && payload.available_symbols.length)
+        ? payload.available_symbols.slice()
+        : (payload.symbols || []).map((x) => x.symbol || x).filter(Boolean);
+      if (!names.length && current) names.push(current);
+      const key = names.join("|");
+      if (sel.dataset.key !== key) {
+        sel.dataset.key = key;
+        sel.innerHTML = names.map(
+          (s) => `<option value="${s}" ${s === current ? "selected" : ""}>${s}</option>`
+        ).join("");
+      } else if (current && sel.value !== current) {
+        sel.value = current;
+      }
+      const byName = Object.fromEntries(
+        (payload.symbols || []).map((x) => [x.symbol, x])
+      );
+      const meta = byName[current] || {};
+      const online = !!(meta.connected || (payload.ea_online && (payload.symbol || "") === current));
+      const dot = document.getElementById("pairDot");
+      dot.className = "pair-dot " + (online ? "ok" : "warn");
+      sel.title = online
+        ? "EA online for this pair"
+        : "Waiting for EA heartbeat on this pair";
+    }
     function render(payload) {
       const body = document.getElementById("body");
       const kpis = document.getElementById("kpis");
       const pb = payload.pullback;
-      document.getElementById("symPill").textContent = payload.symbol || "—";
+      syncSymbolSelect(payload);
 
       if (!payload.ea_online) {
         kpis.innerHTML = "";
         document.getElementById("trendPill").textContent = "offline";
-        body.innerHTML = `<div class="empty">EA offline.<br/>Start the Vantage EA on a chart so pullback scores can sync via heartbeat.</div>`;
+        body.innerHTML = `<div class="empty">EA offline on <b>${payload.selected_symbol || payload.symbol || "this pair"}</b>.<br/>Attach the Vantage EA to that chart, or pick another symbol above.</div>`;
         return;
       }
       if (!payload.pullback_supported || !pb) {
         kpis.innerHTML = "";
         document.getElementById("trendPill").textContent = "unsupported";
-        body.innerHTML = `<div class="empty">This EA build is not sending <b>pullback</b> yet.<br/>
+        body.innerHTML = `<div class="empty">This EA build is not sending <b>pullback</b> yet for <b>${payload.selected_symbol || "—"}</b>.<br/>
           In MetaEditor: recompile <b>VantageMT5AIDecisionAssistant.mq5</b> (needs <b>VantagePullback.mqh</b>), reload on the chart, wait for a new M5 close / heartbeat (~15s).</div>`;
         return;
       }
       if (pb.valid === false) {
         kpis.innerHTML = "";
         document.getElementById("trendPill").textContent = "warming up";
-        body.innerHTML = `<div class="empty">Pullback analyzer warming up or insufficient data.<br/>Wait for closed H1/M15/M5 bars.</div>`;
+        body.innerHTML = `<div class="empty">Pullback analyzer warming up or insufficient data on <b>${payload.selected_symbol || "—"}</b>.<br/>Wait for closed H1/M15/M5 bars.</div>`;
         return;
       }
 
@@ -195,7 +253,7 @@
       const pos = splitReasons(pb.reasons_positive).map((r) => `<li class="pos">${r}</li>`).join("");
       const neg = splitReasons(pb.reasons_negative).map((r) => `<li class="neg">${r}</li>`).join("");
       body.innerHTML = `
-        <div class="section-title">Market state</div>
+        <div class="section-title">Market state · ${payload.selected_symbol || payload.symbol || "—"}</div>
         <div class="card">
           <div class="state">${pb.market_state || "—"}</div>
           <div class="meta">${pb.explanation || pb.short_reason || "—"}</div>
@@ -226,6 +284,20 @@
           `<div class="empty">Failed to load pullback status</div>`;
       }
     }
+    document.getElementById("symbolSelect").addEventListener("change", async () => {
+      const sym = document.getElementById("symbolSelect").value;
+      if (!sym || selectingSymbol) return;
+      selectingSymbol = true;
+      try {
+        await fetch("/api/v1/monitor/select-symbol", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ symbol: sym }),
+        });
+      } catch (_) {}
+      selectingSymbol = false;
+      await refresh();
+    });
     refresh();
     setInterval(refresh, 11000);
   </script>

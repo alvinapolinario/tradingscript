@@ -264,12 +264,16 @@ def pullback_status() -> dict:
     ea = st.get("vantage_ea") or {}
     link = st.get("link_health") or {}
     pb = ea.get("pullback")
+    selected = str(st.get("selected_symbol") or ea.get("symbol") or "").upper()
     return {
         "advisory_only": True,
         "caption": "Advisory only — never places, modifies, or cancels MT5 orders.",
         "ea_online": bool(link.get("ea_online") or ea.get("connected")),
         "pullback_supported": bool(ea.get("pullback_supported")),
-        "symbol": str(ea.get("symbol") or st.get("selected_symbol") or "").upper(),
+        "selected_symbol": selected,
+        "symbol": str(ea.get("symbol") or selected).upper(),
+        "available_symbols": list(st.get("available_symbols") or []),
+        "symbols": list(st.get("symbols") or []),
         "digits": int(ea.get("digits") or 5) or 5,
         "bid": ea.get("bid"),
         "ask": ea.get("ask"),
