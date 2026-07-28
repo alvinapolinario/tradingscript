@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Gold SMC · Vantage</title>
+  <link rel="stylesheet" href="/static/shell.css" />
+  <style>
+    :root {
+      --bg: #0b1210; --panel: #121c19; --line: #2a3d36; --text: #e8f2ed;
+      --muted: #8aa399; --buy: #3dd68c; --sell: #f07575; --warn: #e8c547;
+      --accent: #e0c35e; --mono: "Cascadia Code", "Consolas", ui-monospace, monospace;
+      --sans: "Segoe UI", system-ui, sans-serif;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; font-family: var(--sans); color: var(--text); min-height: 100vh;
+      background: radial-gradient(700px 320px at 10% 0%, #2a2418 0%, transparent 55%), var(--bg);
+    }
+    header {
+      display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap;
+      padding: .85rem 1.25rem; border-bottom: 1px solid var(--line);
+      background: rgba(11,18,16,.92); position: sticky; top: 0; z-index: 5;
+    }
+    header h1 { margin: 0; font-size: 1.05rem; }
+    header .sub { color: var(--muted); font-size: .78rem; margin-top: .15rem; }
+    .actions { display: flex; gap: .45rem; flex-wrap: wrap; align-items: center; }
+    .pill {
+      display: inline-flex; align-items: center; gap: .35rem;
+      border: 1px solid var(--line); border-radius: 999px;
+      padding: .35rem .7rem; font-size: .78rem; background: var(--panel);
+    }
+    .pair-select {
+      display: inline-flex; align-items: center; gap: .45rem;
+      border: 1px solid var(--line); border-radius: 999px;
+      padding: .3rem .55rem .3rem .65rem; background: var(--panel); font-size: .78rem;
+    }
+    .pair-select label { color: var(--muted); font-size: .68rem; text-transform: uppercase; letter-spacing: .06em; }
+    .pair-select select {
+      appearance: none; border: 0; background: transparent; color: var(--text);
+      font-family: var(--mono); font-size: .85rem; font-weight: 650;
+      padding: .15rem .35rem; min-width: 6.5rem; cursor: pointer;
+    }
+    .pair-select .pair-dot { width: .45rem; height: .45rem; border-radius: 50%; background: var(--muted); }
+    .pair-select .pair-dot.ok { background: var(--buy); }
+    .pair-select .pair-dot.warn { background: var(--warn); }
+    main { max-width: 960px; margin: 0 auto; padding: 1rem 1.1rem 2.5rem; }
+    .card {
+      background: var(--panel); border: 1px solid var(--line); border-radius: 16px;
+      padding: 1rem 1.1rem; margin-bottom: .85rem;
+    }
+    .state { font-size: 1.1rem; font-weight: 800; color: var(--accent); }
+    .meta { color: var(--muted); font-size: .78rem; margin-top: .35rem; line-height: 1.45; }
+    .empty {
+      border: 1px dashed var(--line); border-radius: 14px; padding: 1.5rem;
+      color: var(--muted); text-align: center; line-height: 1.5;
+    }
+    .warn-box {
+      border: 1px solid rgba(232,197,71,.45); background: rgba(232,197,71,.08);
+      border-radius: 14px; padding: 1rem 1.1rem; color: var(--warn); line-height: 1.5;
+    }
+    .k { font-size: .68rem; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+    .v { font-family: var(--mono); font-size: .95rem; font-weight: 650; margin-top: .2rem; }
+    .grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: .55rem; margin-top: .75rem; }
+    @media (max-width: 700px) { .grid { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body data-nav="gold-smc">
+  <header>
+    <div>
+      <h1>Gold SMC Intelligence</h1>
+      <div class="sub">XAUUSD / Gold only · advisory · Phase 8 complete</div>
+    </div>
+    <div class="actions">
+      <div class="pair-select" title="Select monitored pair">
+        <span class="pair-dot" id="pairDot"></span>
+        <label for="symbolSelect">Symbol</label>
+        <select id="symbolSelect" aria-label="Gold SMC symbol"></select>
+      </div>
+      <span class="pill" id="statusPill">—</span>
+    </div>
+  </header>
+  <main id="main"><div class="empty">Loading…</div></main>
+  <script>
+    let selectingSymbol = false;
+    const DISABLE_MSG = "Gold SMC Intelligence Engine is disabled. This module supports XAUUSD/Gold only.";
+
+    function syncSymbolSelect(payload) {
+      const sel = document.getElementById("symbolSelect");
+      if (!sel || selectingSymbol) return;
+      const current = payload.selected_symbol || payload.symbol || "";
+      const names = (payload.available_symbols && payload.available_symbols.length)
+        ? payload.available_symbols.slice()
+        : (payload.symbols || []).map((x) => x.symbol || x).filter(Boolean);
+      if (!names.length && current) names.push(current);
+      const key = names.join("|");
+      if (sel.dataset.key !== key) {
+        sel.dataset.key = key;
+        sel.innerHTML = names.map(
+          (s) => `<option value="${s}" ${s === current ? "selected" : ""}>${s}</option>`
+        ).join("");
+      } else if (current && sel.value !== current) sel.value = current;
+      const byName = Object.fromEntries((payload.symbols || []).map((x) => [x.symbol, x]));
+      const meta = byName[current] || {};
+      const online = !!(meta.connected || (payload.ea_online && (payload.symbol || "") === current));
+      document.getElementById("pairDot").className = "pair-dot " + (online ? "ok" : "warn");
+    }
+
+    function render(payload) {
+      const root = document.getElementById("main");
+      syncSymbolSelect(payload);
+      const g = payload.gold_smc;
+      if (!payload.ea_online) {
+        document.getElementById("statusPill").textContent = "offline";
+        root.innerHTML = `<div class="empty">EA offline on <b>${payload.selected_symbol || "—"}</b>.<br/>Attach the Vantage EA and wait for heartbeat.</div>`;
+        return;
+      }
+      if (!payload.gold_smc_supported || !g) {
+        document.getElementById("statusPill").textContent = "unsupported";
+        root.innerHTML = `<div class="empty">This EA build is not sending <b>gold_smc</b> yet.<br/>
+          Recompile <b>VantageMT5AIDecisionAssistant.mq5</b> with Gold SMC includes, reload on the chart, wait ~15s.</div>`;
+        return;
+      }
+
+      document.getElementById("statusPill").textContent = g.gold_symbol_valid ? "gold ok" : "not gold";
+
+      if (!g.gold_symbol_valid) {
+        root.innerHTML = `<div class="warn-box"><strong>${g.disable_reason || DISABLE_MSG}</strong><br/>
+          <span class="meta" style="color:inherit">Selected: ${g.symbol || payload.selected_symbol || "—"}</span></div>
+          <div class="card"><div class="k">Status</div><div class="v">${g.status_line || "DISABLED"}</div>
+          <div class="meta">${g.technical_narrative || ""}</div></div>`;
+        return;
+      }
+
+      const score = g.confidence_score != null ? Number(g.confidence_score) : 0;
+      root.innerHTML = `
+        <div class="card">
+          <div class="state">${g.setup_type || "No Valid SMC Setup"}</div>
+          <div class="meta">${g.setup_phase || ""} · ${g.setup_direction || "Neutral"} · Score ${score.toFixed(0)} (${g.quality_grade || "Invalid"} · ${g.confidence_band || "—"})</div>
+          <div class="meta" style="margin-top:.35rem">${g.technical_narrative || ""}</div>
+          <div class="grid">
+            <div><div class="k">Engine phase</div><div class="v">${g.engine_phase ?? 8}</div></div>
+            <div><div class="k">Chart objects</div><div class="v">${g.chart_objects_active ? "active" : "off"}</div></div>
+            <div><div class="k">Candidate</div><div class="v" style="font-size:.8rem">${g.setup_candidate || "—"}</div></div>
+            <div><div class="k">Entry zone</div><div class="v">${g.entry_zone || "—"}</div></div>
+            <div><div class="k">Entry status</div><div class="v">${g.entry_status || "—"} · ${g.zone_source || ""}</div></div>
+            <div><div class="k">Preferred entry</div><div class="v">${g.preferred_entry ? Number(g.preferred_entry).toFixed(2) : "—"}</div></div>
+            <div><div class="k">Invalidation</div><div class="v" style="font-size:.78rem">${g.invalidation || "—"}</div></div>
+            <div><div class="k">Targets</div><div class="v" style="font-size:.8rem">${g.targets || "—"}</div></div>
+            <div><div class="k">Est. R:R (T1)</div><div class="v">${g.estimated_rr != null && g.estimated_rr > 0 ? Number(g.estimated_rr).toFixed(1) : "—"}</div></div>
+            <div><div class="k">Premium / Discount</div><div class="v">${g.premium_discount || "—"} (${g.dealing_pct != null ? Number(g.dealing_pct).toFixed(0) : "—"}%)</div></div>
+            <div><div class="k">OTE / PO3</div><div class="v">${g.price_in_ote ? "OTE IN" : (g.poi_overlaps_ote ? "POI∩OTE" : "OTE out")} · ${g.po3_bias && g.po3_bias !== "None" ? g.po3_bias : (g.po3_status || "—")}</div></div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="k">Confluence breakdown</div>
+          <div class="meta">${g.score_breakdown || "—"}</div>
+          <div class="meta" style="margin-top:.55rem">For: ${g.reasons_for || "—"}</div>
+          <div class="meta">Against: ${g.reasons_against || "—"}</div>
+        </div>
+        <div class="card">
+          <div class="k">Context</div>
+          <div class="grid">
+            <div><div class="k">POI</div><div class="v">${g.primary_poi_dir || ""} ${g.primary_poi_type || "None"}</div></div>
+            <div><div class="k">Liquidity draw</div><div class="v">${g.liquidity_draw || "—"}</div></div>
+            <div><div class="k">BSL / SSL</div><div class="v">${g.nearest_bsl ? Number(g.nearest_bsl).toFixed(2) : "—"} / ${g.nearest_ssl ? Number(g.nearest_ssl).toFixed(2) : "—"}</div></div>
+            <div><div class="k">Sweep</div><div class="v">${g.sweep_class || "None"}</div></div>
+          </div>
+          <div class="meta" style="margin-top:.55rem">${g.latest_liquidity_event || ""}</div>
+        </div>
+        <div class="card">
+          <div class="k">Guidance</div>
+          <div class="v" style="font-family:var(--sans);font-weight:600">${g.recommendation || "—"}</div>
+          <div class="meta">Advisory only — score is explainable confluence, not an order. OTE alone never creates a setup.</div>
+          ${g.last_alert ? `<div class="meta" style="margin-top:.55rem;color:var(--warn)">Last alert: ${g.last_alert}</div>` : ""}
+        </div>`;
+    }
+
+    async function refresh() {
+      try {
+        const r = await fetch("/api/v1/gold-smc/status");
+        render(await r.json());
+      } catch (e) {
+        document.getElementById("main").innerHTML = `<div class="empty">Failed to load Gold SMC status</div>`;
+      }
+    }
+    document.getElementById("symbolSelect").addEventListener("change", async () => {
+      const sym = document.getElementById("symbolSelect").value;
+      if (!sym || selectingSymbol) return;
+      selectingSymbol = true;
+      try {
+        await fetch("/api/v1/monitor/select-symbol", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ symbol: sym }),
+        });
+      } catch (_) {}
+      selectingSymbol = false;
+      await refresh();
+    });
+    refresh();
+    setInterval(refresh, 11000);
+  </script>
+  <script src="/static/shell.js"></script>
+</body>
+</html>

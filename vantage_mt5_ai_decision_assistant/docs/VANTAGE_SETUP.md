@@ -320,6 +320,12 @@ Keeps `.env` and the `vantage_signal_data` Docker volume (signal ledger). Rebuil
 - Does **not** affect SETUP_OK, Signal Center, or Analyzer Take/Ignore. See [PULLBACK_PROBABILITY.md](PULLBACK_PROBABILITY.md).
 - VPS deploy updates the API only — recompile and reload the EA on Windows MT5 separately.
 
+### Gold SMC Intelligence (`/gold-smc`)
+- Backend: `GET /api/v1/gold-smc/status` + page `/gold-smc` (Gold-only SMC desk; Phase 8 complete — see `docs/GOLD_SMC.md`).
+- **Requires a recompiled EA** with `VantageGoldSMC*.mqh` sending top-level `"gold_smc"`.
+- Strict XAUUSD/GOLD alias validation — disabled on non-gold with an explicit HUD/web warning.
+- Does **not** trade or affect SETUP_OK. See [GOLD_SMC.md](GOLD_SMC.md).
+
 ## 15. Explicit warning — live automatic trading is disabled
 
 > **This release is advisory-only.**  

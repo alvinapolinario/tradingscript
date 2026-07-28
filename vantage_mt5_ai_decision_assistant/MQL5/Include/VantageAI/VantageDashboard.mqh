@@ -10,6 +10,7 @@
 #include "VantageDecision.mqh"
 #include "VantageHistory.mqh"
 #include "VantagePullback.mqh"
+#include "VantageGoldSMC.mqh"
 
 class CVantageDashboard
   {
@@ -70,7 +71,9 @@ public:
                const int month_deals,
                const VantageTradeStats &stats,
                const VantagePullbackResult &pb,
-               const bool show_pullback)
+               const bool show_pullback,
+               const VantageGoldSMCResult &gsm,
+               const bool show_gold_smc)
      {
       int r = 0;
       color riskCol = clrSilver;
@@ -184,6 +187,49 @@ public:
                   " | Quality " + DoubleToString(pb.pullback_quality, 0), clrSilver);
          SetLabel("tpb3", r++, "State: " + pb.market_state, clrYellow);
          SetLabel("tpb4", r++, StringSubstr(pb.short_reason != "" ? pb.short_reason : pb.explanation, 0, 90), clrSilver);
+        }
+
+      if(show_gold_smc && gsm.valid)
+        {
+         SetLabel("tsmc0", r++, "--- GOLD SMC INTELLIGENCE (advisory) ---", clrAqua);
+         if(!gsm.gold_symbol_valid || !gsm.engine_enabled)
+           {
+            SetLabel("tsmc1", r++, StringSubstr(gsm.disable_reason != "" ? gsm.disable_reason : gsm.status_line, 0, 96), clrOrange);
+            SetLabel("tsmc2", r++, "Status: " + gsm.status_line, clrSilver);
+           }
+         else
+           {
+            SetLabel("tsmc1", r++, "Symbol: " + gsm.base_symbol + " | " + gsm.status_line, clrLime);
+            SetLabel("tsmc2", r++, "Macro " + SmcDirectionToString(gsm.macro_bias) +
+                     " | H4 " + SmcDirectionToString(gsm.h4_bias) +
+                     " | H1 " + SmcDirectionToString(gsm.h1_bias), clrYellow);
+            SetLabel("tsmc3", r++, "M15 " + SmcDirectionToString(gsm.m15_bias) +
+                     " | M5 " + SmcDirectionToString(gsm.m5_bias) +
+                     " | Evt " + (gsm.latest_structure_event != "" ? gsm.latest_structure_event : "None"), clrSilver);
+            SetLabel("tsmc4", r++, StringSubstr(gsm.m5_context != "" ? gsm.m5_context : gsm.structure_status, 0, 96), clrSilver);
+            SetLabel("tsmc5", r++, "Draw " + (gsm.liquidity_draw != "" ? gsm.liquidity_draw : "—") +
+                     " | BSL " + (gsm.nearest_bsl > 0 ? DoubleToString(gsm.nearest_bsl, _Digits) : "—") +
+                     " | SSL " + (gsm.nearest_ssl > 0 ? DoubleToString(gsm.nearest_ssl, _Digits) : "—"), clrAqua);
+            SetLabel("tsmc6", r++, "POI " + (gsm.primary_poi_dir != "" ? gsm.primary_poi_dir + " " : "") +
+                     (gsm.primary_poi_type != "" ? gsm.primary_poi_type : "None") +
+                     (gsm.entry_zone != "" ? " " + gsm.entry_zone : ""), clrWhite);
+            SetLabel("tsmc7", r++, "PD " + (gsm.premium_discount != "" ? gsm.premium_discount : "—") +
+                     " (" + DoubleToString(gsm.dealing_pct, 0) + "%)" +
+                     " | OTE " + (gsm.price_in_ote ? "IN" : (gsm.poi_overlaps_ote ? "POI" : "out")) +
+                     " | PO3 " + (gsm.po3_bias != "" && gsm.po3_bias != "None" ? gsm.po3_bias : "—"), clrAqua);
+            SetLabel("tsmc8", r++, "Setup " + (gsm.setup_direction != "" ? gsm.setup_direction + " " : "") +
+                     (gsm.setup_type != "" ? gsm.setup_type : "No Valid SMC Setup") +
+                     " | " + DoubleToString(gsm.confidence_score, 0) + " (" + gsm.quality_grade + ")", clrWhite);
+            SetLabel("tsmc9", r++, StringSubstr(
+                     (gsm.entry_zone != "" ? "Entry " + gsm.entry_zone + " [" + gsm.entry_status + "] | " : "") +
+                     (gsm.targets != "" ? gsm.targets : "") +
+                     (gsm.estimated_rr > 0 ? " R:R " + DoubleToString(gsm.estimated_rr, 1) : ""), 0, 96), clrSilver);
+            SetLabel("tsmc10", r++, StringSubstr(
+                     (gsm.invalidation != "" ? "Inv " + gsm.invalidation : "") , 0, 96), clrMagenta);
+            SetLabel("tsmc11", r++, StringSubstr(gsm.recommendation != "" ? gsm.recommendation : gsm.displacement_status, 0, 96), clrGold);
+            if(gsm.last_alert != "")
+               SetLabel("tsmc12", r++, StringSubstr("Alert: " + gsm.last_alert, 0, 96), clrOrange);
+           }
         }
 
       SetLabel("t18", r++, "Primary Action: " + dec.primary_action + " | Resp: " + resp_ts + " (" + resp_age + ")", clrYellow);

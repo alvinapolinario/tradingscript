@@ -40,6 +40,7 @@
 #include <VantageAI/VantageDiagnostics.mqh>
 #include <VantageAI/VantageM5Desk.mqh>
 #include <VantageAI/VantagePullback.mqh>
+#include <VantageAI/VantageGoldSMC.mqh>
 
 //--- Explicit compile-time advisory guard (do not import Trade.mqh / CTrade)
 #ifdef __MQL5__
@@ -161,6 +162,102 @@ input int    InpPbUtcOffsetHrs = 0;
 input bool   InpPbShowChartObj = true;
 input bool   InpPbShowDash     = true;
 
+input group "M. Gold SMC Intelligence — Symbol Gate"
+input bool   InpGoldSmcEnable       = true;
+input string InpGoldSmcAliases      = "XAUUSD,GOLD"; // Comma-separated base aliases
+input bool   InpGoldSmcAllowSuffix  = true;          // Allow .a .pro glued m etc.
+input bool   InpGoldSmcAllowPrefix  = true;          // Allow m. / a_ prefixes
+input bool   InpGoldSmcShowWarn     = true;          // Show non-gold disable warning on HUD
+input bool   InpGoldSmcShowDash     = true;
+input bool   InpGoldSmcShowChartObj = true;          // Draw VAI_GSMC_* chart objects
+
+input group "N. Gold SMC Intelligence — Timeframes"
+input ENUM_TIMEFRAMES InpGoldSmcTF_D1  = PERIOD_D1;
+input ENUM_TIMEFRAMES InpGoldSmcTF_H4  = PERIOD_H4;
+input ENUM_TIMEFRAMES InpGoldSmcTF_H1  = PERIOD_H1;
+input ENUM_TIMEFRAMES InpGoldSmcTF_M15 = PERIOD_M15;
+input ENUM_TIMEFRAMES InpGoldSmcTF_M5  = PERIOD_M5;
+input ENUM_TIMEFRAMES InpGoldSmcTF_M1  = PERIOD_M1;
+
+input group "O. Gold SMC Intelligence — Structure (Phase 2)"
+input int    InpGoldSmcSwingLExt   = 5;      // External swing left bars
+input int    InpGoldSmcSwingRExt   = 5;      // External swing right bars
+input int    InpGoldSmcSwingLInt   = 2;      // Internal swing left bars
+input int    InpGoldSmcSwingRInt   = 2;      // Internal swing right bars
+input int    InpGoldSmcLookback    = 80;     // Structure lookback (closed bars)
+input int    InpGoldSmcAtrPeriod   = 14;
+input int    InpGoldSmcBreakMode   = 3;      // 0=wick 1=body 2=body+pen 3=body+disp (default)
+input double InpGoldSmcMinPenAtr   = 0.05;   // Min close penetration in ATR
+input double InpGoldSmcMinDispAtr  = 0.45;   // Body/ATR for displacement score
+input double InpGoldSmcMinDispScore = 55.0;  // Min displacement score for BOS (0-100)
+
+input group "P. Gold SMC Intelligence — Liquidity / Sessions (Phase 3)"
+input int    InpGoldSmcUtcOffset   = 0;      // Broker/server hours ahead of UTC
+input int    InpGoldSmcAsianStart  = 0;      // Asian start hour UTC
+input int    InpGoldSmcAsianEnd    = 7;
+input int    InpGoldSmcLondonStart = 7;
+input int    InpGoldSmcLondonEnd   = 16;
+input int    InpGoldSmcNyStart     = 12;
+input int    InpGoldSmcNyEnd       = 21;
+input bool   InpGoldSmcShowSession = true;
+input bool   InpGoldSmcShowPrevDay = true;
+input bool   InpGoldSmcShowPrevWk  = true;
+input double InpGoldSmcEqualTolAtr = 0.08;   // Equal H/L tolerance (ATR)
+input double InpGoldSmcApproachAtr = 0.35;   // Approaching distance (ATR)
+
+input group "Q. Gold SMC Intelligence — FVG / Order Blocks (Phase 4)"
+input double InpGoldSmcMinFvgAtr   = 0.12;   // Min FVG size (ATR)
+input int    InpGoldSmcMaxFvg      = 6;
+input int    InpGoldSmcMaxOb       = 6;
+input bool   InpGoldSmcFvgNeedDisp = true;   // FVG requires displacement candle
+input bool   InpGoldSmcObNeedDisp  = true;   // OB requires displacement
+input bool   InpGoldSmcObPreferSwp = true;   // Prefer OB after liquidity sweep
+input bool   InpGoldSmcEnableIFVG  = true;
+input bool   InpGoldSmcEnableBrk   = true;
+input int    InpGoldSmcObRefine    = 0;      // 0=full candle 1=body 2=CE band
+
+input group "R. Gold SMC Intelligence — Context / OTE / PO3 (Phase 5)"
+input bool   InpGoldSmcEnableOte   = true;
+input double InpGoldSmcOteLow      = 0.618;  // OTE fib low (retracement)
+input double InpGoldSmcOteMid      = 0.705;  // OTE fib mid (sweet spot)
+input double InpGoldSmcOteHigh     = 0.790;  // OTE fib high
+input bool   InpGoldSmcEnableInd   = true;   // Inducement heuristics
+input bool   InpGoldSmcEnablePo3   = true;   // Power of Three (session-based)
+input double InpGoldSmcDeepDisc    = 0.15;   // Deep discount ≤ this fraction of range
+input double InpGoldSmcDeepPrem    = 0.85;   // Deep premium ≥ this fraction of range
+
+input group "S. Gold SMC Intelligence — Setup Score (Phase 6)"
+input double InpGoldSmcMinScore    = 45.0;   // Min score for named setup (else No Valid)
+input double InpGoldSmcWHtf        = 15.0;   // Weight: H4/H1 alignment
+input double InpGoldSmcWLiq        = 12.0;   // Weight: liquidity event
+input double InpGoldSmcWDisp       = 12.0;   // Weight: displacement
+input double InpGoldSmcWStruct     = 14.0;   // Weight: structure confirmation
+input double InpGoldSmcWOb         = 10.0;   // Weight: order block
+input double InpGoldSmcWFvg        = 8.0;    // Weight: FVG
+input double InpGoldSmcWPd         = 7.0;    // Weight: premium/discount
+input double InpGoldSmcWSess       = 5.0;    // Weight: session
+input double InpGoldSmcWPdWk       = 4.0;    // Weight: PDH/PDL/PWH confluence
+input double InpGoldSmcWOte        = 4.0;    // Weight: OTE
+input double InpGoldSmcWLtf        = 6.0;    // Weight: LTF confirmation
+input double InpGoldSmcWVol        = 3.0;    // Weight: spread/volatility
+
+input group "T. Gold SMC Intelligence — Chart / Alerts (Phase 7)"
+input bool   InpGoldSmcChartRange  = true;   // Dealing range + EQ + PD bands
+input bool   InpGoldSmcChartLiq    = true;   // BSL/SSL + PDH/PDL/PWH/PWL
+input bool   InpGoldSmcChartSess   = false;  // Asian/London/NY lines (can clutter)
+input bool   InpGoldSmcChartPoi    = true;   // Primary POI rectangle
+input bool   InpGoldSmcChartOte    = true;   // OTE zone
+input bool   InpGoldSmcChartSetup  = true;   // Entry / invalidation / targets
+input int    InpGoldSmcChartBars   = 80;     // Rectangle lookback bars
+input bool   InpGoldSmcAlertEnable = false;
+input bool   InpGoldSmcAlertPopup  = false;
+input bool   InpGoldSmcAlertPush   = false;
+input bool   InpGoldSmcAlertSound  = false;
+input int    InpGoldSmcAlertCool   = 300;    // Alert cooldown seconds
+input double InpGoldSmcAlertScore  = 75.0;   // Min score for confidence alert
+input double InpGoldSmcAlertSpread = 120.0;  // Wide-spread alert (points)
+input bool   InpGoldSmcDebug       = false;  // Verbose [GoldSMC][*] logs (Phase 8)
+
 //+------------------------------------------------------------------+
 //| Globals                                                          |
 //+------------------------------------------------------------------+
@@ -174,6 +271,8 @@ CVantageM5Desk       g_m5desk;
 VantageM5DeskSnap    g_m5snap;
 CVantagePullback     g_pullback;
 VantagePullbackResult g_pbsnap;
+CVantageGoldSMC      g_goldsmc;
+VantageGoldSMCResult g_gsmsnap;
 
 datetime g_last_closed_candle = 0;
 datetime g_last_request_candle = 0;
@@ -624,6 +723,8 @@ string BuildHeartbeatPayload(void)
      }
    if(InpPullbackEnable && g_pbsnap.valid)
       j += ",\"pullback\":" + g_pullback.ToJson(g_pbsnap);
+   if(g_gsmsnap.valid)
+      j += ",\"gold_smc\":" + g_goldsmc.ToJson(g_gsmsnap);
    j += "}";
    return j;
   }
@@ -680,6 +781,101 @@ void MaybeEvalPullback(const bool force)
       g_pbsnap = r;
   }
 
+void FillGoldSmcConfig(VantageGoldSMCConfig &cfg)
+  {
+   ZeroMemory(cfg);
+   cfg.enable = InpGoldSmcEnable;
+   cfg.approved_aliases = InpGoldSmcAliases;
+   cfg.allow_broker_suffix = InpGoldSmcAllowSuffix;
+   cfg.allow_broker_prefix = InpGoldSmcAllowPrefix;
+   cfg.show_nongold_warning = InpGoldSmcShowWarn;
+   cfg.show_dashboard = InpGoldSmcShowDash;
+   cfg.show_chart_objects = InpGoldSmcShowChartObj;
+   cfg.tf_macro = InpGoldSmcTF_D1;
+   cfg.tf_major = InpGoldSmcTF_H4;
+   cfg.tf_bias = InpGoldSmcTF_H1;
+   cfg.tf_confirm = InpGoldSmcTF_M15;
+   cfg.tf_exec = InpGoldSmcTF_M5;
+   cfg.tf_precision = InpGoldSmcTF_M1;
+   cfg.swing_left_ext = InpGoldSmcSwingLExt;
+   cfg.swing_right_ext = InpGoldSmcSwingRExt;
+   cfg.swing_left_int = InpGoldSmcSwingLInt;
+   cfg.swing_right_int = InpGoldSmcSwingRInt;
+   cfg.structure_lookback = InpGoldSmcLookback;
+   cfg.atr_period = InpGoldSmcAtrPeriod;
+   int bm = InpGoldSmcBreakMode;
+   if(bm < 0) bm = 0;
+   if(bm > 3) bm = 3;
+   cfg.break_mode = (ENUM_SMC_BREAK_MODE)bm;
+   cfg.min_close_penetration_atr = InpGoldSmcMinPenAtr;
+   cfg.min_displacement_atr = InpGoldSmcMinDispAtr;
+   cfg.min_displacement_score = InpGoldSmcMinDispScore;
+   cfg.server_utc_offset_hours = InpGoldSmcUtcOffset;
+   cfg.asian_start_hour_utc = InpGoldSmcAsianStart;
+   cfg.asian_end_hour_utc = InpGoldSmcAsianEnd;
+   cfg.london_start_hour_utc = InpGoldSmcLondonStart;
+   cfg.london_end_hour_utc = InpGoldSmcLondonEnd;
+   cfg.ny_start_hour_utc = InpGoldSmcNyStart;
+   cfg.ny_end_hour_utc = InpGoldSmcNyEnd;
+   cfg.show_session_liquidity = InpGoldSmcShowSession;
+   cfg.show_prev_day_liquidity = InpGoldSmcShowPrevDay;
+   cfg.show_prev_week_liquidity = InpGoldSmcShowPrevWk;
+   cfg.equal_tol_atr = InpGoldSmcEqualTolAtr;
+   cfg.approach_atr = InpGoldSmcApproachAtr;
+   cfg.min_fvg_atr = InpGoldSmcMinFvgAtr;
+   cfg.max_fvgs = InpGoldSmcMaxFvg;
+   cfg.max_obs = InpGoldSmcMaxOb;
+   cfg.fvg_require_displacement = InpGoldSmcFvgNeedDisp;
+   cfg.ob_require_displacement = InpGoldSmcObNeedDisp;
+   cfg.ob_prefer_sweep_origin = InpGoldSmcObPreferSwp;
+   cfg.enable_inverse_fvg = InpGoldSmcEnableIFVG;
+   cfg.enable_breaker = InpGoldSmcEnableBrk;
+   cfg.ob_refinement_mode = InpGoldSmcObRefine;
+   cfg.enable_ote = InpGoldSmcEnableOte;
+   cfg.ote_low_pct = InpGoldSmcOteLow;
+   cfg.ote_mid_pct = InpGoldSmcOteMid;
+   cfg.ote_high_pct = InpGoldSmcOteHigh;
+   cfg.enable_inducement = InpGoldSmcEnableInd;
+   cfg.enable_po3 = InpGoldSmcEnablePo3;
+   cfg.deep_discount_pct = InpGoldSmcDeepDisc;
+   cfg.deep_premium_pct = InpGoldSmcDeepPrem;
+   cfg.min_setup_score = InpGoldSmcMinScore;
+   cfg.w_htf_align = InpGoldSmcWHtf;
+   cfg.w_liquidity = InpGoldSmcWLiq;
+   cfg.w_displacement = InpGoldSmcWDisp;
+   cfg.w_structure = InpGoldSmcWStruct;
+   cfg.w_order_block = InpGoldSmcWOb;
+   cfg.w_fvg = InpGoldSmcWFvg;
+   cfg.w_premium_discount = InpGoldSmcWPd;
+   cfg.w_session = InpGoldSmcWSess;
+   cfg.w_pd_week = InpGoldSmcWPdWk;
+   cfg.w_ote = InpGoldSmcWOte;
+   cfg.w_ltf = InpGoldSmcWLtf;
+   cfg.w_vol_spread = InpGoldSmcWVol;
+   cfg.chart_show_range = InpGoldSmcChartRange;
+   cfg.chart_show_liquidity = InpGoldSmcChartLiq;
+   cfg.chart_show_sessions = InpGoldSmcChartSess;
+   cfg.chart_show_poi = InpGoldSmcChartPoi;
+   cfg.chart_show_ote = InpGoldSmcChartOte;
+   cfg.chart_show_setup = InpGoldSmcChartSetup;
+   cfg.chart_lookback_bars = InpGoldSmcChartBars;
+   cfg.alert_enable = InpGoldSmcAlertEnable;
+   cfg.alert_popup = InpGoldSmcAlertPopup;
+   cfg.alert_push = InpGoldSmcAlertPush && !g_replay_mode;
+   cfg.alert_sound = InpGoldSmcAlertSound;
+   cfg.alert_cooldown_sec = InpGoldSmcAlertCool;
+   cfg.alert_min_score = InpGoldSmcAlertScore;
+   cfg.alert_spread_points = InpGoldSmcAlertSpread;
+   cfg.debug_log = InpGoldSmcDebug;
+}
+
+void MaybeEvalGoldSmc(const bool force)
+  {
+   VantageGoldSMCResult r;
+   if(g_goldsmc.Evaluate(force, r))
+      g_gsmsnap = r;
+  }
+
 void RefreshPlCalendar(const bool force)
   {
    // Rebuild when forced, when minute elapsed, or when requested month differs from loaded
@@ -732,6 +928,7 @@ void MaybeSendHeartbeat(void)
    else
       g_m5snap.valid = false;
    MaybeEvalPullback(false);
+   MaybeEvalGoldSmc(false);
 
    static int s_last_pending_logged = -1;
    if(g_pending.count != s_last_pending_logged)
@@ -1065,11 +1262,16 @@ void RefreshDashboard(void)
    string ts = (g_reply.timestamp_utc != "" ? g_reply.timestamp_utc : "n/a");
 
    MaybeEvalPullback(false);
+   MaybeEvalGoldSmc(false);
+   const bool show_gsm = InpGoldSmcShowDash &&
+                         (InpGoldSmcEnable || InpGoldSmcShowWarn) &&
+                         g_gsmsnap.valid;
    g_dash.Render(g_acct, g_spec, g_px, g_backend_status, g_candle_status, g_dec,
                  g_pos, g_risk, ts, age,
                  g_equity, g_floating_pl_pct, InpFloatProfitTargetPct, g_float_profit_target_hit,
                  g_pl_cal.year, g_pl_cal.month, g_pl_cal.month_pl, g_pl_cal.month_pct, g_pl_cal.month_deals,
-                 g_trade_stats, g_pbsnap, InpPbShowDash && InpPullbackEnable);
+                 g_trade_stats, g_pbsnap, InpPbShowDash && InpPullbackEnable,
+                 g_gsmsnap, show_gsm);
   }
 
 //+------------------------------------------------------------------+
@@ -1135,6 +1337,15 @@ int OnInit()
          MaybeEvalPullback(true);
      }
 
+   {
+    VantageGoldSMCConfig gcfg;
+    FillGoldSmcConfig(gcfg);
+    if(!g_goldsmc.Init(_Symbol, gcfg))
+       Print("[VantageAI] Gold SMC Intelligence init failed.");
+    else
+       MaybeEvalGoldSmc(true);
+   }
+
    // Build chart-relative levels for BTC/etc. (AUTO) or gold manual map
    if(g_analysis.HasEnoughHistory(50))
       g_analysis.BuildSnapshot(g_tech);
@@ -1192,6 +1403,7 @@ void OnDeinit(const int reason)
    g_analysis.Release();
    g_m5desk.Release();
    g_pullback.Release();
+   g_goldsmc.Release();
    g_dash.Clear();
    Comment("");
    Print("[VantageAI] Stopped. reason=", reason);

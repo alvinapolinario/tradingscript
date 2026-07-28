@@ -127,6 +127,15 @@ def pullback_page():
     return FileResponse(page)
 
 
+@app.get("/gold-smc")
+def gold_smc_page():
+    """Gold SMC Intelligence desk — advisory only, XAUUSD/Gold."""
+    page = STATIC_DIR / "gold-smc.html"
+    if not page.exists():
+        return {"error": "gold-smc.html missing", "path": str(page)}
+    return FileResponse(page)
+
+
 @app.get("/analyzer")
 def analyzer_page():
     """Smart Analyzer — advisory decision desk (Take/Ignore, no orders)."""
