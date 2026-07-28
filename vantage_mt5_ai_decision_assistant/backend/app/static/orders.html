@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Pending Orders · Vantage</title>
+  <link rel="stylesheet" href="/static/shell.css" />
+  <style>
+    :root {
+      --bg: #0b1210;
+      --panel: #121c19;
+      --line: #2a3d36;
+      --text: #e8f2ed;
+      --muted: #8aa399;
+      --buy: #3dd68c;
+      --sell: #f07575;
+      --warn: #e8c547;
+      --accent: #5ee0b5;
+      --mono: "Cascadia Code", "Consolas", ui-monospace, monospace;
+      --sans: "Segoe UI", system-ui, sans-serif;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: var(--sans);
+      color: var(--text);
+      min-height: 100vh;
+      background:
+        radial-gradient(700px 320px at 10% 0%, #1a2830 0%, transparent 55%),
+        var(--bg);
+    }
+    header {
+      display: flex; justify-content: space-between; align-items: center;
+      gap: 1rem; flex-wrap: wrap;
+      padding: .85rem 1.25rem;
+      border-bottom: 1px solid var(--line);
+      background: rgba(11,18,16,.92);
+      position: sticky; top: 0; z-index: 5;
+    }
+    header h1 { margin: 0; font-size: 1.05rem; }
+    header .sub { color: var(--muted); font-size: .78rem; margin-top: .15rem; }
+    .actions { display: flex; gap: .45rem; flex-wrap: wrap; align-items: center; }
+    .pill {
+      display: inline-flex; align-items: center; gap: .35rem;
+      border: 1px solid var(--line); border-radius: 999px;
+      padding: .35rem .7rem; font-size: .78rem; background: var(--panel);
+    }
+    main { max-width: 820px; margin: 0 auto; padding: 1rem 1.1rem 2.5rem; }
+    .ledger-title {
+      font-size: .72rem; letter-spacing: .1em; text-transform: uppercase;
+      color: var(--muted); margin: .4rem 0 1rem;
+    }
+    .empty {
+      border: 1px dashed var(--line); border-radius: 14px;
+      padding: 1.5rem; color: var(--muted); text-align: center; line-height: 1.5;
+    }
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 1rem 1.1rem;
+      margin-bottom: .85rem;
+    }
+    .card.buy { border-color: rgba(61,214,140,.35); }
+    .card.sell { border-color: rgba(240,117,117,.35); }
+    .card-head {
+      display: flex; justify-content: space-between; gap: .75rem; flex-wrap: wrap;
+      margin-bottom: .75rem;
+    }
+    .type {
+      font-size: 1.15rem; font-weight: 800; letter-spacing: .02em;
+    }
+    .card.buy .type { color: var(--buy); }
+    .card.sell .type { color: var(--sell); }
+    .meta { color: var(--muted); font-size: .78rem; margin-top: .2rem; }
+    .badge {
+      font-size: .68rem; letter-spacing: .08em; text-transform: uppercase;
+      border: 1px solid var(--line); border-radius: 999px;
+      padding: .3rem .65rem; align-self: flex-start;
+    }
+    .badge.with { color: var(--buy); border-color: rgba(61,214,140,.4); }
+    .badge.counter { color: var(--sell); border-color: rgba(240,117,117,.4); }
+    .badge.mixed { color: var(--warn); border-color: rgba(232,197,71,.4); }
+    .sug-title {
+      font-size: .68rem; letter-spacing: .1em; text-transform: uppercase;
+      color: var(--muted); margin-bottom: .35rem;
+    }
+    .sug-list {
+      list-style: none; margin: 0 0 .85rem; padding: 0;
+      display: flex; flex-direction: column; gap: .35rem;
+    }
+    .sug-list li {
+      background: rgba(0,0,0,.22);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: .45rem .65rem;
+      font-size: .86rem; font-weight: 650;
+    }
+    .sug-list li.warn { color: var(--warn); }
+    .sug-list li.bad { color: var(--sell); }
+    .sug-list li.ok { color: var(--buy); }
+    .chips { display: flex; flex-wrap: wrap; gap: .4rem; margin-bottom: .7rem; }
+    .chip {
+      font-size: .72rem; border: 1px solid var(--line); border-radius: 8px;
+      padding: .28rem .5rem; color: var(--muted);
+    }
+    .chip strong { color: var(--text); font-weight: 650; }
+    .grid {
+      display: grid; grid-template-columns: repeat(4, 1fr); gap: .55rem;
+    }
+    .col .k {
+      font-size: .68rem; letter-spacing: .06em; text-transform: uppercase; color: var(--muted);
+    }
+    .col .v {
+      font-family: var(--mono); font-size: .9rem; font-weight: 650; margin-top: .15rem;
+    }
+    @media (max-width: 700px) {
+      .grid { grid-template-columns: 1fr 1fr; }
+    }
+  </style>
+</head>
+<body data-nav="orders">
+  <header>
+    <div>
+      <h1>Pending Orders</h1>
+      <div class="sub">Advisory risk &amp; trend desk · never modifies MT5 orders</div>
+    </div>
+    <div class="actions">
+      <span class="pill" id="symPill">—</span>
+      <span class="pill" id="countPill">0 orders</span>
+    </div>
+  </header>
+  <main>
+    <div class="ledger-title">Suggestions first · then risk &amp; trend</div>
+    <div id="list"><div class="empty">Loading…</div></div>
+  </main>
+  <script>
+    const WARN = new Set(["ADD_OR_TIGHTEN_SL", "WAIT_FOR_FILL", "STACKED_WITH_OPEN_POSITION", "AGAINST_TREND"]);
+    const BAD = new Set(["STALE_OR_INVALID", "SIZE_TOO_LARGE", "CONSIDER_CANCEL", "AGAINST_H1_BIAS"]);
+
+    function fmtPx(n, digits) {
+      if (n == null || Number.isNaN(Number(n))) return "—";
+      const d = digits != null ? digits : (Number(n) >= 100 ? 2 : 5);
+      return Number(n).toLocaleString(undefined, { minimumFractionDigits: d, maximumFractionDigits: d });
+    }
+    function sugClass(s) {
+      if (BAD.has(s)) return "bad";
+      if (WARN.has(s)) return "warn";
+      return "ok";
+    }
+    function trendClass(label) {
+      if (label === "WITH_TREND") return "with";
+      if (label === "COUNTER_TREND") return "counter";
+      return "mixed";
+    }
+    function render(payload) {
+      const root = document.getElementById("list");
+      const items = payload.items || [];
+      const digits = payload.digits || 2;
+      document.getElementById("symPill").textContent = payload.symbol || "—";
+      document.getElementById("countPill").textContent =
+        `${items.length} order${items.length === 1 ? "" : "s"}`;
+
+      if (!payload.ea_online) {
+        root.innerHTML = `<div class="empty">EA offline.<br/>Start the Vantage EA on your chart so pending orders can sync.</div>`;
+        return;
+      }
+      if (!items.length) {
+        root.innerHTML = `<div class="empty">No pending orders on <b>${payload.symbol || "chart"}</b>.<br/>Place a Buy/Sell Limit or Stop on MT5 — analysis appears here (advisory only).</div>`;
+        return;
+      }
+
+      root.innerHTML = items.map((o) => {
+        const side = (o.side || "").toLowerCase();
+        const trend = o.trend || {};
+        const risk = o.risk || {};
+        const sugs = (o.suggestions || []).map((s) =>
+          `<li class="${sugClass(s)}">${s.replaceAll("_", " ")}</li>`
+        ).join("");
+        return `<article class="card ${side}">
+          <div class="card-head">
+            <div>
+              <div class="type">${o.type || "—"}</div>
+              <div class="meta">#${o.ticket || "—"} · ${o.volume ?? "—"} lots · ${payload.symbol || ""}</div>
+            </div>
+            <span class="badge ${trendClass(trend.label)}">${(trend.label || "MIXED").replaceAll("_", " ")}</span>
+          </div>
+          <div class="sug-title">Suggestions</div>
+          <ul class="sug-list">${sugs || "<li class='ok'>KEEP WATCH</li>"}</ul>
+          <div class="chips">
+            <span class="chip">Risk <strong>${risk.label || "—"}</strong></span>
+            <span class="chip">Equity @ SL <strong>${risk.equity_risk_pct != null ? risk.equity_risk_pct.toFixed(2) + "%" : "—"}</strong></span>
+            <span class="chip">Money @ SL <strong>${risk.money_at_risk != null ? fmtPx(risk.money_at_risk, 2) : "—"}</strong></span>
+            <span class="chip">R:R <strong>${risk.reward_risk_ratio != null ? risk.reward_risk_ratio.toFixed(2) : "—"}</strong></span>
+            <span class="chip">To fill <strong>${fmtPx(risk.distance_price, digits)}</strong></span>
+            ${risk.missing_sl ? '<span class="chip"><strong>No SL</strong></span>' : ""}
+            ${risk.stale_or_invalid ? '<span class="chip"><strong>Stale</strong></span>' : ""}
+          </div>
+          <div class="grid">
+            <div class="col"><div class="k">Entry</div><div class="v">${fmtPx(o.price_open, digits)}</div></div>
+            <div class="col"><div class="k">Stop</div><div class="v">${fmtPx(o.sl, digits)}</div></div>
+            <div class="col"><div class="k">Target</div><div class="v">${fmtPx(o.tp, digits)}</div></div>
+            <div class="col"><div class="k">Setup</div><div class="v" style="font-size:.75rem">${o.time_setup || "—"}</div></div>
+          </div>
+        </article>`;
+      }).join("");
+    }
+    async function refresh() {
+      try {
+        const r = await fetch("/api/v1/orders/pending");
+        const j = await r.json();
+        render(j);
+      } catch (e) {
+        document.getElementById("list").innerHTML =
+          `<div class="empty">Failed to load pending orders</div>`;
+      }
+    }
+    refresh();
+    setInterval(refresh, 12000);
+  </script>
+  <script src="/static/shell.js"></script>
+</body>
+</html>

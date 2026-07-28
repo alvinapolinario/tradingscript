@@ -64,6 +64,10 @@ class EaSnapshot:
     candle_status: str = ""
     backend_status: str = ""
     position_count: int = 0
+    total_buy_volume: float = 0.0
+    total_sell_volume: float = 0.0
+    pending_order_count: int = 0
+    pending_orders: dict | None = None
     floating_pl: float = 0.0
     equity: float = 0.0
     balance: float = 0.0
@@ -97,6 +101,7 @@ class EaSnapshot:
     server_year: int = 0
     server_month: int = 0
     strategy: dict | None = None
+    max_position_risk_pct: float | None = None
 
 
 def _apply_heartbeat_fields(ea: EaSnapshot, payload: dict[str, Any]) -> None:
@@ -130,6 +135,22 @@ def _apply_heartbeat_fields(ea: EaSnapshot, payload: dict[str, Any]) -> None:
     ea.candle_status = str(payload.get("candle_status", ea.candle_status))
     ea.backend_status = str(payload.get("backend_status", "OK"))
     ea.position_count = int(payload.get("position_count", ea.position_count) or 0)
+    if payload.get("total_buy_volume") is not None:
+        ea.total_buy_volume = float(payload.get("total_buy_volume") or 0)
+    if payload.get("total_sell_volume") is not None:
+        ea.total_sell_volume = float(payload.get("total_sell_volume") or 0)
+    if isinstance(payload.get("pending_orders"), dict):
+        po = payload["pending_orders"]
+        items = po.get("items") if isinstance(po.get("items"), list) else []
+        ea.pending_orders = {"count": int(po.get("count") or len(items)), "items": items}
+        ea.pending_order_count = int(ea.pending_orders["count"])
+    elif payload.get("pending_order_count") is not None:
+        ea.pending_order_count = int(payload.get("pending_order_count") or 0)
+    if payload.get("max_position_risk_pct") is not None:
+        try:
+            ea.max_position_risk_pct = float(payload["max_position_risk_pct"])
+        except (TypeError, ValueError):
+            pass
     ea.floating_pl = float(payload.get("floating_pl", ea.floating_pl) or 0)
     ea.equity = float(payload.get("equity", ea.equity) or 0)
     ea.balance = float(payload.get("balance", ea.balance) or 0)
@@ -337,6 +358,32 @@ class MonitorStore:
             equity_risk_pct=payload.get("equity_risk_pct"),
         )
 
+    def update_pending_orders(self, symbol: str, pending_orders: dict[str, Any], **extra: Any) -> None:
+        """Merge pending-order blob from analyze/heartbeat without a full heartbeat log."""
+        sym = _norm_symbol(symbol)
+        with self._lock:
+            ea = self._get_or_create(sym)
+            items = pending_orders.get("items") if isinstance(pending_orders.get("items"), list) else []
+            ea.pending_orders = {"count": int(pending_orders.get("count") or len(items)), "items": items}
+            ea.pending_order_count = int(ea.pending_orders["count"])
+            if extra.get("total_buy_volume") is not None:
+                ea.total_buy_volume = float(extra.get("total_buy_volume") or 0)
+            if extra.get("total_sell_volume") is not None:
+                ea.total_sell_volume = float(extra.get("total_sell_volume") or 0)
+            if extra.get("max_position_risk_pct") is not None:
+                try:
+                    ea.max_position_risk_pct = float(extra["max_position_risk_pct"])
+                except (TypeError, ValueError):
+                    pass
+            if extra.get("bid") is not None:
+                ea.bid = float(extra.get("bid") or 0)
+            if extra.get("ask") is not None:
+                ea.ask = float(extra.get("ask") or 0)
+            if extra.get("trend"):
+                ea.trend = str(extra["trend"])
+            if extra.get("position_count") is not None:
+                ea.position_count = int(extra.get("position_count") or 0)
+
     def record_analyze(self, req_summary: dict[str, Any], action: str) -> None:
         now = _utc_now()
         sym = _norm_symbol(str(req_summary.get("symbol", "")))
@@ -431,6 +478,12 @@ class MonitorStore:
             "candle_status": ea.candle_status,
             "backend_status_reported": ea.backend_status,
             "position_count": ea.position_count,
+            "total_buy_volume": ea.total_buy_volume,
+            "total_sell_volume": ea.total_sell_volume,
+            "pending_order_count": ea.pending_order_count,
+            "pending_orders": ea.pending_orders
+            or {"count": 0, "items": []},
+            "max_position_risk_pct": ea.max_position_risk_pct,
             "floating_pl": ea.floating_pl,
             "equity": ea.equity,
             "balance": ea.balance,

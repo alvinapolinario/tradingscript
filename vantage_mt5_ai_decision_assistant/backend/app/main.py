@@ -109,6 +109,15 @@ def signals_page():
     return FileResponse(page)
 
 
+@app.get("/orders")
+def orders_page():
+    """Pending Orders desk — advisory risk/trend/suggestions (no order mutations)."""
+    page = STATIC_DIR / "orders.html"
+    if not page.exists():
+        return {"error": "orders.html missing", "path": str(page)}
+    return FileResponse(page)
+
+
 @app.get("/analyzer")
 def analyzer_page():
     """Smart Analyzer — advisory decision desk (Take/Ignore, no orders)."""

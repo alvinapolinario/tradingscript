@@ -176,6 +176,32 @@ class PositionsInfo(BaseModel):
     items: list[PositionItem] = Field(default_factory=list)
 
 
+class PendingOrderItem(BaseModel):
+    ticket: int = 0
+    type: str = ""
+    volume: float = 0.0
+    price_open: float = 0.0
+    price_current: float = 0.0
+    sl: float = 0.0
+    tp: float = 0.0
+    time_setup: str = ""
+    comment: str = ""
+    magic: int = 0
+    distance_price: float = 0.0
+    distance_points: float = 0.0
+    risk_available: bool = False
+    risk_status: str = "RISK_CALCULATION_UNAVAILABLE"
+    money_at_risk: float = 0.0
+    equity_risk_pct: float = 0.0
+    reward_risk_ratio: float = 0.0
+    margin_required: float = 0.0
+
+
+class PendingOrdersInfo(BaseModel):
+    count: int = 0
+    items: list[PendingOrderItem] = Field(default_factory=list)
+
+
 class AnalyzeRequest(BaseModel):
     schema_version: str = "1.0"
     mode: str = "advisory_only"
@@ -187,6 +213,7 @@ class AnalyzeRequest(BaseModel):
     structure: StructureInfo = Field(default_factory=StructureInfo)
     levels: dict[str, float] = Field(default_factory=dict)
     positions: PositionsInfo = Field(default_factory=PositionsInfo)
+    pending_orders: PendingOrdersInfo = Field(default_factory=PendingOrdersInfo)
     risk: RiskInfo = Field(default_factory=RiskInfo)
     environment: str = "NORMAL"
     extra: Optional[dict[str, Any]] = None
@@ -267,6 +294,10 @@ class HeartbeatRequest(BaseModel):
     candle_status: str = ""
     backend_status: str = "OK"
     position_count: int = 0
+    total_buy_volume: float = 0.0
+    total_sell_volume: float = 0.0
+    pending_order_count: int = 0
+    pending_orders: Optional[dict[str, Any]] = None
     floating_pl: float = 0.0
     equity: float = 0.0
     balance: float = 0.0
@@ -301,6 +332,8 @@ class HeartbeatRequest(BaseModel):
     server_month: int = 0
     # Optional M5 Alignment Desk feed (H1/M15/M5 gates). Ignored by M30 cockpit.
     strategy: Optional[dict[str, Any]] = None
+    # EA risk thresholds (optional; also may arrive via analyze extra)
+    max_position_risk_pct: Optional[float] = None
 
 
 class HeartbeatResponse(BaseModel):

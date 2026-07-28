@@ -29,6 +29,7 @@
 #include <VantageAI/VantageAccount.mqh>
 #include <VantageAI/VantageSymbol.mqh>
 #include <VantageAI/VantagePositions.mqh>
+#include <VantageAI/VantagePendingOrders.mqh>
 #include <VantageAI/VantageHistory.mqh>
 #include <VantageAI/VantageRisk.mqh>
 #include <VantageAI/VantageAnalysis.mqh>
@@ -134,6 +135,7 @@ string   g_note = "";
 VantageBackendReply g_reply;
 VantageTechnicalSnap g_tech;
 VantagePositionSummary g_pos;
+VantagePendingOrderSummary g_pending;
 VantageRiskEstimate g_risk;
 VantagePriceSnap g_px;
 VantageDecisionState g_dec;
@@ -487,6 +489,7 @@ string BuildAnalyzePayload(const VantageTechnicalSnap &tech,
    j += "\"total_floating_pl\":" + DoubleToJson(pos.total_floating_pl, 4) + ",";
    j += "\"items\":" + VantagePositionsToJson(pos);
    j += "},";
+   j += "\"pending_orders\":" + VantagePendingOrdersBlobJson(g_pending) + ",";
    j += "\"risk\":" + VantageRiskToJson(risk) + ",";
    j += "\"environment\":\"" + JsonEscape(environment) + "\"";
    j += "}";
@@ -524,6 +527,10 @@ string BuildHeartbeatPayload(void)
    j += "\"candle_status\":\"" + JsonEscape(g_candle_status) + "\",";
    j += "\"backend_status\":\"" + JsonEscape(g_backend_status) + "\",";
    j += "\"position_count\":" + IntegerToString(g_pos.count) + ",";
+   j += "\"total_buy_volume\":" + DoubleToJson(g_pos.total_buy_volume, 4) + ",";
+   j += "\"total_sell_volume\":" + DoubleToJson(g_pos.total_sell_volume, 4) + ",";
+   j += "\"pending_order_count\":" + IntegerToString(g_pending.count) + ",";
+   j += "\"pending_orders\":" + VantagePendingOrdersBlobJson(g_pending) + ",";
    j += "\"floating_pl\":" + DoubleToJson(g_pos.total_floating_pl, 2) + ",";
    j += "\"equity\":" + DoubleToJson(g_equity, 2) + ",";
    j += "\"balance\":" + DoubleToJson(g_balance, 2) + ",";
@@ -613,6 +620,7 @@ void MaybeSendHeartbeat(void)
 
    VantageCapturePrices(_Symbol, InpMaxSpreadPoints, g_px);
    VantageLoadPositions(_Symbol, g_pos);
+   VantageLoadPendingOrders(_Symbol, g_spec, g_px, g_pending);
    RefreshEquityMetrics();
    RefreshPlCalendar(false);
    if(InpM5DeskEnable)
@@ -870,6 +878,7 @@ void ProcessClosedCandle(const datetime closed_time)
      }
 
    VantageLoadPositions(_Symbol, g_pos);
+   VantageLoadPendingOrders(_Symbol, g_spec, g_px, g_pending);
    RefreshRisk();
 
    string environment = "NORMAL";

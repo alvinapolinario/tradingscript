@@ -8,6 +8,7 @@
 
 #define VANTAGE_AI_VERSION "1.2.0"
 #define VANTAGE_MAX_POSITIONS 64
+#define VANTAGE_MAX_PENDING   64
 #define VANTAGE_MAX_CANDLES   300
 
 //--- Advisory actions (must match backend enum)
@@ -130,6 +131,34 @@ struct VantagePositionSummary
    double             total_floating_pl;
    double             total_swap;
    bool               has_position;
+  };
+
+struct VantagePendingOrderRow
+  {
+   ulong    ticket;
+   long     type;             // ORDER_TYPE_* pending
+   double   volume;
+   double   price_open;
+   double   price_current;
+   double   sl;
+   double   tp;
+   datetime time_setup;
+   string   comment;
+   long     magic;
+   double   distance_price;
+   double   distance_points;
+   bool     risk_available;
+   string   risk_status;
+   double   money_at_risk;
+   double   equity_risk_pct;
+   double   reward_risk_ratio;
+   double   margin_required;
+  };
+
+struct VantagePendingOrderSummary
+  {
+   int                     count;
+   VantagePendingOrderRow rows[VANTAGE_MAX_PENDING];
   };
 
 struct VantageRiskEstimate

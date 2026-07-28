@@ -202,6 +202,18 @@ def analyze(
 
     validate_symbol_sanity(req)
     resp = decide(req)
+    if req.pending_orders is not None:
+        monitor_store.update_pending_orders(
+            req.symbol.name,
+            req.pending_orders.model_dump(),
+            bid=req.prices.bid,
+            ask=req.prices.ask,
+            trend=req.structure.trend,
+            position_count=req.positions.count,
+            total_buy_volume=req.positions.total_buy_volume,
+            total_sell_volume=req.positions.total_sell_volume,
+            max_position_risk_pct=(req.extra or {}).get("max_position_risk_pct"),
+        )
     monitor_store.record_analyze(
         {
             "symbol": req.symbol.name,
@@ -235,6 +247,14 @@ def dashboard_status() -> dict:
     from app.strategy_desk import build_dashboard
 
     return build_dashboard(monitor_store.status())
+
+
+@router.get("/api/v1/orders/pending")
+def pending_orders_status() -> dict:
+    """MT5 pending-order advisory desk — risk, trend, suggestions (no order mutations)."""
+    from app.analysis.pending_orders import build_pending_orders_status
+
+    return build_pending_orders_status(monitor_store.status())
 
 
 @router.get("/api/v1/signals")

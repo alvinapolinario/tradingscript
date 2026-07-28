@@ -307,6 +307,12 @@ bash /var/www/tradingscript/vantage_mt5_ai_decision_assistant/deploy/update-from
 
 Keeps `.env` and the `vantage_signal_data` Docker volume (signal ledger). Rebuilds the image from `main`.
 
+### Pending Orders desk (`/orders`)
+- Backend: `GET /api/v1/orders/pending` + page `/orders` (advisory risk / trend / suggestions).
+- **Requires a recompiled EA** that sends `pending_orders` on heartbeat/analyze (`VantagePendingOrders.mqh`).
+- VPS `update-from-github.sh` updates the API only — recompile and reload the EA on Windows MT5 separately.
+- Never places, modifies, or cancels MT5 pending orders from the web UI.
+
 ## 15. Explicit warning — live automatic trading is disabled
 
 > **This release is advisory-only.**  
