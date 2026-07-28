@@ -118,6 +118,15 @@ def orders_page():
     return FileResponse(page)
 
 
+@app.get("/pullback")
+def pullback_page():
+    """Pullback Probability Analyzer desk — advisory only."""
+    page = STATIC_DIR / "pullback.html"
+    if not page.exists():
+        return {"error": "pullback.html missing", "path": str(page)}
+    return FileResponse(page)
+
+
 @app.get("/analyzer")
 def analyzer_page():
     """Smart Analyzer — advisory decision desk (Take/Ignore, no orders)."""

@@ -102,6 +102,8 @@ class EaSnapshot:
     server_year: int = 0
     server_month: int = 0
     strategy: dict | None = None
+    pullback: dict | None = None
+    pullback_supported: bool = False
     max_position_risk_pct: float | None = None
 
 
@@ -212,6 +214,9 @@ def _apply_heartbeat_fields(ea: EaSnapshot, payload: dict[str, Any]) -> None:
         ea.strategy = payload["strategy"]
     elif isinstance(payload.get("m5_desk"), dict):
         ea.strategy = payload["m5_desk"]
+    if isinstance(payload.get("pullback"), dict):
+        ea.pullback = payload["pullback"]
+        ea.pullback_supported = True
 
 
 class MonitorStore:
@@ -529,6 +534,8 @@ class MonitorStore:
             "pl_calendar": display_cal,
             "trade_stats": ea.trade_stats,
             "strategy": ea.strategy,
+            "pullback": ea.pullback,
+            "pullback_supported": ea.pullback_supported,
             "server_year": ea.server_year,
             "server_month": ea.server_month,
             "calendar_request": calendar_request,

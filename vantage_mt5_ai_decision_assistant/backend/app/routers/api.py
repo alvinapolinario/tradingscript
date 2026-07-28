@@ -257,6 +257,27 @@ def pending_orders_status() -> dict:
     return build_pending_orders_status(monitor_store.status())
 
 
+@router.get("/api/v1/pullback/status")
+def pullback_status() -> dict:
+    """Pullback Probability Analyzer — EA-computed advisory blob (passthrough)."""
+    st = monitor_store.status()
+    ea = st.get("vantage_ea") or {}
+    link = st.get("link_health") or {}
+    pb = ea.get("pullback")
+    return {
+        "advisory_only": True,
+        "caption": "Advisory only — never places, modifies, or cancels MT5 orders.",
+        "ea_online": bool(link.get("ea_online") or ea.get("connected")),
+        "pullback_supported": bool(ea.get("pullback_supported")),
+        "symbol": str(ea.get("symbol") or st.get("selected_symbol") or "").upper(),
+        "digits": int(ea.get("digits") or 5) or 5,
+        "bid": ea.get("bid"),
+        "ask": ea.get("ask"),
+        "pullback": pb,
+        "links": {"pullback": "/pullback", "analyzer": "/analyzer", "monitor": "/monitor"},
+    }
+
+
 @router.get("/api/v1/signals")
 def list_accepted_signals(
     limit: int = Query(default=50, ge=1, le=200),

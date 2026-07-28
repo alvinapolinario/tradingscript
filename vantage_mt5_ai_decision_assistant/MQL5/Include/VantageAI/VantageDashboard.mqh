@@ -9,6 +9,7 @@
 #include "VantageAccount.mqh"
 #include "VantageDecision.mqh"
 #include "VantageHistory.mqh"
+#include "VantagePullback.mqh"
 
 class CVantageDashboard
   {
@@ -67,7 +68,9 @@ public:
                const double month_pl,
                const double month_pct,
                const int month_deals,
-               const VantageTradeStats &stats)
+               const VantageTradeStats &stats,
+               const VantagePullbackResult &pb,
+               const bool show_pullback)
      {
       int r = 0;
       color riskCol = clrSilver;
@@ -163,6 +166,24 @@ public:
                   " (" + DoubleToString(stats.max_drawdown_pct, 1) + "%)" +
                   " | AvgWin " + DoubleToString(stats.avg_win, 2) +
                   " / AvgLoss " + DoubleToString(stats.avg_loss, 2), clrSilver);
+        }
+
+      if(show_pullback && pb.valid)
+        {
+         color pbCol = clrGold;
+         if(pb.dominant_dir > 0) pbCol = clrLime;
+         else if(pb.dominant_dir < 0) pbCol = clrOrange;
+         SetLabel("tpb0", r++, "--- PULLBACK PROBABILITY (advisory) ---", clrAqua);
+         SetLabel("tpb1", r++, "Trend: " + pb.dominant_trend +
+                  " | PB " + DoubleToString(pb.pullback_prob, 0) +
+                  "% Cont " + DoubleToString(pb.continuation_prob, 0) +
+                  "% Cons " + DoubleToString(pb.consolidation_prob, 0) +
+                  "% Rev " + DoubleToString(pb.reversal_prob, 0) + "%", pbCol);
+         SetLabel("tpb2", r++, "Ext " + DoubleToString(pb.extension_score, 0) +
+                  " | Strength " + DoubleToString(pb.trend_strength_score, 0) +
+                  " | Quality " + DoubleToString(pb.pullback_quality, 0), clrSilver);
+         SetLabel("tpb3", r++, "State: " + pb.market_state, clrYellow);
+         SetLabel("tpb4", r++, StringSubstr(pb.short_reason != "" ? pb.short_reason : pb.explanation, 0, 90), clrSilver);
         }
 
       SetLabel("t18", r++, "Primary Action: " + dec.primary_action + " | Resp: " + resp_ts + " (" + resp_age + ")", clrYellow);

@@ -337,6 +337,8 @@ class HeartbeatRequest(BaseModel):
     server_month: int = 0
     # Optional M5 Alignment Desk feed (H1/M15/M5 gates). Ignored by M30 cockpit.
     strategy: Optional[dict[str, Any]] = None
+    # Pullback Probability Analyzer blob (advisory; not used by SETUP_OK gates)
+    pullback: Optional[dict[str, Any]] = None
     # EA risk thresholds (optional; also may arrive via analyze extra)
     max_position_risk_pct: Optional[float] = None
 

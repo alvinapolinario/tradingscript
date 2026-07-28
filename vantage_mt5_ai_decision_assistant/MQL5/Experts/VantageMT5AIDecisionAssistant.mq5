@@ -39,6 +39,7 @@
 #include <VantageAI/VantageNotify.mqh>
 #include <VantageAI/VantageDiagnostics.mqh>
 #include <VantageAI/VantageM5Desk.mqh>
+#include <VantageAI/VantagePullback.mqh>
 
 //--- Explicit compile-time advisory guard (do not import Trade.mqh / CTrade)
 #ifdef __MQL5__
@@ -113,6 +114,53 @@ input int    InpM5DeskNewsBefore    = 30;     // High-impact news block minutes 
 input int    InpM5DeskNewsAfter     = 15;     // High-impact news block minutes after
 input int    InpM5DeskMaxSetupAge   = 3;      // Max completed M5 candles for setup age
 
+input group "I. Pullback Probability — Timeframes"
+input bool             InpPullbackEnable     = true;
+input ENUM_TIMEFRAMES  InpPullbackTF_H1      = PERIOD_H1;
+input ENUM_TIMEFRAMES  InpPullbackTF_M15     = PERIOD_M15;
+input ENUM_TIMEFRAMES  InpPullbackTF_M5      = PERIOD_M5;
+
+input group "J. Pullback Probability — Indicators"
+input int    InpPbEmaFast      = 20;
+input int    InpPbEmaSlow      = 50;
+input int    InpPbEmaLong      = 200;
+input int    InpPbRsiPeriod    = 14;
+input double InpPbRsiOB        = 70.0;
+input double InpPbRsiOS        = 30.0;
+input int    InpPbAtrPeriod    = 14;
+input int    InpPbBbPeriod     = 20;
+input double InpPbBbDev        = 2.0;
+input int    InpPbAdxPeriod    = 14;
+input double InpPbAdxMin       = 20.0;
+input int    InpPbSwingLeft    = 3;
+input int    InpPbSwingRight   = 3;
+
+input group "K. Pullback Probability — Weights"
+input double InpPbWRsiExtreme  = 10.0;
+input double InpPbWRsiRecover  = 8.0;
+input double InpPbWExtension   = 15.0;
+input double InpPbWBb          = 10.0;
+input double InpPbWEmaDist     = 10.0;
+input double InpPbWCandle      = 8.0;
+input double InpPbWDivergence  = 7.0;
+input double InpPbWSr          = 7.0;
+input double InpPbWStructure   = 10.0;
+input double InpPbWAdx         = 8.0;
+input double InpPbWMtf         = 7.0;
+
+input group "L. Pullback Probability — Alerts / Display"
+input bool   InpPbAlertPopup   = false;
+input bool   InpPbAlertPush    = false;
+input bool   InpPbAlertSound   = false;
+input double InpPbThrPullback  = 65.0;
+input double InpPbThrContinue  = 65.0;
+input double InpPbThrReversal  = 55.0;
+input double InpPbThrExtension = 75.0;
+input int    InpPbAlertCoolSec = 300;
+input int    InpPbUtcOffsetHrs = 0;
+input bool   InpPbShowChartObj = true;
+input bool   InpPbShowDash     = true;
+
 //+------------------------------------------------------------------+
 //| Globals                                                          |
 //+------------------------------------------------------------------+
@@ -124,6 +172,8 @@ CVantageDashboard    g_dash;
 CVantageNotify       g_notify;
 CVantageM5Desk       g_m5desk;
 VantageM5DeskSnap    g_m5snap;
+CVantagePullback     g_pullback;
+VantagePullbackResult g_pbsnap;
 
 datetime g_last_closed_candle = 0;
 datetime g_last_request_candle = 0;
@@ -572,8 +622,62 @@ string BuildHeartbeatPayload(void)
       j += ",\"reward_risk_ratio\":" + DoubleToJson(g_m5snap.reward_risk_ratio, 4);
       j += ",\"strategy\":" + g_m5desk.ToJson(g_m5snap);
      }
+   if(InpPullbackEnable && g_pbsnap.valid)
+      j += ",\"pullback\":" + g_pullback.ToJson(g_pbsnap);
    j += "}";
    return j;
+  }
+
+void FillPullbackConfig(VantagePullbackConfig &cfg)
+  {
+   ZeroMemory(cfg);
+   cfg.tf_h1 = InpPullbackTF_H1;
+   cfg.tf_m15 = InpPullbackTF_M15;
+   cfg.tf_m5 = InpPullbackTF_M5;
+   cfg.ema_fast = InpPbEmaFast;
+   cfg.ema_slow = InpPbEmaSlow;
+   cfg.ema_long = InpPbEmaLong;
+   cfg.rsi_period = InpPbRsiPeriod;
+   cfg.rsi_ob = InpPbRsiOB;
+   cfg.rsi_os = InpPbRsiOS;
+   cfg.atr_period = InpPbAtrPeriod;
+   cfg.bb_period = InpPbBbPeriod;
+   cfg.bb_dev = InpPbBbDev;
+   cfg.adx_period = InpPbAdxPeriod;
+   cfg.adx_min = InpPbAdxMin;
+   cfg.swing_left = InpPbSwingLeft;
+   cfg.swing_right = InpPbSwingRight;
+   cfg.w_rsi_extreme = InpPbWRsiExtreme;
+   cfg.w_rsi_recovery = InpPbWRsiRecover;
+   cfg.w_extension = InpPbWExtension;
+   cfg.w_bb = InpPbWBb;
+   cfg.w_ema_dist = InpPbWEmaDist;
+   cfg.w_candle = InpPbWCandle;
+   cfg.w_divergence = InpPbWDivergence;
+   cfg.w_sr = InpPbWSr;
+   cfg.w_structure = InpPbWStructure;
+   cfg.w_adx_fall = InpPbWAdx;
+   cfg.w_mtf = InpPbWMtf;
+   cfg.alert_popup = InpPbAlertPopup;
+   cfg.alert_push = InpPbAlertPush && !g_replay_mode;
+   cfg.alert_sound = InpPbAlertSound;
+   cfg.thr_pullback = InpPbThrPullback;
+   cfg.thr_continuation = InpPbThrContinue;
+   cfg.thr_reversal = InpPbThrReversal;
+   cfg.thr_extension = InpPbThrExtension;
+   cfg.alert_cooldown_sec = InpPbAlertCoolSec;
+   cfg.server_utc_offset_hours = InpPbUtcOffsetHrs;
+   cfg.show_chart_objects = InpPbShowChartObj;
+   cfg.show_dashboard = InpPbShowDash;
+  }
+
+void MaybeEvalPullback(const bool force)
+  {
+   if(!InpPullbackEnable)
+      return;
+   VantagePullbackResult r;
+   if(g_pullback.Evaluate(force, r))
+      g_pbsnap = r;
   }
 
 void RefreshPlCalendar(const bool force)
@@ -627,6 +731,7 @@ void MaybeSendHeartbeat(void)
       g_m5desk.Evaluate(g_spec, (int)MathRound(InpMaxSpreadPoints), g_m5snap);
    else
       g_m5snap.valid = false;
+   MaybeEvalPullback(false);
 
    static int s_last_pending_logged = -1;
    if(g_pending.count != s_last_pending_logged)
@@ -959,11 +1064,12 @@ void RefreshDashboard(void)
       age = IntegerToString((int)(TimeLocal() - g_reply.received_local)) + "s";
    string ts = (g_reply.timestamp_utc != "" ? g_reply.timestamp_utc : "n/a");
 
+   MaybeEvalPullback(false);
    g_dash.Render(g_acct, g_spec, g_px, g_backend_status, g_candle_status, g_dec,
                  g_pos, g_risk, ts, age,
                  g_equity, g_floating_pl_pct, InpFloatProfitTargetPct, g_float_profit_target_hit,
                  g_pl_cal.year, g_pl_cal.month, g_pl_cal.month_pl, g_pl_cal.month_pct, g_pl_cal.month_deals,
-                 g_trade_stats);
+                 g_trade_stats, g_pbsnap, InpPbShowDash && InpPullbackEnable);
   }
 
 //+------------------------------------------------------------------+
@@ -1017,6 +1123,16 @@ int OnInit()
          Print("[VantageAI] M5 Alignment Desk init failed — /dashboard gates will stay unknown.");
       else
          Print("[VantageAI] M5 Alignment Desk enabled (H1/M15/M5 feed → /dashboard).");
+     }
+
+   if(InpPullbackEnable)
+     {
+      VantagePullbackConfig pcfg;
+      FillPullbackConfig(pcfg);
+      if(!g_pullback.Init(_Symbol, pcfg))
+         Print("[VantageAI] Pullback Probability Analyzer init failed.");
+      else
+         MaybeEvalPullback(true);
      }
 
    // Build chart-relative levels for BTC/etc. (AUTO) or gold manual map
@@ -1075,6 +1191,7 @@ void OnDeinit(const int reason)
      }
    g_analysis.Release();
    g_m5desk.Release();
+   g_pullback.Release();
    g_dash.Clear();
    Comment("");
    Print("[VantageAI] Stopped. reason=", reason);
