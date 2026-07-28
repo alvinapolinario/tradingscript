@@ -226,11 +226,17 @@
       });
 
       if (!payload.ea_online) {
-        root.innerHTML = `<div class="empty">EA offline.<br/>Start the Vantage EA so all MT5 pending orders can sync.</div>`;
+        root.innerHTML = `<div class="empty">EA offline.<br/>Start the Vantage EA on a chart so pending orders can sync via heartbeat.</div>`;
+        return;
+      }
+      if (!payload.pending_orders_supported) {
+        root.innerHTML = `<div class="empty">This EA build is not sending <b>pending_orders</b> yet.<br/>
+          In MetaEditor: recompile <b>VantageMT5AIDecisionAssistant.mq5</b>, reload it on the chart, then wait ~15s for a heartbeat.<br/>
+          Your MT5 Trade tab can show pendings while the web desk stays empty until that sync runs.</div>`;
         return;
       }
       if (!items.length) {
-        root.innerHTML = `<div class="empty">No pending orders on the MT5 account.<br/>Place Buy/Sell Limit or Stop orders — they appear here with KPIs (advisory only).</div>`;
+        root.innerHTML = `<div class="empty">No pending orders reported on the last EA heartbeat.<br/>If MT5 Trade still shows limits/stops, reload the EA and confirm Experts log shows heartbeat with pending=&gt;0.</div>`;
         return;
       }
 

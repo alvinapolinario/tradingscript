@@ -68,6 +68,7 @@ class EaSnapshot:
     total_sell_volume: float = 0.0
     pending_order_count: int = 0
     pending_orders: dict | None = None
+    pending_orders_supported: bool = False
     floating_pl: float = 0.0
     equity: float = 0.0
     balance: float = 0.0
@@ -142,10 +143,16 @@ def _apply_heartbeat_fields(ea: EaSnapshot, payload: dict[str, Any]) -> None:
     if isinstance(payload.get("pending_orders"), dict):
         po = payload["pending_orders"]
         items = po.get("items") if isinstance(po.get("items"), list) else []
-        ea.pending_orders = {"count": int(po.get("count") or len(items)), "items": items}
+        ea.pending_orders = {
+            "count": int(po.get("count") or len(items)),
+            "scope": po.get("scope") or "account",
+            "items": items,
+        }
         ea.pending_order_count = int(ea.pending_orders["count"])
+        ea.pending_orders_supported = True
     elif payload.get("pending_order_count") is not None:
         ea.pending_order_count = int(payload.get("pending_order_count") or 0)
+        ea.pending_orders_supported = True
     if payload.get("max_position_risk_pct") is not None:
         try:
             ea.max_position_risk_pct = float(payload["max_position_risk_pct"])
@@ -352,7 +359,8 @@ class MonitorStore:
             else "INFO",
             "ea",
             f"Heartbeat {sym} new={payload.get('new_entry_decision', '?')} "
-            f"pos={payload.get('existing_position_decision', '?')} risk={payload.get('risk_status', '?')}",
+            f"pos={payload.get('existing_position_decision', '?')} risk={payload.get('risk_status', '?')}"
+            f" pending={payload.get('pending_order_count', (payload.get('pending_orders') or {}).get('count', '?'))}",
             spread=payload.get("spread_points"),
             positions=payload.get("position_count"),
             equity_risk_pct=payload.get("equity_risk_pct"),
@@ -364,8 +372,13 @@ class MonitorStore:
         with self._lock:
             ea = self._get_or_create(sym)
             items = pending_orders.get("items") if isinstance(pending_orders.get("items"), list) else []
-            ea.pending_orders = {"count": int(pending_orders.get("count") or len(items)), "items": items}
+            ea.pending_orders = {
+                "count": int(pending_orders.get("count") or len(items)),
+                "scope": pending_orders.get("scope") or "account",
+                "items": items,
+            }
             ea.pending_order_count = int(ea.pending_orders["count"])
+            ea.pending_orders_supported = True
             if extra.get("total_buy_volume") is not None:
                 ea.total_buy_volume = float(extra.get("total_buy_volume") or 0)
             if extra.get("total_sell_volume") is not None:
@@ -482,7 +495,8 @@ class MonitorStore:
             "total_sell_volume": ea.total_sell_volume,
             "pending_order_count": ea.pending_order_count,
             "pending_orders": ea.pending_orders
-            or {"count": 0, "items": []},
+            or {"count": 0, "scope": "account", "items": []},
+            "pending_orders_supported": ea.pending_orders_supported,
             "max_position_risk_pct": ea.max_position_risk_pct,
             "floating_pl": ea.floating_pl,
             "equity": ea.equity,

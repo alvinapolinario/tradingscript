@@ -628,6 +628,14 @@ void MaybeSendHeartbeat(void)
    else
       g_m5snap.valid = false;
 
+   static int s_last_pending_logged = -1;
+   if(g_pending.count != s_last_pending_logged)
+     {
+      PrintFormat("[VantageAI] Pending orders on account: %d (OrdersTotal=%d)",
+                  g_pending.count, OrdersTotal());
+      s_last_pending_logged = g_pending.count;
+     }
+
    int resp_y = 0, resp_m = 0;
    if(g_backend.Heartbeat(BuildHeartbeatPayload(), resp_y, resp_m))
      {

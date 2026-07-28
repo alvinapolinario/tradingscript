@@ -203,7 +203,7 @@ def test_api_pending_orders():
             "trend": "BULLISH",
             "pending_orders": {
                 "count": 1,
-                "items": [_base_order(sl=0.0, risk_available=False)],
+                "items": [_base_order(sl=0.0, risk_available=False, symbol="XAUUSD")],
             },
             "strategy": {
                 "h1_bias": "BULLISH",
@@ -219,7 +219,84 @@ def test_api_pending_orders():
     body = r.json()
     assert body["advisory_only"] is True
     assert body["count"] == 1
+    assert body["pending_orders_supported"] is True
     assert "ADD_OR_TIGHTEN_SL" in body["items"][0]["suggestions"]
     page = client.get("/orders")
     assert page.status_code == 200
     assert "Pending Orders" in page.text
+
+
+def test_analyze_without_pending_does_not_wipe():
+    """Regression: default empty pending_orders on analyze must not clear heartbeat book."""
+    from fastapi.testclient import TestClient
+
+    from app.main import app
+    from app.monitor_state import monitor_store
+    from app.config import get_settings
+
+    monitor_store.record_heartbeat(
+        {
+            "symbol": "XAUUSD",
+            "bid": 3300.0,
+            "ask": 3300.2,
+            "digits": 2,
+            "pending_order_count": 2,
+            "pending_orders": {
+                "count": 2,
+                "scope": "account",
+                "items": [
+                    _base_order(ticket=1, symbol="XAUUSD"),
+                    _base_order(ticket=2, symbol="GBPUSD", type="SELL_LIMIT"),
+                ],
+            },
+        }
+    )
+    token = get_settings().local_api_token
+    client = TestClient(app)
+    # Minimal analyze body — no pending_orders field
+    payload = {
+        "mode": "advisory_only",
+        "symbol": {
+            "name": "XAUUSD",
+            "digits": 2,
+            "point": 0.01,
+            "tick_size": 0.01,
+            "tick_value": 1.0,
+            "contract_size": 100.0,
+            "volume_min": 0.01,
+            "volume_max": 100.0,
+            "volume_step": 0.01,
+        },
+        "prices": {"bid": 3300.0, "ask": 3300.2, "spread_points": 20},
+        "candle": {
+            "timeframe": "M30",
+            "time": "2026.07.28 00:00:00",
+            "open": 3300.0,
+            "high": 3301.0,
+            "low": 3299.0,
+            "close": 3300.5,
+            "volume": 100,
+        },
+        "indicators": {
+            "ema20": 3290.0,
+            "ema50": 3280.0,
+            "ema200": 3200.0,
+            "bb_upper": 3310.0,
+            "bb_middle": 3300.0,
+            "bb_lower": 3290.0,
+            "rsi14": 50.0,
+            "atr14": 12.0,
+        },
+        "structure": {"trend": "BULLISH"},
+        "positions": {"count": 0, "items": []},
+        "risk": {"available": False, "status": "RISK_CALCULATION_UNAVAILABLE"},
+    }
+    r = client.post(
+        "/api/v1/analyze",
+        json=payload,
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert r.status_code == 200, r.text
+    status = client.get("/api/v1/orders/pending").json()
+    assert status["count"] == 2
+    assert status["pending_orders_supported"] is True

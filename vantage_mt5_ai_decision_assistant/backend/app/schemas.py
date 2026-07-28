@@ -217,7 +217,8 @@ class AnalyzeRequest(BaseModel):
     structure: StructureInfo = Field(default_factory=StructureInfo)
     levels: dict[str, float] = Field(default_factory=dict)
     positions: PositionsInfo = Field(default_factory=PositionsInfo)
-    pending_orders: PendingOrdersInfo = Field(default_factory=PendingOrdersInfo)
+    # Optional — omit when absent so analyze does not wipe a fresher heartbeat book
+    pending_orders: Optional[PendingOrdersInfo] = None
     risk: RiskInfo = Field(default_factory=RiskInfo)
     environment: str = "NORMAL"
     extra: Optional[dict[str, Any]] = None

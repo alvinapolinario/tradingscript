@@ -29,22 +29,20 @@ string VantagePendingOrderTypeName(const long t)
   }
 
 // Loads every pending order on the account (not chart-only).
-// chart_symbol / chart_spec / chart_px kept for API compat; used as fallback ticks.
+// OrderGetTicket() already selects the order — do not OrderSelect again.
 bool VantageLoadPendingOrders(const string chart_symbol,
                               const VantageSymbolSpec &chart_spec,
                               const VantagePriceSnap &chart_px,
                               VantagePendingOrderSummary &sum)
   {
-   ZeroMemory(sum);
    sum.count = 0;
 
-   int total = OrdersTotal();
+   const int total = OrdersTotal();
    for(int i = 0; i < total; i++)
      {
+      // Selects the order for OrderGet* accessors
       ulong ticket = OrderGetTicket(i);
       if(ticket == 0)
-         continue;
-      if(!OrderSelect(ticket))
          continue;
 
       long otype = OrderGetInteger(ORDER_TYPE);
@@ -54,6 +52,10 @@ bool VantageLoadPendingOrders(const string chart_symbol,
          break;
 
       string ord_sym = OrderGetString(ORDER_SYMBOL);
+      if(ord_sym == "")
+         continue;
+      SymbolSelect(ord_sym, true);
+
       VantageSymbolSpec ospec;
       bool have_spec = VantageLoadSymbolSpec(ord_sym, ospec);
       if(!have_spec && ord_sym == chart_symbol)
@@ -77,8 +79,8 @@ bool VantageLoadPendingOrders(const string chart_symbol,
       else
          mid = ask;
 
+      // Do not ZeroMemory rows that contain string fields
       VantagePendingOrderRow row;
-      ZeroMemory(row);
       row.ticket        = ticket;
       row.symbol        = ord_sym;
       row.digits        = have_spec ? ospec.digits : (int)SymbolInfoInteger(ord_sym, SYMBOL_DIGITS);
@@ -110,6 +112,7 @@ bool VantageLoadPendingOrders(const string chart_symbol,
       row.reward_risk_ratio = 0.0;
       row.margin_required = 0.0;
 
+      // Still list the order even when risk calc is unavailable (no SL / other symbols)
       if(have_spec && row.sl > 0.0 && row.volume > 0.0 && row.price_open > 0.0)
         {
          VantageRiskEstimate risk;

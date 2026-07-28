@@ -330,6 +330,7 @@ def build_pending_orders_status(monitor_status: dict[str, Any]) -> dict[str, Any
     symbols = sorted({str(a.get("symbol") or "").upper() for a in analyzed if a.get("symbol")})
 
     ea_online = bool(link.get("ea_online") or ea.get("connected"))
+    supported = bool(ea.get("pending_orders_supported"))
     scope = "account"
     if isinstance(raw_po, dict) and raw_po.get("scope"):
         scope = str(raw_po.get("scope"))
@@ -356,6 +357,7 @@ def build_pending_orders_status(monitor_status: dict[str, Any]) -> dict[str, Any
         "advisory_only": True,
         "caption": "Advisory only — never places, modifies, or cancels MT5 pending orders.",
         "ea_online": ea_online,
+        "pending_orders_supported": supported,
         "scope": scope,
         "symbol": chart_symbol,
         "bid": bid,
