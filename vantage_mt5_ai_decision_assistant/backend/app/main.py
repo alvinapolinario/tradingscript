@@ -154,6 +154,15 @@ def breakout_structure_page():
     return FileResponse(page)
 
 
+@app.get("/market-state")
+def market_state_page():
+    """Institutional Market State Engine v2 desk — advisory only, XAUUSD/Gold."""
+    page = STATIC_DIR / "market-state.html"
+    if not page.exists():
+        return {"error": "market-state.html missing", "path": str(page)}
+    return FileResponse(page)
+
+
 @app.get("/analyzer")
 def analyzer_page():
     """Smart Analyzer — advisory decision desk (Take/Ignore, no orders)."""

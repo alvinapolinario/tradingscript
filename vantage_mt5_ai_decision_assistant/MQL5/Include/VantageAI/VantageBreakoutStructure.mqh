@@ -51,13 +51,20 @@ private:
       ZeroMemory(r);
       r.valid = false;
       r.symbol = m_symbol;
-      r.engine_phase = 1;
+      r.engine_phase = 2;
       r.grade_label = "Reject";
-      r.breakout_label = "None";
-      r.retest_label = "No Retest";
-      r.sbr_label = "None";
-      r.rbs_label = "None";
-      r.recommendation = "WAIT — no valid breakout structure";
+      r.breakout_label = "Waiting";
+      r.retest_label = "Waiting";
+      r.sbr_label = "Waiting";
+      r.rbs_label = "Waiting";
+      r.breakout_type = "Waiting";
+      r.breakout_lifecycle = "Waiting";
+      r.retest_lifecycle = "Waiting";
+      r.rbs_flip_lifecycle = "Waiting";
+      r.sbr_flip_lifecycle = "Waiting";
+      r.current_structure = "Range";
+      r.structure_strength = "Weak";
+      r.recommendation = "WAIT — monitoring breakout structure";
      }
 
    bool CopyRatesClosed(const ENUM_TIMEFRAMES tf, const int count, MqlRates &rates[])
@@ -387,6 +394,280 @@ private:
       return BOS_FLIP_NONE;
      }
 
+   string DominantStructure(const VantageBosResult &r) const
+     {
+      int bull = 0, bear = 0;
+      if(r.market_structure_h4 == BOS_STRUCT_BULLISH) bull++;
+      else if(r.market_structure_h4 == BOS_STRUCT_BEARISH) bear++;
+      if(r.market_structure_h1 == BOS_STRUCT_BULLISH) bull++;
+      else if(r.market_structure_h1 == BOS_STRUCT_BEARISH) bear++;
+      if(r.market_structure_m15 == BOS_STRUCT_BULLISH) bull++;
+      else if(r.market_structure_m15 == BOS_STRUCT_BEARISH) bear++;
+      if(bull >= 2 && bull > bear) return "Bullish (HH-HL)";
+      if(bear >= 2 && bear > bull) return "Bearish (LH-LL)";
+      if(bull == bear && bull > 0) return "Range";
+      if(bull > bear) return "Bullish (HH-HL)";
+      if(bear > bull) return "Bearish (LH-LL)";
+      return "Range";
+     }
+
+   string StructureStrengthLabel(const VantageBosResult &r, const double adx) const
+     {
+      double pts = 0;
+      if(r.htf_aligned) pts += 35;
+      if(r.market_structure_h1 != BOS_STRUCT_NEUTRAL) pts += 25;
+      if(r.trendline_touches >= m_cfg.min_tl_touches) pts += 20;
+      pts += ClampD(adx / 50.0, 0, 1) * 20;
+      if(pts >= 65) return "Strong";
+      if(pts >= 35) return "Moderate";
+      return "Weak";
+     }
+
+   bool HorizontalBreakActive(MqlRates &m5[], const int n, const double pdh, const double pdl,
+                               const double atr, double &level, string &dir) const
+     {
+      if(n < 1 || atr <= 0) return false;
+      MqlRates bar = m5[0];
+      if(pdh > 0 && bar.close > pdh && (bar.close - pdh) >= m_cfg.min_break_atr * atr)
+        { level = pdh; dir = "bull"; return true; }
+      if(pdl > 0 && bar.close < pdl && (pdl - bar.close) >= m_cfg.min_break_atr * atr)
+        { level = pdl; dir = "bear"; return true; }
+      if(pdh > 0 && bar.high > pdh && bar.close <= pdh) { level = pdh; dir = "bull"; return false; }
+      if(pdl > 0 && bar.low < pdl && bar.close >= pdl) { level = pdl; dir = "bear"; return false; }
+      return false;
+     }
+
+   bool MaBreakActive(MqlRates &m5[], const double ema50, const double atr, double &level, string &dir) const
+     {
+      if(ArraySize(m5) < 1 || ema50 <= 0) return false;
+      MqlRates bar = m5[0];
+      if(bar.close > ema50 && (bar.close - ema50) >= m_cfg.min_break_atr * atr)
+        { level = ema50; dir = "bull"; return true; }
+      if(bar.close < ema50 && (ema50 - bar.close) >= m_cfg.min_break_atr * atr)
+        { level = ema50; dir = "bear"; return true; }
+      return false;
+     }
+
+   void BuildModuleView(VantageBosResult &r, MqlRates &m5[], const int n,
+                         const double pdh, const double pdl, const double atr_m5,
+                         const double rsi, const double adx, const double ema50,
+                         const VantageBosTrendline &active_tl)
+     {
+      r.current_structure = DominantStructure(r);
+      r.structure_strength = StructureStrengthLabel(r, adx);
+      r.current_price = (n > 0 ? m5[0].close : SymbolInfoDouble(m_symbol, SYMBOL_BID));
+
+      double h_level = 0; string h_dir = "";
+      bool h_conf = HorizontalBreakActive(m5, n, pdh, pdl, atr_m5, h_level, h_dir);
+      bool h_pot = (h_level > 0 && !h_conf);
+
+      ENUM_BOS_BREAK_CLASS tl_brk = r.breakout_status;
+      bool tl_conf = (tl_brk == BOS_BREAK_STRONG || tl_brk == BOS_BREAK_INSTITUTIONAL);
+      bool tl_pot = (tl_brk == BOS_BREAK_WEAK);
+
+      double ma_level = 0; string ma_dir = "";
+      bool ma_conf = MaBreakActive(m5, ema50, atr_m5, ma_level, ma_dir);
+
+      bool channel_pot = (adx < 22 && r.structure_strength != "Strong");
+
+      if(h_conf) { r.breakout_type = "Horizontal"; r.breakout_level = h_level; }
+      else if(tl_conf || tl_pot) { r.breakout_type = "Trendline"; r.breakout_level = (active_tl.type != BOS_TL_NONE ? TlPriceAt(active_tl, m5[0].time) : 0); }
+      else if(ma_conf) { r.breakout_type = "Moving Average"; r.breakout_level = ma_level; }
+      else if(channel_pot) { r.breakout_type = "Channel"; r.breakout_level = (pdh > 0 && pdl > 0 ? (pdh + pdl) / 2.0 : 0); }
+      else if(h_pot) { r.breakout_type = "Horizontal"; r.breakout_level = h_level; }
+      else { r.breakout_type = "Waiting"; r.breakout_level = (pdh > 0 ? pdh : (pdl > 0 ? pdl : 0)); }
+
+      r.lifecycle_failed = (tl_brk == BOS_BREAK_FAKE || r.retest_status == BOS_RETEST_FAILED);
+      if(r.lifecycle_failed)
+        {
+         r.breakout_lifecycle = "Failed";
+         r.lifecycle_stage = 5;
+         r.lifecycle_failed = true;
+        }
+      else if(tl_conf || h_conf || ma_conf)
+        {
+         if(r.retest_status == BOS_RETEST_SUCCESS && r.ml.expected_follow_through >= 55)
+           { r.breakout_lifecycle = "Completed"; r.lifecycle_stage = 5; }
+         else if(r.retest_status == BOS_RETEST_SUCCESS)
+           { r.breakout_lifecycle = "Continuation"; r.lifecycle_stage = 4; }
+         else if(r.retest_status == BOS_RETEST_PENDING || r.retest_status == BOS_RETEST_SUCCESS)
+           { r.breakout_lifecycle = "Retesting"; r.lifecycle_stage = 3; }
+         else
+           { r.breakout_lifecycle = "Confirmed Close"; r.lifecycle_stage = 2; }
+        }
+      else if(tl_pot || h_pot || tl_brk == BOS_BREAK_WEAK)
+        { r.breakout_lifecycle = "Potential Break"; r.lifecycle_stage = 1; }
+      else
+        { r.breakout_lifecycle = "Waiting"; r.lifecycle_stage = 0; }
+
+      r.breakout_confidence = ClampD(r.ml.prob_success, 0, 100);
+      if(r.breakout_lifecycle == "Confirmed Close") r.breakout_confidence = MathMax(r.breakout_confidence, 70);
+      if(r.breakout_lifecycle == "Potential Break") r.breakout_confidence = MathMax(r.breakout_confidence, 45);
+
+      MqlRates bar;
+      if(n > 0) bar = m5[0];
+      else { ZeroMemory(bar); bar.close = SymbolInfoDouble(m_symbol, SYMBOL_BID); bar.open = bar.close; bar.high = bar.close; bar.low = bar.close; }
+      double body = MathAbs(bar.close - bar.open);
+      double rng = MathMax(bar.high - bar.low, _Point);
+      double body_pct = body / rng;
+      r.val_strong_close = (body_pct >= m_cfg.min_body_break_pct);
+      r.val_closed_beyond_swing = (r.bos_class == BOS_BOS_BULLISH || r.bos_class == BOS_BOS_BEARISH);
+      r.val_atr_expansion = (r.breakout_level > 0 && MathAbs(bar.close - r.breakout_level) >= m_cfg.min_bos_atr * atr_m5);
+      r.val_momentum = ((r.bos_class == BOS_BOS_BULLISH && rsi > 50) || (r.bos_class == BOS_BOS_BEARISH && rsi < 50) || (rsi >= 45 && rsi <= 55 && adx > 20));
+      r.val_retest_done = (r.retest_status == BOS_RETEST_SUCCESS);
+      r.val_follow_through = (r.ml.expected_follow_through >= 60);
+
+      int val_n = 0, val_done = 0;
+      if(r.val_strong_close) val_done++; val_n++;
+      if(r.val_closed_beyond_swing) val_done++; val_n++;
+      if(r.val_atr_expansion) val_done++; val_n++;
+      if(r.val_momentum) val_done++; val_n++;
+      if(r.val_retest_done) val_done++; val_n++;
+      if(r.val_follow_through) val_done++; val_n++;
+      r.validation_progress = (val_n > 0 ? (double)val_done / val_n * 100.0 : 0);
+
+      if(r.breakout_level > 0)
+        {
+         r.distance_from_breakout = MathAbs(r.current_price - r.breakout_level);
+         r.atr_distance_ratio = (atr_m5 > 0 ? r.distance_from_breakout / atr_m5 : 0);
+        }
+      else
+        {
+         r.distance_from_breakout = 0;
+         r.atr_distance_ratio = 0;
+        }
+
+      if(r.lifecycle_failed) r.risk_zone = "Invalidation zone — breakout failed";
+      else if(r.breakout_lifecycle == "Retesting") r.risk_zone = "Retest tolerance band";
+      else if(r.breakout_lifecycle == "Confirmed Close" || r.breakout_lifecycle == "Continuation")
+         r.risk_zone = "Above breakout — continuation zone";
+      else r.risk_zone = "Pre-breakout monitoring zone";
+
+      r.retest_max_distance = atr_m5 * m_cfg.retest_tolerance_atr * 2.0;
+      r.retest_max_candles = m_cfg.retest_max_bars;
+      r.retest_candles_elapsed = 0;
+      if(r.breakout_level > 0)
+         r.retest_distance = MathAbs(r.current_price - r.breakout_level);
+      else
+         r.retest_distance = 0;
+
+      if(r.retest_status == BOS_RETEST_FAILED) r.retest_lifecycle = "Failed";
+      else if(r.retest_status == BOS_RETEST_SUCCESS) r.retest_lifecycle = "Confirmed";
+      else if(r.retest_status == BOS_RETEST_PENDING)
+        {
+         if(r.retest_distance <= r.retest_max_distance * 0.5) r.retest_lifecycle = "Retesting";
+         else if(r.retest_distance <= r.retest_max_distance) r.retest_lifecycle = "Approaching";
+         else r.retest_lifecycle = "Waiting";
+        }
+      else if(r.breakout_lifecycle == "Confirmed Close" || r.breakout_lifecycle == "Potential Break")
+         r.retest_lifecycle = (r.retest_distance <= r.retest_max_distance ? "Approaching" : "Waiting");
+      else
+         r.retest_lifecycle = "Waiting";
+
+      r.rbs_flip_lifecycle = FlipLifecycleLabel(r.rbs_status, pdh, r.breakout_level, true);
+      r.sbr_flip_lifecycle = FlipLifecycleLabel(r.sbr_status, pdl, r.breakout_level, false);
+
+      r.breakout_valid = (!r.lifecycle_failed &&
+                          (r.breakout_lifecycle == "Confirmed Close" || r.breakout_lifecycle == "Retesting" ||
+                           r.breakout_lifecycle == "Continuation" || r.breakout_lifecycle == "Completed"));
+
+      BuildEventsAndReasoning(r, pdh, pdl);
+
+      r.breakout_label = r.breakout_lifecycle;
+      r.retest_label = r.retest_lifecycle;
+      r.rbs_label = r.rbs_flip_lifecycle;
+      r.sbr_label = r.sbr_flip_lifecycle;
+     }
+
+   string FlipLifecycleLabel(const ENUM_BOS_FLIP_STATUS st, const double level,
+                              const double brk_level, const bool is_rbs) const
+     {
+      if(st == BOS_FLIP_VALID) return "Confirmed";
+      if(st == BOS_FLIP_FAILED) return "Failed";
+      if(st == BOS_FLIP_WEAK) return "Retesting";
+      if(level > 0 && brk_level > 0 && MathAbs(brk_level - level) < _Point * 10)
+         return "Broken";
+      if(st == BOS_FLIP_NONE && level > 0) return "Waiting Retest";
+      return "Waiting";
+     }
+
+   void BuildEventsAndReasoning(VantageBosResult &r, const double pdh, const double pdl)
+     {
+      string miss = "";
+      if(!r.val_strong_close) miss += "Strong candle close; ";
+      if(!r.val_closed_beyond_swing) miss += "Close beyond swing; ";
+      if(!r.val_atr_expansion) miss += "ATR expansion; ";
+      if(!r.val_momentum) miss += "Momentum; ";
+      if(!r.val_retest_done) miss += "Retest completion; ";
+      if(!r.val_follow_through) miss += "Follow-through; ";
+      r.missing_confirmations = (miss == "" ? "All primary confirmations complete" : miss);
+
+      if(r.lifecycle_failed)
+        {
+         r.current_event = "Failed Breakout";
+         r.expected_next_event = "Breakout invalid if price closes beyond invalidation level";
+        }
+      else if(r.retest_lifecycle == "Retesting" || r.retest_lifecycle == "Approaching")
+        {
+         r.current_event = "Retest In Progress";
+         r.expected_next_event = "Waiting for Retest Confirmation";
+        }
+      else if(r.breakout_lifecycle == "Confirmed Close" && r.breakout_type == "Horizontal")
+        {
+         r.current_event = "Horizontal Breakout Detected";
+         r.expected_next_event = "Waiting for Retest";
+        }
+      else if(r.bos_class == BOS_BOS_BULLISH || r.bos_class == BOS_BOS_BEARISH)
+        {
+         r.current_event = (r.bos_class == BOS_BOS_BULLISH ? "Bullish BOS Confirmed" : "Bearish BOS Confirmed");
+         r.expected_next_event = "Waiting for Follow Through";
+        }
+      else if(r.breakout_lifecycle == "Continuation" || r.breakout_lifecycle == "Completed")
+        {
+         r.current_event = "Continuation Confirmed";
+         r.expected_next_event = "Monitor for Resistance to Become Support";
+        }
+      else if(r.breakout_lifecycle == "Potential Break")
+        {
+         r.current_event = "Potential " + r.breakout_type + " Break";
+         r.expected_next_event = "Waiting for Confirmed Close";
+        }
+      else
+        {
+         r.current_event = "Monitoring Breakout Structure";
+         r.expected_next_event = "Waiting for Valid Breakout Setup";
+        }
+
+      if(r.rbs_flip_lifecycle == "Waiting Retest" && r.breakout_valid)
+         r.expected_next_event = "Waiting for Resistance to Become Support";
+      if(r.sbr_flip_lifecycle == "Waiting Retest" && r.breakout_valid)
+         r.expected_next_event = "Waiting for Support to Become Resistance";
+
+      string nar = "";
+      nar += r.current_structure + " structure (" + r.structure_strength + " strength). ";
+      if(r.bos_class == BOS_BOS_BULLISH || r.bos_class == BOS_BOS_BEARISH)
+         nar += "Price has closed beyond the prior swing level. ";
+      else
+         nar += "No confirmed BOS on the execution timeframe yet. ";
+      nar += r.breakout_type + " breakout is ";
+      string lc = r.breakout_lifecycle;
+      StringToLower(lc);
+      nar += lc + ". ";
+      if(r.breakout_type != "Trendline" && r.trendline_type != BOS_TL_NONE)
+         nar += "Trendline breakout has not yet occurred. ";
+      if(!r.val_retest_done)
+         nar += "Retest has not yet been completed. ";
+      if(r.rbs_flip_lifecycle == "Waiting Retest" || r.rbs_flip_lifecycle == "Waiting")
+         nar += "Resistance has not yet become support. ";
+      if(r.breakout_valid)
+         nar += "The breakout remains valid, but confirmation is still pending.";
+      else if(r.lifecycle_failed)
+         nar += "The breakout has failed — treat as invalid until structure resets.";
+      else
+         nar += "No active confirmed breakout — continue monitoring.";
+      r.ai_reasoning = nar;
+     }
+
    void ComputeMl(VantageBosResult &r, const double atr, const double rsi, const double adx,
                   const double spread_pts)
      {
@@ -459,6 +740,12 @@ private:
 
       r.confidence_score = ClampD(s, 0, 100);
       r.score_breakdown = br;
+      r.score_structure_pts = ms;
+      r.score_breakout_pts = bk;
+      r.score_trendline_pts = tl;
+      r.score_retest_pts = rt;
+      r.score_flip_pts = fl;
+      r.score_momentum_pts = htf + sess;
 
       if(r.confidence_score >= 95) r.signal_grade = BOS_GRADE_INSTITUTIONAL;
       else if(r.confidence_score >= 90) r.signal_grade = BOS_GRADE_A_PLUS;
@@ -578,6 +865,7 @@ public:
       double atr_m5 = GetAtrTf(PERIOD_M5);
       double rsi = GetBuf(m_h_rsi_m5);
       double adx = GetBuf(m_h_adx_h1);
+      double ema50 = GetBuf(m_h_ema50_h1);
       double spread = (double)SymbolInfoInteger(m_symbol, SYMBOL_SPREAD);
 
       CollectSwings(h1, ArraySize(h1), atr_h1);
@@ -637,6 +925,8 @@ public:
 
       ComputeMl(out, atr_m5, rsi, adx, spread);
       ScoreSetup(out);
+
+      BuildModuleView(out, m5, ArraySize(m5), pdh, pdl, atr_m5, rsi, adx, ema50, active_tl);
 
       out.valid = true;
       out.analysis_active = true;
@@ -702,7 +992,44 @@ public:
       j += "\"nearest_resistance\":" + DoubleToString(r.nearest_resistance, _Digits) + ",";
       j += "\"eval_bar_m5\":" + IntegerToString((int)r.eval_bar_m5) + ",";
       j += "\"chart_objects_active\":" + (r.chart_objects_active ? "true" : "false") + ",";
-      j += "\"engine_phase\":" + IntegerToString(r.engine_phase);
+      j += "\"engine_phase\":" + IntegerToString(r.engine_phase) + ",";
+      j += "\"current_structure\":\"" + JsonEscape(r.current_structure) + "\",";
+      j += "\"structure_strength\":\"" + JsonEscape(r.structure_strength) + "\",";
+      j += "\"breakout_type\":\"" + JsonEscape(r.breakout_type) + "\",";
+      j += "\"breakout_lifecycle\":\"" + JsonEscape(r.breakout_lifecycle) + "\",";
+      j += "\"breakout_confidence\":" + DoubleToString(r.breakout_confidence, 1) + ",";
+      j += "\"lifecycle_stage\":" + IntegerToString(r.lifecycle_stage) + ",";
+      j += "\"lifecycle_failed\":" + (r.lifecycle_failed ? "true" : "false") + ",";
+      j += "\"val_strong_close\":" + (r.val_strong_close ? "true" : "false") + ",";
+      j += "\"val_closed_beyond_swing\":" + (r.val_closed_beyond_swing ? "true" : "false") + ",";
+      j += "\"val_atr_expansion\":" + (r.val_atr_expansion ? "true" : "false") + ",";
+      j += "\"val_momentum\":" + (r.val_momentum ? "true" : "false") + ",";
+      j += "\"val_retest_done\":" + (r.val_retest_done ? "true" : "false") + ",";
+      j += "\"val_follow_through\":" + (r.val_follow_through ? "true" : "false") + ",";
+      j += "\"validation_progress\":" + DoubleToString(r.validation_progress, 1) + ",";
+      j += "\"breakout_level\":" + DoubleToString(r.breakout_level, _Digits) + ",";
+      j += "\"current_price\":" + DoubleToString(r.current_price, _Digits) + ",";
+      j += "\"distance_from_breakout\":" + DoubleToString(r.distance_from_breakout, _Digits) + ",";
+      j += "\"atr_distance_ratio\":" + DoubleToString(r.atr_distance_ratio, 2) + ",";
+      j += "\"risk_zone\":\"" + JsonEscape(r.risk_zone) + "\",";
+      j += "\"retest_lifecycle\":\"" + JsonEscape(r.retest_lifecycle) + "\",";
+      j += "\"retest_distance\":" + DoubleToString(r.retest_distance, _Digits) + ",";
+      j += "\"retest_max_distance\":" + DoubleToString(r.retest_max_distance, _Digits) + ",";
+      j += "\"retest_max_candles\":" + IntegerToString(r.retest_max_candles) + ",";
+      j += "\"retest_candles_elapsed\":" + IntegerToString(r.retest_candles_elapsed) + ",";
+      j += "\"rbs_flip_lifecycle\":\"" + JsonEscape(r.rbs_flip_lifecycle) + "\",";
+      j += "\"sbr_flip_lifecycle\":\"" + JsonEscape(r.sbr_flip_lifecycle) + "\",";
+      j += "\"current_event\":\"" + JsonEscape(r.current_event) + "\",";
+      j += "\"expected_next_event\":\"" + JsonEscape(r.expected_next_event) + "\",";
+      j += "\"ai_reasoning\":\"" + JsonEscape(r.ai_reasoning) + "\",";
+      j += "\"missing_confirmations\":\"" + JsonEscape(r.missing_confirmations) + "\",";
+      j += "\"breakout_valid\":" + (r.breakout_valid ? "true" : "false") + ",";
+      j += "\"score_structure_pts\":" + DoubleToString(r.score_structure_pts, 1) + ",";
+      j += "\"score_breakout_pts\":" + DoubleToString(r.score_breakout_pts, 1) + ",";
+      j += "\"score_trendline_pts\":" + DoubleToString(r.score_trendline_pts, 1) + ",";
+      j += "\"score_retest_pts\":" + DoubleToString(r.score_retest_pts, 1) + ",";
+      j += "\"score_flip_pts\":" + DoubleToString(r.score_flip_pts, 1) + ",";
+      j += "\"score_momentum_pts\":" + DoubleToString(r.score_momentum_pts, 1);
       j += "}";
       return j;
      }

@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Market State Engine · Vantage</title>
+  <link rel="stylesheet" href="/static/shell.css" />
+  <style>
+    :root {
+      --bg: #0c1018; --panel: #141a26; --line: #2a3344; --text: #e8eef8;
+      --muted: #8a96aa; --accent: #7eb8ff; --warn: #e8c547; --good: #3dd68c;
+      --mono: "Cascadia Code", Consolas, ui-monospace, monospace;
+    }
+    body { margin: 0; font-family: "Segoe UI", system-ui, sans-serif; color: var(--text); background: var(--bg); min-height: 100vh; }
+    header { padding: .85rem 1.25rem; border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; align-items: center; }
+    header h1 { margin: 0; font-size: 1.05rem; }
+    .sub { color: var(--muted); font-size: .78rem; margin-top: .2rem; }
+    main { max-width: 980px; margin: 0 auto; padding: 1rem 1.1rem 2.5rem; }
+    .card { background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 1rem 1.1rem; margin-bottom: .85rem; }
+    .score { font-size: 1.4rem; font-weight: 800; color: var(--accent); }
+    .grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: .55rem; margin-top: .75rem; }
+    .k { font-size: .68rem; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }
+    .v { font-family: var(--mono); font-size: .92rem; font-weight: 650; margin-top: .2rem; }
+    .empty { border: 1px dashed var(--line); border-radius: 14px; padding: 1.5rem; color: var(--muted); text-align: center; }
+    .timeline { margin-top: .75rem; border-left: 2px solid var(--line); padding-left: 1rem; }
+    .tl-item { position: relative; margin-bottom: .85rem; }
+    .tl-item::before { content: ""; position: absolute; left: -1.28rem; top: .35rem; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
+    .tl-time { font-family: var(--mono); font-size: .78rem; color: var(--warn); }
+    .tl-ev { font-weight: 650; margin-top: .15rem; }
+    .tl-det { color: var(--muted); font-size: .82rem; margin-top: .15rem; line-height: 1.45; }
+    .narrative { color: var(--muted); font-size: .84rem; line-height: 1.55; margin-top: .75rem; }
+    @media (max-width: 700px) { .grid { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body data-nav="market-state">
+  <header>
+    <div>
+      <h1>Institutional Market State Engine v2</h1>
+      <div class="sub">XAUUSD / Gold only · lifecycle intelligence · explainable scoring · no trade orders</div>
+    </div>
+    <span id="pill" style="font-size:.78rem;color:var(--muted)">—</span>
+  </header>
+  <main id="main"><div class="empty">Loading…</div></main>
+  <script src="/static/shell.js"></script>
+  <script>
+    function parseTimeline(raw) {
+      if (!raw) return [];
+      try {
+        const arr = JSON.parse(raw);
+        if (Array.isArray(arr)) return arr;
+      } catch (_) {}
+      return String(raw).split("|").filter(Boolean).map(line => {
+        const m = line.match(/^(\d{2}:\d{2})\s+(.+?)(?:\s+—\s+(.+))?$/);
+        if (!m) return { time: "—", event: line, detail: "" };
+        return { time: m[1], event: m[2], detail: m[3] || "" };
+      });
+    }
+
+    function renderTimeline(items) {
+      if (!items.length) {
+        return `<div class="k" style="margin-top:.5rem">Market Timeline</div>
+                <p class="narrative">No lifecycle events yet on this M5 bar.</p>`;
+      }
+      return `<div class="k" style="margin-top:.5rem">Market Timeline</div>
+              <div class="timeline">${items.map(it => `
+                <div class="tl-item">
+                  <div class="tl-time">${it.time || fmtTime(it.t || it.time)}</div>
+                  <div class="tl-ev">${it.e || it.event || "—"}</div>
+                  ${(it.d || it.detail) ? `<div class="tl-det">${it.d || it.detail}</div>` : ""}
+                </div>`).join("")}</div>`;
+    }
+
+    function render(p) {
+      const root = document.getElementById("main");
+      const m = p.market_state_engine;
+      if (!p.ea_online) {
+        root.innerHTML = `<div class="empty">EA offline — attach Vantage EA on XAUUSD.</div>`;
+        return;
+      }
+      if (!p.market_state_engine_supported || !m) {
+        root.innerHTML = `<div class="empty">EA not sending <b>market_state_engine</b>. Recompile with groups AG–AJ enabled.</div>`;
+        return;
+      }
+      if (!m.gold_symbol_valid) {
+        root.innerHTML = `<div class="empty">${m.disable_reason || "Gold only."}</div>`;
+        return;
+      }
+      document.getElementById("pill").textContent = m.signal_lifecycle || "—";
+      const timeline = parseTimeline(m.timeline);
+      root.innerHTML = `
+        <div class="card">
+          <div class="k">Signal lifecycle</div>
+          <div class="score">${m.signal_lifecycle || "Waiting"} · ${Math.round(m.confidence_score || 0)}/100</div>
+          <div class="grid">
+            <div><div class="k">Market context</div><div class="v">${m.market_context || "—"}</div></div>
+            <div><div class="k">Institutional probability</div><div class="v">${m.institutional_probability ?? "—"}%</div></div>
+            <div><div class="k">BOS</div><div class="v">${m.bos_label || "Waiting"}</div></div>
+            <div><div class="k">CHoCH</div><div class="v">${m.choch_label || "Waiting"}</div></div>
+            <div><div class="k">Horizontal breakout</div><div class="v">${m.horizontal_breakout || "Waiting"}</div></div>
+            <div><div class="k">Trendline breakout</div><div class="v">${m.trendline_breakout || "Waiting"}</div></div>
+            <div><div class="k">Retest</div><div class="v">${m.retest_status || "Waiting"}</div></div>
+            <div><div class="k">RBS / Liquidity</div><div class="v">${m.rbs_status || "Waiting"} / ${m.liquidity_status || "Waiting"}</div></div>
+            <div><div class="k">ML trend continuation</div><div class="v">${m.ml_trend_continuation ?? "—"}%</div></div>
+            <div><div class="k">ML failed breakout</div><div class="v">${m.ml_failed_breakout ?? "—"}%</div></div>
+          </div>
+          ${renderTimeline(timeline)}
+          <div class="narrative">
+            <strong>Now:</strong> ${m.what_is_happening || "—"}<br/>
+            <strong>Next:</strong> ${m.what_is_next || "—"}<br/>
+            <strong>Missing:</strong> ${m.missing_confirmations || "—"}<br/>
+            <strong>Score:</strong> ${m.score_breakdown || "—"}
+          </div>
+          <p style="color:var(--muted);font-size:.78rem;margin-top:1rem">Advisory market intelligence — not a trade signal.</p>
+        </div>`;
+    }
+    async function tick() {
+      try { render(await (await fetch("/api/v1/market-state/status")).json()); }
+      catch { document.getElementById("main").innerHTML = `<div class="empty">Failed to load status</div>`; }
+    }
+    tick(); setInterval(tick, 5000);
+  </script>
+</body>
+</html>

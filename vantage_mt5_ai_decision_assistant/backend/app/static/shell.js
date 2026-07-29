@@ -30,6 +30,7 @@
     { id: "gold-smc", href: "/gold-smc", label: "Gold SMC", icon: "gold" },
     { id: "liquidity-grab", href: "/liquidity-grab", label: "Liquidity Grab Desk", icon: "liquidity" },
     { id: "breakout-structure", href: "/breakout-structure", label: "Breakout Structure", icon: "chart" },
+    { id: "market-state", href: "/market-state", label: "Market State Engine", icon: "layers" },
     { id: "radar", href: "/dashboard", label: "Opportunity Radar", icon: "radar" },
     { id: "patterns", href: "/patterns", label: "Pattern Strategy", icon: "shapes" },
     { id: "scanner", href: "/scanner", label: "Strategy Scanner", icon: "search" },

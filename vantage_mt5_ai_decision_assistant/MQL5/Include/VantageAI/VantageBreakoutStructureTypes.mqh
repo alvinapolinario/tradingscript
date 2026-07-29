@@ -6,7 +6,7 @@
 #ifndef VANTAGE_BREAKOUT_STRUCTURE_TYPES_MQH
 #define VANTAGE_BREAKOUT_STRUCTURE_TYPES_MQH
 
-#define VANTAGE_BOS_VERSION "1.0"
+#define VANTAGE_BOS_VERSION "1.1"
 #define VANTAGE_BOS_DISABLE_MSG \
   "Breakout Structure Engine is disabled. This module supports XAUUSD/Gold only."
 #define BOS_MAX_SWINGS 32
@@ -205,6 +205,44 @@ struct VantageBosResult
    datetime last_alert_time;
    bool   chart_objects_active;
    int    engine_phase;
+   // Lifecycle desk fields (v1.1 — never expose "None" to UI)
+   string current_structure;
+   string structure_strength;
+   string breakout_type;
+   string breakout_lifecycle;
+   double breakout_confidence;
+   int    lifecycle_stage;
+   bool   lifecycle_failed;
+   bool   val_strong_close;
+   bool   val_closed_beyond_swing;
+   bool   val_atr_expansion;
+   bool   val_momentum;
+   bool   val_retest_done;
+   bool   val_follow_through;
+   double validation_progress;
+   double breakout_level;
+   double current_price;
+   double distance_from_breakout;
+   double atr_distance_ratio;
+   string risk_zone;
+   string retest_lifecycle;
+   double retest_distance;
+   double retest_max_distance;
+   int    retest_max_candles;
+   int    retest_candles_elapsed;
+   string rbs_flip_lifecycle;
+   string sbr_flip_lifecycle;
+   string current_event;
+   string expected_next_event;
+   string ai_reasoning;
+   string missing_confirmations;
+   bool   breakout_valid;
+   double score_structure_pts;
+   double score_breakout_pts;
+   double score_trendline_pts;
+   double score_retest_pts;
+   double score_flip_pts;
+   double score_momentum_pts;
   };
 
 string BosStructureToString(const ENUM_BOS_STRUCTURE s)

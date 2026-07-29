@@ -1,4 +1,4 @@
-"""Breakout Structure — static advisory audits."""
+"""Market State Engine v2 — static advisory audits."""
 from __future__ import annotations
 
 import re
@@ -8,16 +8,16 @@ ROOT = Path(__file__).resolve().parents[2]
 MQL5 = ROOT / "MQL5"
 INC = MQL5 / "Include" / "VantageAI"
 
-REQUIRED = ["VantageBreakoutStructureTypes.mqh", "VantageBreakoutStructure.mqh"]
+REQUIRED = ["VantageMarketStateTypes.mqh", "VantageMarketStateManager.mqh"]
 FORBIDDEN = [r"\bCTrade\b", r"\bOrderSend\b"]
 
 
-def test_breakout_modules_present():
+def test_market_state_modules_present():
     missing = [n for n in REQUIRED if not (INC / n).exists()]
     assert not missing
 
 
-def test_breakout_no_trade_execution():
+def test_market_state_no_trade_execution():
     offenders = []
     for name in REQUIRED:
         text = (INC / name).read_text(encoding="utf-8", errors="ignore")
@@ -30,22 +30,20 @@ def test_breakout_no_trade_execution():
     assert not offenders
 
 
-def test_breakout_closed_bars():
-    text = (INC / "VantageBreakoutStructure.mqh").read_text(encoding="utf-8")
-    assert "CopyRates(m_symbol, tf, 1, count, rates)" in text
+def test_market_state_closed_bars():
+    text = (INC / "VantageMarketStateManager.mqh").read_text(encoding="utf-8")
+    assert "CopyRates(m_symbol, PERIOD_M5, 1, 120, m_cache.m5)" in text
     assert "m_last_m5_bar" in text
 
 
-def test_breakout_lifecycle_fields_in_engine():
-    text = (INC / "VantageBreakoutStructure.mqh").read_text(encoding="utf-8")
-    assert "BuildModuleView" in text
-    assert "breakout_lifecycle" in text
-    assert "ai_reasoning" in text
-    assert "Waiting" in text
+def test_market_state_lifecycle_labels():
+    text = (INC / "VantageMarketStateManager.mqh").read_text(encoding="utf-8")
+    assert "horizontal_breakout = \"Waiting\"" in text
+    assert "retest_status = \"Waiting\"" in text
 
 
-def test_ea_wires_breakout():
+def test_ea_wires_market_state():
     ea = (MQL5 / "Experts" / "VantageMT5AIDecisionAssistant.mq5").read_text(encoding="utf-8")
-    assert "InpBosEnable" in ea
-    assert "breakout_structure" in ea
-    assert "CVantageBreakoutStructure" in ea
+    assert "InpMseEnable" in ea
+    assert "market_state_engine" in ea
+    assert "CMarketStateManager" in ea

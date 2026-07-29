@@ -7,40 +7,205 @@
   <link rel="stylesheet" href="/static/shell.css" />
   <style>
     :root {
-      --bg: #0c1018; --panel: #141a26; --line: #2a3344; --text: #e8eef8;
-      --muted: #8a96aa; --accent: #7eb8ff; --warn: #e8c547; --good: #3dd68c;
+      --bg: #0a0e14; --panel: #121824; --panel2: #161d2b; --line: #263044;
+      --text: #e8eef8; --muted: #8a96aa; --accent: #7eb8ff;
+      --good: #3dd68c; --monitor: #5b9cf5; --wait: #e8a84a;
+      --pot: #e8c547; --fail: #f07178; --inactive: #5c677d;
       --mono: "Cascadia Code", Consolas, ui-monospace, monospace;
     }
+    * { box-sizing: border-box; }
     body { margin: 0; font-family: "Segoe UI", system-ui, sans-serif; color: var(--text); background: var(--bg); min-height: 100vh; }
-    header { padding: .85rem 1.25rem; border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; align-items: center; }
-    header h1 { margin: 0; font-size: 1.05rem; }
-    .sub { color: var(--muted); font-size: .78rem; margin-top: .2rem; }
-    main { max-width: 980px; margin: 0 auto; padding: 1rem 1.1rem 2.5rem; }
-    .card { background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 1rem 1.1rem; margin-bottom: .85rem; }
-    .grade { font-size: 1.4rem; font-weight: 800; color: var(--accent); }
-    .grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: .55rem; margin-top: .75rem; }
-    .k { font-size: .68rem; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }
-    .v { font-family: var(--mono); font-size: .92rem; font-weight: 650; margin-top: .2rem; }
-    .empty { border: 1px dashed var(--line); border-radius: 14px; padding: 1.5rem; color: var(--muted); text-align: center; }
-    @media (max-width: 700px) { .grid { grid-template-columns: 1fr; } }
+    header {
+      padding: .9rem 1.25rem; border-bottom: 1px solid var(--line);
+      display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem;
+      background: linear-gradient(180deg, #141b28 0%, var(--bg) 100%);
+    }
+    header h1 { margin: 0; font-size: 1.08rem; letter-spacing: .02em; }
+    .sub { color: var(--muted); font-size: .76rem; margin-top: .25rem; line-height: 1.4; }
+    .pill {
+      font-size: .72rem; font-weight: 700; padding: .35rem .65rem; border-radius: 999px;
+      border: 1px solid var(--line); white-space: nowrap;
+    }
+    main { max-width: 1100px; margin: 0 auto; padding: 1rem 1rem 2.5rem; }
+    .grid {
+      display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .7rem;
+    }
+    .span2 { grid-column: span 2; }
+    .card {
+      background: var(--panel); border: 1px solid var(--line); border-radius: 14px;
+      padding: .85rem .95rem; min-height: 0;
+    }
+    .card.hero {
+      background: linear-gradient(135deg, #152033 0%, var(--panel) 100%);
+      border-color: #33415a;
+    }
+    .card-title {
+      font-size: .68rem; text-transform: uppercase; letter-spacing: .1em;
+      color: var(--muted); margin-bottom: .55rem; display: flex; align-items: center; gap: .4rem;
+    }
+    .card-title .ico { opacity: .85; }
+    .status-lg {
+      font-size: 1.15rem; font-weight: 800; line-height: 1.25; margin-bottom: .35rem;
+    }
+    .status-md { font-family: var(--mono); font-size: .92rem; font-weight: 650; }
+    .hint { color: var(--muted); font-size: .78rem; line-height: 1.45; margin-top: .45rem; }
+    .row { display: flex; justify-content: space-between; gap: .5rem; margin-top: .35rem; }
+    .k { font-size: .66rem; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); }
+    .v { font-family: var(--mono); font-size: .84rem; font-weight: 650; text-align: right; }
+    .tf-grid { display: grid; grid-template-columns: 3.2rem 1fr auto; gap: .25rem .6rem; margin-top: .5rem; font-size: .82rem; }
+    .tf-grid .tf { color: var(--muted); font-weight: 700; font-size: .72rem; }
+    .badge {
+      display: inline-block; font-size: .68rem; font-weight: 700; padding: .15rem .45rem;
+      border-radius: 6px; border: 1px solid transparent;
+    }
+    .c-good { color: var(--good); border-color: rgba(61,214,140,.35); background: rgba(61,214,140,.08); }
+    .c-monitor { color: var(--monitor); border-color: rgba(91,156,245,.35); background: rgba(91,156,245,.08); }
+    .c-wait { color: var(--wait); border-color: rgba(232,168,74,.35); background: rgba(232,168,74,.08); }
+    .c-pot { color: var(--pot); border-color: rgba(232,197,71,.35); background: rgba(232,197,71,.08); }
+    .c-fail { color: var(--fail); border-color: rgba(240,113,120,.35); background: rgba(240,113,120,.08); }
+    .c-inactive { color: var(--inactive); border-color: rgba(92,103,125,.35); background: rgba(92,103,125,.08); }
+
+    .lifecycle {
+      display: flex; flex-wrap: wrap; align-items: center; gap: .25rem .35rem;
+      margin-top: .55rem; font-size: .74rem;
+    }
+    .lc-step {
+      padding: .22rem .5rem; border-radius: 8px; border: 1px solid var(--line);
+      color: var(--muted); background: var(--panel2);
+    }
+    .lc-step.active { font-weight: 800; border-width: 2px; }
+    .lc-step.done { opacity: .55; text-decoration: line-through; }
+    .lc-arrow { color: var(--inactive); font-size: .7rem; }
+
+    .checklist { margin-top: .45rem; }
+    .check {
+      display: flex; align-items: center; gap: .45rem; font-size: .8rem;
+      padding: .22rem 0; color: var(--text);
+    }
+    .check.off { color: var(--muted); }
+    .prog-wrap { margin-top: .55rem; }
+    .prog-bar {
+      height: 7px; border-radius: 999px; background: #1e2738; overflow: hidden; margin-top: .3rem;
+    }
+    .prog-fill { height: 100%; border-radius: 999px; background: linear-gradient(90deg, var(--monitor), var(--good)); transition: width .35s ease; }
+
+    .score-bar {
+      font-family: var(--mono); letter-spacing: .08em; color: var(--good);
+      font-size: .95rem; margin: .2rem 0;
+    }
+    .breakdown { margin-top: .45rem; }
+    .bd-row {
+      display: grid; grid-template-columns: 1fr auto auto; gap: .5rem;
+      font-size: .78rem; padding: .18rem 0; border-bottom: 1px dashed rgba(38,48,68,.7);
+    }
+    .bd-row:last-child { border-bottom: none; }
+
+    .event-box {
+      border-radius: 10px; padding: .65rem .75rem; margin-top: .35rem;
+      border: 1px solid var(--line); background: var(--panel2);
+    }
+    .event-box.highlight { border-color: rgba(91,156,245,.45); box-shadow: 0 0 0 1px rgba(91,156,245,.12) inset; }
+    .empty {
+      border: 1px dashed var(--line); border-radius: 14px; padding: 1.5rem;
+      color: var(--muted); text-align: center;
+    }
+    @media (max-width: 820px) { .grid { grid-template-columns: 1fr; } .span2 { grid-column: span 1; } }
   </style>
 </head>
 <body data-nav="breakout-structure">
   <header>
     <div>
-      <h1>Breakout Structure Intelligence</h1>
-      <div class="sub">XAUUSD / Gold only · swings · trendlines · BOS · retest · SBR/RBS · explainable ML score</div>
+      <h1>📊 BREAKOUT STRUCTURE INTELLIGENCE</h1>
+      <div class="sub">XAUUSD / Gold only · lifecycle breakout analyst · advisory — never places orders</div>
     </div>
-    <span id="pill" style="font-size:.78rem;color:var(--muted)">—</span>
+    <span id="pill" class="pill c-inactive">—</span>
   </header>
   <main id="main"><div class="empty">Loading…</div></main>
   <script src="/static/shell.js"></script>
   <script>
+    const LC_STAGES = ["Waiting", "Potential Break", "Confirmed Close", "Retesting", "Continuation", "Completed"];
+    const LC_FAILED = "Failed";
+    let lastSig = "";
+
+    function cls(status) {
+      const s = String(status || "").toLowerCase();
+      if (/fail|invalid|reject/.test(s)) return "c-fail";
+      if (/confirm|continu|complete|valid|success|strong/.test(s)) return "c-good";
+      if (/retest|approach|monitor|progress/.test(s)) return "c-monitor";
+      if (/potential|weak|pending/.test(s)) return "c-pot";
+      if (/wait|inactive|building|range/.test(s)) return "c-wait";
+      return "c-inactive";
+    }
+
+    function badge(text) {
+      return `<span class="badge ${cls(text)}">${text || "Waiting"}</span>`;
+    }
+
+    function fmt(n, d = 2) {
+      if (n == null || Number.isNaN(Number(n))) return "—";
+      return Number(n).toFixed(d);
+    }
+
+    function bar(score, max = 100) {
+      const pct = Math.max(0, Math.min(100, (score / max) * 100));
+      const filled = Math.round(pct / 10);
+      return "█".repeat(filled) + "░".repeat(10 - filled);
+    }
+
+    function lifecycleHtml(b) {
+      const failed = b.lifecycle_failed || b.breakout_lifecycle === "Failed";
+      const stages = failed ? [...LC_STAGES.slice(0, 4), LC_FAILED] : LC_STAGES;
+      const cur = failed ? LC_FAILED : (b.breakout_lifecycle || "Waiting");
+      const idx = stages.indexOf(cur);
+      return `<div class="lifecycle">${stages.map((st, i) => {
+        const active = st === cur;
+        const done = idx >= 0 && i < idx;
+        const arrow = i < stages.length - 1 ? `<span class="lc-arrow">↓</span>` : "";
+        return `<span class="lc-step ${active ? "active " + cls(st) : ""} ${done ? "done" : ""}">${st}</span>${arrow}`;
+      }).join("")}</div>`;
+    }
+
+    function checklist(b) {
+      const items = [
+        ["val_strong_close", "Strong Candle Close"],
+        ["val_closed_beyond_swing", "Closed Above/Below Swing"],
+        ["val_atr_expansion", "ATR Expansion"],
+        ["val_momentum", "Momentum Confirmed"],
+        ["val_retest_done", "Retest Completed"],
+        ["val_follow_through", "Follow Through"],
+      ];
+      return items.map(([k, label]) => {
+        const on = !!b[k];
+        return `<div class="check ${on ? "" : "off"}">${on ? "☑" : "☐"} ${label}</div>`;
+      }).join("");
+    }
+
+    function breakdownRows(b) {
+      const rows = [
+        ["Structure", b.score_structure_pts, 20],
+        ["Breakout Strength", b.score_breakout_pts, 15],
+        ["Trendline", b.score_trendline_pts, 15],
+        ["Retest", b.score_retest_pts, 15],
+        ["Flip", b.score_flip_pts, 10],
+        ["Momentum", b.score_momentum_pts, 10],
+      ];
+      return rows.map(([n, v, m]) => `
+        <div class="bd-row">
+          <span>${n}</span>
+          <span>${fmt(v ?? 0, 0)}/${m}</span>
+          <span style="color:var(--muted)">${Math.round(((v || 0) / m) * 100)}%</span>
+        </div>`).join("");
+    }
+
+    function signature(b) {
+      return [b.eval_bar_m5, b.breakout_lifecycle, b.retest_lifecycle, b.current_event, b.confidence_score].join("|");
+    }
+
     function render(p) {
       const root = document.getElementById("main");
       const b = p.breakout_structure;
       if (!p.ea_online) {
-        root.innerHTML = `<div class="empty">EA offline — attach Vantage EA on XAUUSD.</div>`;
+        root.innerHTML = `<div class="empty">EA offline — attach Vantage EA on <b>XAUUSD</b>.</div>`;
         return;
       }
       if (!p.breakout_structure_supported || !b) {
@@ -48,33 +213,142 @@
         return;
       }
       if (!b.gold_symbol_valid) {
-        root.innerHTML = `<div class="empty">${b.disable_reason || "Gold only."}</div>`;
+        root.innerHTML = `<div class="empty">${b.disable_reason || "This module supports XAUUSD / Gold only."}</div>`;
         return;
       }
-      document.getElementById("pill").textContent = b.signal_grade || "—";
+
+      const sig = signature(b);
+      const pill = document.getElementById("pill");
+      pill.textContent = b.breakout_lifecycle || "Waiting";
+      pill.className = "pill " + cls(b.breakout_lifecycle);
+
+      if (sig === lastSig && root.dataset.ready === "1") return;
+      lastSig = sig;
+      root.dataset.ready = "1";
+
+      const h4 = b.market_structure_h4 || "—";
+      const h1 = b.market_structure_h1 || "—";
+      const m15 = b.market_structure_m15 || "—";
+
       root.innerHTML = `
-        <div class="card">
-          <div class="k">Signal grade</div>
-          <div class="grade">${b.signal_grade || "Reject"} · ${Math.round(b.confidence_score || 0)}/100</div>
-          <div class="grid">
-            <div><div class="k">Market structure</div><div class="v">${b.market_structure || "—"}</div></div>
-            <div><div class="k">BOS / CHoCH</div><div class="v">${b.bos_class || "—"} ${b.latest_choch_event ? "· " + b.latest_choch_event : ""}</div></div>
-            <div><div class="k">Trendline</div><div class="v">${b.trendline_type || "None"} · strength ${b.trendline_strength ?? "—"} · ${b.trendline_touches ?? 0} touches</div></div>
-            <div><div class="k">Breakout</div><div class="v">${b.breakout_status || "None"}</div></div>
-            <div><div class="k">Retest</div><div class="v">${b.retest_status || "None"}</div></div>
-            <div><div class="k">SBR / RBS</div><div class="v">${b.sbr_status || "None"} / ${b.rbs_status || "None"}</div></div>
-            <div><div class="k">ML success</div><div class="v">${b.ml_prob_success ?? "—"}%</div></div>
-            <div><div class="k">Institutional prob.</div><div class="v">${b.institutional_probability ?? "—"}%</div></div>
+        <div class="grid">
+          <!-- CARD 1 -->
+          <div class="card">
+            <div class="card-title"><span class="ico">①</span> Market Structure</div>
+            <div class="status-lg">${b.current_structure || "Range"}</div>
+            <div class="hint">Dominant swing classification across HTF stack</div>
+            <div class="tf-grid">
+              <div class="tf">H4</div><div>${h4}</div><div>${badge(h4.includes("Bullish") ? "Bullish" : h4.includes("Bearish") ? "Bearish" : "Neutral")}</div>
+              <div class="tf">H1</div><div>${h1}</div><div>${badge(h1.includes("Bullish") ? "Bullish" : h1.includes("Bearish") ? "Bearish" : "Neutral")}</div>
+              <div class="tf">M15</div><div>${m15}</div><div>${badge(m15.includes("Bullish") ? "Bullish" : m15.includes("Bearish") ? "Bearish" : "Neutral")}</div>
+            </div>
+            <div class="row" style="margin-top:.65rem">
+              <span class="k">Structure Strength</span>
+              <span>${badge(b.structure_strength || "Weak")}</span>
+            </div>
           </div>
-          <p style="color:var(--muted);font-size:.82rem;margin-top:1rem;line-height:1.5">${b.recommendation || ""}. ${b.score_breakdown || ""}</p>
-          <p style="color:var(--muted);font-size:.78rem">Advisory structural analysis — not a trade signal.</p>
-        </div>`;
+
+          <!-- CARD 2 -->
+          <div class="card hero">
+            <div class="card-title"><span class="ico">②</span> Breakout Status</div>
+            <div class="row">
+              <div><div class="k">Breakout Type</div><div class="status-md">${b.breakout_type || "Waiting"}</div></div>
+              <div style="text-align:right"><div class="k">Confidence</div><div class="status-md">${Math.round(b.breakout_confidence ?? b.ml_prob_success ?? 0)}%</div></div>
+            </div>
+            <div style="margin-top:.65rem">
+              <div class="k">Current Status</div>
+              <div class="status-lg ${cls(b.breakout_lifecycle)}">${b.breakout_lifecycle || "Waiting"}</div>
+            </div>
+            <div class="hint">${b.breakout_valid ? "Breakout is structurally valid." : b.lifecycle_failed ? "Breakout has failed — treat as invalid." : "Monitoring for confirmed breakout close."}</div>
+          </div>
+
+          <!-- CARD 3 -->
+          <div class="card span2">
+            <div class="card-title"><span class="ico">③</span> Breakout Lifecycle</div>
+            ${lifecycleHtml(b)}
+            <div class="hint">Current stage highlighted · updates on new M5 close or state change</div>
+          </div>
+
+          <!-- CARD 4 -->
+          <div class="card">
+            <div class="card-title"><span class="ico">④</span> Breakout Validation</div>
+            <div class="checklist">${checklist(b)}</div>
+            <div class="prog-wrap">
+              <div class="row"><span class="k">Validation Progress</span><span class="v">${Math.round(b.validation_progress || 0)}%</span></div>
+              <div class="prog-bar"><div class="prog-fill" style="width:${Math.round(b.validation_progress || 0)}%"></div></div>
+            </div>
+            <div class="hint">${b.missing_confirmations || ""}</div>
+          </div>
+
+          <!-- CARD 5 -->
+          <div class="card">
+            <div class="card-title"><span class="ico">⑤</span> Breakout Levels</div>
+            <div class="row"><span class="k">Breakout Level</span><span class="v">${fmt(b.breakout_level)}</span></div>
+            <div class="row"><span class="k">Current Price</span><span class="v">${fmt(b.current_price ?? p.bid)}</span></div>
+            <div class="row"><span class="k">Distance</span><span class="v">${fmt(b.distance_from_breakout)}</span></div>
+            <div class="row"><span class="k">ATR Distance</span><span class="v">${fmt(b.atr_distance_ratio)} ATR</span></div>
+            <div class="row"><span class="k">Risk Zone</span><span class="v" style="max-width:58%;font-size:.75rem">${b.risk_zone || "—"}</span></div>
+          </div>
+
+          <!-- CARD 6 -->
+          <div class="card">
+            <div class="card-title"><span class="ico">⑥</span> Retest Status</div>
+            <div class="status-lg ${cls(b.retest_lifecycle)}">${b.retest_lifecycle || "Waiting"}</div>
+            <div class="row"><span class="k">Distance</span><span class="v">${fmt(b.retest_distance)}</span></div>
+            <div class="row"><span class="k">Maximum Allowed Distance</span><span class="v">${fmt(b.retest_max_distance)}</span></div>
+            <div class="row"><span class="k">Maximum Candles</span><span class="v">${b.retest_max_candles ?? "—"}</span></div>
+            <div class="hint">${b.retest_status || b.retest_label || "Waiting for breakout retest window."}</div>
+          </div>
+
+          <!-- CARD 7 -->
+          <div class="card">
+            <div class="card-title"><span class="ico">⑦</span> Support / Resistance Flip</div>
+            <div class="row"><span class="k">Resistance → Support</span><span>${badge(b.rbs_flip_lifecycle || b.rbs_status || "Waiting")}</span></div>
+            <div class="row" style="margin-top:.45rem"><span class="k">Support → Resistance</span><span>${badge(b.sbr_flip_lifecycle || b.sbr_status || "Waiting")}</span></div>
+            <div class="hint">Flip lifecycle tracks break → retest → confirmation</div>
+          </div>
+
+          <!-- CARD 8 -->
+          <div class="card">
+            <div class="card-title"><span class="ico">⑧</span> Breakout Quality</div>
+            <div class="score-bar">${bar(b.confidence_score || 0)}</div>
+            <div class="status-md">${Math.round(b.confidence_score || 0)} / 100 · Grade ${b.signal_grade || "Reject"}</div>
+            <div class="breakdown">${breakdownRows(b)}</div>
+          </div>
+
+          <!-- CARD 9 -->
+          <div class="card">
+            <div class="card-title"><span class="ico">⑨</span> Current Event</div>
+            <div class="event-box highlight">
+              <div class="status-md ${cls(b.current_event)}">${b.current_event || "Monitoring Breakout Structure"}</div>
+            </div>
+            <div class="hint">${b.latest_bos_event || b.technical_narrative || ""}</div>
+          </div>
+
+          <!-- CARD 10 -->
+          <div class="card">
+            <div class="card-title"><span class="ico">⑩</span> Expected Next Event</div>
+            <div class="event-box">
+              <div class="status-md ${cls(b.expected_next_event)}">${b.expected_next_event || "Waiting for Valid Breakout Setup"}</div>
+            </div>
+            <div class="hint">Advisory forecast — not a buy/sell signal</div>
+          </div>
+
+          <!-- CARD 11 -->
+          <div class="card span2">
+            <div class="card-title"><span class="ico">⑪</span> AI Reasoning</div>
+            <p class="hint" style="margin:0;font-size:.84rem;color:var(--text);line-height:1.6">${b.ai_reasoning || b.recommendation || "—"}</p>
+          </div>
+        </div>
+        <p style="color:var(--muted);font-size:.74rem;text-align:center;margin-top:1rem">Advisory structural intelligence · XAUUSD only · no MT5 orders</p>`;
     }
+
     async function tick() {
       try { render(await (await fetch("/api/v1/breakout-structure/status")).json()); }
       catch { document.getElementById("main").innerHTML = `<div class="empty">Failed to load status</div>`; }
     }
-    tick(); setInterval(tick, 5000);
+    tick();
+    setInterval(tick, 5000);
   </script>
 </body>
 </html>

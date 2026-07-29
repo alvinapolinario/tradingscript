@@ -13,6 +13,7 @@
 #include "VantageGoldSMC.mqh"
 #include "VantageLiquidityGrab.mqh"
 #include "VantageBreakoutStructure.mqh"
+#include "VantageMarketStateManager.mqh"
 
 class CVantageDashboard
   {
@@ -79,7 +80,9 @@ public:
                const VantageLiquidityGrabResult &lg,
                const bool show_liq_grab,
                const VantageBosResult &bos,
-               const bool show_breakout)
+               const bool show_breakout,
+               const VantageMseResult &mse,
+               const bool show_mse)
      {
       int r = 0;
       color riskCol = clrSilver;
@@ -265,19 +268,38 @@ public:
 
       if(show_breakout)
         {
-         SetLabel("tbs0", r++, "--- BREAKOUT STRUCTURE (advisory) ---", clrAqua);
+         SetLabel("tbs0", r++, "--- BREAKOUT STRUCTURE INTELLIGENCE ---", clrAqua);
          if(!bos.gold_symbol_valid && bos.disable_reason != "")
             SetLabel("tbs1", r++, StringSubstr(bos.disable_reason, 0, 96), clrOrange);
          else
            {
-            SetLabel("tbs1", r++, "Grade " + bos.grade_label + " | Score " + DoubleToString(bos.confidence_score, 0), clrYellow);
-            SetLabel("tbs2", r++, StringSubstr(bos.market_structure_label, 0, 96), clrSilver);
-            SetLabel("tbs3", r++, "TL " + (bos.trendline_type == BOS_TL_BULLISH ? "Bullish HL" : (bos.trendline_type == BOS_TL_BEARISH ? "Bearish LH" : "None")) +
-                     " str " + DoubleToString(bos.trendline_strength, 0) + " touches " + IntegerToString(bos.trendline_touches), clrWhite);
-            SetLabel("tbs4", r++, "Break " + bos.breakout_label + " | Retest " + bos.retest_label, clrSilver);
-            SetLabel("tbs5", r++, "SBR " + bos.sbr_label + " | RBS " + bos.rbs_label, clrSilver);
-            SetLabel("tbs6", r++, "ML success " + DoubleToString(bos.ml.prob_success, 0) + "% | Inst " + DoubleToString(bos.institutional_probability, 0) + "%", clrGold);
-            SetLabel("tbs7", r++, StringSubstr(bos.recommendation, 0, 96), clrAqua);
+            string tl = (bos.trendline_type == BOS_TL_BULLISH ? "Bullish HL" : (bos.trendline_type == BOS_TL_BEARISH ? "Bearish LH" : "Waiting"));
+            SetLabel("tbs1", r++, bos.breakout_type + " | " + bos.breakout_lifecycle + " | " + DoubleToString(bos.breakout_confidence, 0) + "%", clrYellow);
+            SetLabel("tbs2", r++, bos.current_structure + " (" + bos.structure_strength + ")", clrSilver);
+            SetLabel("tbs3", r++, "TL " + tl + " | Retest " + bos.retest_lifecycle, clrWhite);
+            SetLabel("tbs4", r++, "Event: " + StringSubstr(bos.current_event, 0, 72), clrAqua);
+            SetLabel("tbs5", r++, "Next: " + StringSubstr(bos.expected_next_event, 0, 72), clrSilver);
+            SetLabel("tbs6", r++, "Grade " + bos.grade_label + " " + DoubleToString(bos.confidence_score, 0) + "/100 | Valid " + (bos.breakout_valid ? "YES" : "NO"), clrGold);
+            SetLabel("tbs7", r++, StringSubstr(bos.ai_reasoning, 0, 96), clrSilver);
+           }
+        }
+
+      if(show_mse)
+        {
+         SetLabel("tms0", r++, "--- MARKET STATE ENGINE v2 (advisory) ---", clrAqua);
+         if(!mse.gold_symbol_valid && mse.disable_reason != "")
+            SetLabel("tms1", r++, StringSubstr(mse.disable_reason, 0, 96), clrOrange);
+         else
+           {
+            SetLabel("tms1", r++, mse.signal_lifecycle + " | Score " + DoubleToString(mse.confidence_score, 0) +
+                     " | Inst " + DoubleToString(mse.institutional_probability, 0) + "%", clrYellow);
+            SetLabel("tms2", r++, "Context: " + mse.market_context + " — " + StringSubstr(mse.context_reason, 0, 72), clrSilver);
+            SetLabel("tms3", r++, "BOS " + mse.bos_label + " | CHoCH " + mse.choch_label, clrWhite);
+            SetLabel("tms4", r++, "H-BO " + mse.horizontal_breakout + " | TL-BO " + mse.trendline_breakout, clrSilver);
+            SetLabel("tms5", r++, "Retest " + mse.retest_status + " | RBS " + mse.rbs_status + " | Liq " + mse.liquidity_status, clrSilver);
+            SetLabel("tms6", r++, "ML cont " + DoubleToString(mse.ml.trend_continuation_pct, 0) + "% | fail BO " +
+                     DoubleToString(mse.ml.failed_breakout_pct, 0) + "%", clrGold);
+            SetLabel("tms7", r++, StringSubstr(mse.what_is_happening, 0, 96), clrAqua);
            }
         }
 

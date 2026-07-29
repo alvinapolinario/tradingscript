@@ -43,6 +43,7 @@
 #include <VantageAI/VantageGoldSMC.mqh>
 #include <VantageAI/VantageLiquidityGrab.mqh>
 #include <VantageAI/VantageBreakoutStructure.mqh>
+#include <VantageAI/VantageMarketStateManager.mqh>
 
 //--- Explicit compile-time advisory guard (do not import Trade.mqh / CTrade)
 #ifdef __MQL5__
@@ -382,6 +383,33 @@ input bool   InpBosAlertEnable  = false;
 input int    InpBosAlertCool    = 300;
 input bool   InpBosDebug        = false;
 
+input group "AG. Market State Engine v2 — Core"
+input bool   InpMseEnable       = true;
+input bool   InpMseGoldOnly     = true;
+input string InpMseAliases      = "XAUUSD,GOLD";
+
+input group "AH. Market State — Timeframes"
+input ENUM_TIMEFRAMES InpMseTF_H4  = PERIOD_H4;
+input ENUM_TIMEFRAMES InpMseTF_H1  = PERIOD_H1;
+input ENUM_TIMEFRAMES InpMseTF_M15 = PERIOD_M15;
+input ENUM_TIMEFRAMES InpMseTF_M5  = PERIOD_M5;
+input ENUM_TIMEFRAMES InpMseTF_M1  = PERIOD_M1;
+
+input group "AI. Market State — Detection"
+input int    InpMseSwingLeft    = 3;
+input int    InpMseSwingRight   = 3;
+input double InpMseMinSwingAtr  = 0.15;
+input int    InpMseAtrPeriod    = 14;
+input double InpMseMinBosAtr    = 0.08;
+input double InpMseMinBodyPct   = 0.40;
+input int    InpMseMinTlTouch   = 3;
+input int    InpMseRetestBars   = 8;
+
+input group "AJ. Market State — HUD / Chart"
+input bool   InpMseShowDash     = true;
+input bool   InpMseChartObj     = true;
+input bool   InpMseDebug        = false;
+
 //+------------------------------------------------------------------+
 //| Globals                                                          |
 //+------------------------------------------------------------------+
@@ -401,6 +429,8 @@ CVantageLiquidityGrab g_liqgrab;
 VantageLiquidityGrabResult g_liqgrabsnap;
 CVantageBreakoutStructure g_breakout;
 VantageBosResult g_bossnap;
+CMarketStateManager g_marketstate;
+VantageMseResult g_msesnap;
 
 datetime g_last_closed_candle = 0;
 datetime g_last_request_candle = 0;
@@ -857,6 +887,8 @@ string BuildHeartbeatPayload(void)
       j += ",\"liquidity_grab\":" + g_liqgrab.ToJson(g_liqgrabsnap);
    if(g_bossnap.valid)
       j += ",\"breakout_structure\":" + g_breakout.ToJson(g_bossnap);
+   if(g_msesnap.valid)
+      j += ",\"market_state_engine\":" + g_marketstate.ToJson(g_msesnap);
    j += "}";
    return j;
   }
@@ -1132,6 +1164,41 @@ void MaybeEvalBreakoutStructure(const bool force)
       g_bossnap = r;
   }
 
+void FillMarketStateConfig(VantageMseConfig &cfg)
+  {
+   ZeroMemory(cfg);
+   cfg.enable = InpMseEnable;
+   cfg.gold_only = InpMseGoldOnly;
+   cfg.approved_aliases = InpMseAliases;
+   cfg.allow_suffix = true;
+   cfg.allow_prefix = true;
+   cfg.tf_h4 = InpMseTF_H4;
+   cfg.tf_h1 = InpMseTF_H1;
+   cfg.tf_m15 = InpMseTF_M15;
+   cfg.tf_m5 = InpMseTF_M5;
+   cfg.tf_m1 = InpMseTF_M1;
+   cfg.swing_left = InpMseSwingLeft;
+   cfg.swing_right = InpMseSwingRight;
+   cfg.min_swing_atr = InpMseMinSwingAtr;
+   cfg.atr_period = InpMseAtrPeriod;
+   cfg.min_bos_atr = InpMseMinBosAtr;
+   cfg.min_body_pct = InpMseMinBodyPct;
+   cfg.min_tl_touches = InpMseMinTlTouch;
+   cfg.tl_touch_atr = 0.15;
+   cfg.retest_max_bars = InpMseRetestBars;
+   cfg.retest_tol_atr = 0.25;
+   cfg.show_chart = InpMseChartObj;
+   cfg.show_dashboard = InpMseShowDash;
+   cfg.debug_log = InpMseDebug;
+  }
+
+void MaybeEvalMarketState(const bool force)
+  {
+   VantageMseResult r;
+   if(g_marketstate.Evaluate(force, r))
+      g_msesnap = r;
+  }
+
 void RefreshPlCalendar(const bool force)
   {
    // Rebuild when forced, when minute elapsed, or when requested month differs from loaded
@@ -1187,6 +1254,7 @@ void MaybeSendHeartbeat(void)
    MaybeEvalGoldSmc(false);
    MaybeEvalLiquidityGrab(false);
    MaybeEvalBreakoutStructure(false);
+   MaybeEvalMarketState(false);
 
    static int s_last_pending_logged = -1;
    if(g_pending.count != s_last_pending_logged)
@@ -1523,11 +1591,13 @@ void RefreshDashboard(void)
    MaybeEvalGoldSmc(false);
    MaybeEvalLiquidityGrab(false);
    MaybeEvalBreakoutStructure(false);
+   MaybeEvalMarketState(false);
    const bool show_gsm = InpGoldSmcShowDash &&
                          (InpGoldSmcEnable || InpGoldSmcShowWarn) &&
                          g_gsmsnap.valid;
    const bool show_lg = InpLiqGrabShowDash && InpLiqGrabEnable && g_liqgrabsnap.valid;
    const bool show_bos = InpBosShowDash && InpBosEnable && g_bossnap.valid;
+   const bool show_mse = InpMseShowDash && InpMseEnable && g_msesnap.valid;
    g_dash.Render(g_acct, g_spec, g_px, g_backend_status, g_candle_status, g_dec,
                  g_pos, g_risk, ts, age,
                  g_equity, g_floating_pl_pct, InpFloatProfitTargetPct, g_float_profit_target_hit,
@@ -1535,7 +1605,8 @@ void RefreshDashboard(void)
                  g_trade_stats, g_pbsnap, InpPbShowDash && InpPullbackEnable,
                  g_gsmsnap, show_gsm,
                  g_liqgrabsnap, show_lg,
-                 g_bossnap, show_bos);
+                 g_bossnap, show_bos,
+                 g_msesnap, show_mse);
   }
 
 //+------------------------------------------------------------------+
@@ -1630,6 +1701,16 @@ int OnInit()
          MaybeEvalBreakoutStructure(true);
      }
 
+   if(InpMseEnable)
+     {
+      VantageMseConfig mcfg;
+      FillMarketStateConfig(mcfg);
+      if(!g_marketstate.Init(_Symbol, mcfg))
+         Print("[VantageAI] Market State Engine v2 init failed.");
+      else
+         MaybeEvalMarketState(true);
+     }
+
    // Build chart-relative levels for BTC/etc. (AUTO) or gold manual map
    if(g_analysis.HasEnoughHistory(50))
       g_analysis.BuildSnapshot(g_tech);
@@ -1690,6 +1771,7 @@ void OnDeinit(const int reason)
    g_goldsmc.Release();
    g_liqgrab.Release();
    g_breakout.Release();
+   g_marketstate.Release();
    g_dash.Clear();
    Comment("");
    Print("[VantageAI] Stopped. reason=", reason);

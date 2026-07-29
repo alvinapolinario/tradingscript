@@ -370,6 +370,39 @@ def breakout_structure_status() -> dict:
     }
 
 
+@router.get("/api/v1/market-state/status")
+def market_state_status() -> dict:
+    """Institutional Market State Engine v2 — EA-computed lifecycle blob (passthrough; Gold-only)."""
+    st = monitor_store.status()
+    ea = st.get("vantage_ea") or {}
+    link = st.get("link_health") or {}
+    blob = ea.get("market_state_engine")
+    selected = str(st.get("selected_symbol") or ea.get("symbol") or "").upper()
+    return {
+        "advisory_only": True,
+        "caption": "Advisory only — never places, modifies, or cancels MT5 orders. Gold / XAUUSD only.",
+        "ea_online": bool(link.get("ea_online") or ea.get("connected")),
+        "market_state_engine_supported": bool(ea.get("market_state_engine_supported")),
+        "selected_symbol": selected,
+        "symbol": str(ea.get("symbol") or selected).upper(),
+        "available_symbols": list(st.get("available_symbols") or []),
+        "symbols": list(st.get("symbols") or []),
+        "digits": int(ea.get("digits") or 5) or 5,
+        "bid": ea.get("bid"),
+        "ask": ea.get("ask"),
+        "market_state_engine": blob,
+        "links": {
+            "market_state": "/market-state",
+            "breakout_structure": "/breakout-structure",
+            "liquidity_grab": "/liquidity-grab",
+            "gold_smc": "/gold-smc",
+            "pullback": "/pullback",
+            "analyzer": "/analyzer",
+            "monitor": "/monitor",
+        },
+    }
+
+
 @router.get("/api/v1/signals")
 def list_accepted_signals(
     limit: int = Query(default=50, ge=1, le=200),

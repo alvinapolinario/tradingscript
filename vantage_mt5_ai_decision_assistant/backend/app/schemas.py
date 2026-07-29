@@ -345,6 +345,8 @@ class HeartbeatRequest(BaseModel):
     liquidity_grab: Optional[dict[str, Any]] = None
     # Breakout Structure Intelligence blob (advisory; Gold-only)
     breakout_structure: Optional[dict[str, Any]] = None
+    # Institutional Market State Engine v2 blob (advisory; Gold-only)
+    market_state_engine: Optional[dict[str, Any]] = None
     # EA risk thresholds (optional; also may arrive via analyze extra)
     max_position_risk_pct: Optional[float] = None
 
