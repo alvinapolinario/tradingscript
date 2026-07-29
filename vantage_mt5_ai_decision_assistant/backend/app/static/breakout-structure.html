@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Breakout Structure · Vantage</title>
+  <link rel="stylesheet" href="/static/shell.css" />
+  <style>
+    :root {
+      --bg: #0c1018; --panel: #141a26; --line: #2a3344; --text: #e8eef8;
+      --muted: #8a96aa; --accent: #7eb8ff; --warn: #e8c547; --good: #3dd68c;
+      --mono: "Cascadia Code", Consolas, ui-monospace, monospace;
+    }
+    body { margin: 0; font-family: "Segoe UI", system-ui, sans-serif; color: var(--text); background: var(--bg); min-height: 100vh; }
+    header { padding: .85rem 1.25rem; border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; align-items: center; }
+    header h1 { margin: 0; font-size: 1.05rem; }
+    .sub { color: var(--muted); font-size: .78rem; margin-top: .2rem; }
+    main { max-width: 980px; margin: 0 auto; padding: 1rem 1.1rem 2.5rem; }
+    .card { background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 1rem 1.1rem; margin-bottom: .85rem; }
+    .grade { font-size: 1.4rem; font-weight: 800; color: var(--accent); }
+    .grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: .55rem; margin-top: .75rem; }
+    .k { font-size: .68rem; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }
+    .v { font-family: var(--mono); font-size: .92rem; font-weight: 650; margin-top: .2rem; }
+    .empty { border: 1px dashed var(--line); border-radius: 14px; padding: 1.5rem; color: var(--muted); text-align: center; }
+    @media (max-width: 700px) { .grid { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body data-nav="breakout-structure">
+  <header>
+    <div>
+      <h1>Breakout Structure Intelligence</h1>
+      <div class="sub">XAUUSD / Gold only · swings · trendlines · BOS · retest · SBR/RBS · explainable ML score</div>
+    </div>
+    <span id="pill" style="font-size:.78rem;color:var(--muted)">—</span>
+  </header>
+  <main id="main"><div class="empty">Loading…</div></main>
+  <script src="/static/shell.js"></script>
+  <script>
+    function render(p) {
+      const root = document.getElementById("main");
+      const b = p.breakout_structure;
+      if (!p.ea_online) {
+        root.innerHTML = `<div class="empty">EA offline — attach Vantage EA on XAUUSD.</div>`;
+        return;
+      }
+      if (!p.breakout_structure_supported || !b) {
+        root.innerHTML = `<div class="empty">EA not sending <b>breakout_structure</b>. Recompile with groups AA–AF enabled.</div>`;
+        return;
+      }
+      if (!b.gold_symbol_valid) {
+        root.innerHTML = `<div class="empty">${b.disable_reason || "Gold only."}</div>`;
+        return;
+      }
+      document.getElementById("pill").textContent = b.signal_grade || "—";
+      root.innerHTML = `
+        <div class="card">
+          <div class="k">Signal grade</div>
+          <div class="grade">${b.signal_grade || "Reject"} · ${Math.round(b.confidence_score || 0)}/100</div>
+          <div class="grid">
+            <div><div class="k">Market structure</div><div class="v">${b.market_structure || "—"}</div></div>
+            <div><div class="k">BOS / CHoCH</div><div class="v">${b.bos_class || "—"} ${b.latest_choch_event ? "· " + b.latest_choch_event : ""}</div></div>
+            <div><div class="k">Trendline</div><div class="v">${b.trendline_type || "None"} · strength ${b.trendline_strength ?? "—"} · ${b.trendline_touches ?? 0} touches</div></div>
+            <div><div class="k">Breakout</div><div class="v">${b.breakout_status || "None"}</div></div>
+            <div><div class="k">Retest</div><div class="v">${b.retest_status || "None"}</div></div>
+            <div><div class="k">SBR / RBS</div><div class="v">${b.sbr_status || "None"} / ${b.rbs_status || "None"}</div></div>
+            <div><div class="k">ML success</div><div class="v">${b.ml_prob_success ?? "—"}%</div></div>
+            <div><div class="k">Institutional prob.</div><div class="v">${b.institutional_probability ?? "—"}%</div></div>
+          </div>
+          <p style="color:var(--muted);font-size:.82rem;margin-top:1rem;line-height:1.5">${b.recommendation || ""}. ${b.score_breakdown || ""}</p>
+          <p style="color:var(--muted);font-size:.78rem">Advisory structural analysis — not a trade signal.</p>
+        </div>`;
+    }
+    async function tick() {
+      try { render(await (await fetch("/api/v1/breakout-structure/status")).json()); }
+      catch { document.getElementById("main").innerHTML = `<div class="empty">Failed to load status</div>`; }
+    }
+    tick(); setInterval(tick, 5000);
+  </script>
+</body>
+</html>

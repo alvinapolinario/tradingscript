@@ -9,8 +9,10 @@
 #include "VantageAccount.mqh"
 #include "VantageDecision.mqh"
 #include "VantageHistory.mqh"
+#include "VantagePullback.mqh"
 #include "VantageGoldSMC.mqh"
 #include "VantageLiquidityGrab.mqh"
+#include "VantageBreakoutStructure.mqh"
 
 class CVantageDashboard
   {
@@ -75,7 +77,9 @@ public:
                const VantageGoldSMCResult &gsm,
                const bool show_gold_smc,
                const VantageLiquidityGrabResult &lg,
-               const bool show_liq_grab)
+               const bool show_liq_grab,
+               const VantageBosResult &bos,
+               const bool show_breakout)
      {
       int r = 0;
       color riskCol = clrSilver;
@@ -256,6 +260,24 @@ public:
             SetLabel("tlg5", r++, StringSubstr(lg.action_guidance, 0, 96), clrGold);
             if(lg.news_restricted)
                SetLabel("tlg6", r++, "NEWS_RESTRICTED — reduced confidence", clrOrange);
+           }
+        }
+
+      if(show_breakout)
+        {
+         SetLabel("tbs0", r++, "--- BREAKOUT STRUCTURE (advisory) ---", clrAqua);
+         if(!bos.gold_symbol_valid && bos.disable_reason != "")
+            SetLabel("tbs1", r++, StringSubstr(bos.disable_reason, 0, 96), clrOrange);
+         else
+           {
+            SetLabel("tbs1", r++, "Grade " + bos.grade_label + " | Score " + DoubleToString(bos.confidence_score, 0), clrYellow);
+            SetLabel("tbs2", r++, StringSubstr(bos.market_structure_label, 0, 96), clrSilver);
+            SetLabel("tbs3", r++, "TL " + (bos.trendline_type == BOS_TL_BULLISH ? "Bullish HL" : (bos.trendline_type == BOS_TL_BEARISH ? "Bearish LH" : "None")) +
+                     " str " + DoubleToString(bos.trendline_strength, 0) + " touches " + IntegerToString(bos.trendline_touches), clrWhite);
+            SetLabel("tbs4", r++, "Break " + bos.breakout_label + " | Retest " + bos.retest_label, clrSilver);
+            SetLabel("tbs5", r++, "SBR " + bos.sbr_label + " | RBS " + bos.rbs_label, clrSilver);
+            SetLabel("tbs6", r++, "ML success " + DoubleToString(bos.ml.prob_success, 0) + "% | Inst " + DoubleToString(bos.institutional_probability, 0) + "%", clrGold);
+            SetLabel("tbs7", r++, StringSubstr(bos.recommendation, 0, 96), clrAqua);
            }
         }
 

@@ -343,6 +343,8 @@ class HeartbeatRequest(BaseModel):
     gold_smc: Optional[dict[str, Any]] = None
     # Liquidity Grab Detection blob (advisory; Gold-only)
     liquidity_grab: Optional[dict[str, Any]] = None
+    # Breakout Structure Intelligence blob (advisory; Gold-only)
+    breakout_structure: Optional[dict[str, Any]] = None
     # EA risk thresholds (optional; also may arrive via analyze extra)
     max_position_risk_pct: Optional[float] = None
 

@@ -338,6 +338,38 @@ def liquidity_grab_status() -> dict:
     }
 
 
+@router.get("/api/v1/breakout-structure/status")
+def breakout_structure_status() -> dict:
+    """Breakout Structure Intelligence — EA-computed advisory blob (passthrough; Gold-only)."""
+    st = monitor_store.status()
+    ea = st.get("vantage_ea") or {}
+    link = st.get("link_health") or {}
+    blob = ea.get("breakout_structure")
+    selected = str(st.get("selected_symbol") or ea.get("symbol") or "").upper()
+    return {
+        "advisory_only": True,
+        "caption": "Advisory only — never places, modifies, or cancels MT5 orders. Gold / XAUUSD only.",
+        "ea_online": bool(link.get("ea_online") or ea.get("connected")),
+        "breakout_structure_supported": bool(ea.get("breakout_structure_supported")),
+        "selected_symbol": selected,
+        "symbol": str(ea.get("symbol") or selected).upper(),
+        "available_symbols": list(st.get("available_symbols") or []),
+        "symbols": list(st.get("symbols") or []),
+        "digits": int(ea.get("digits") or 5) or 5,
+        "bid": ea.get("bid"),
+        "ask": ea.get("ask"),
+        "breakout_structure": blob,
+        "links": {
+            "breakout_structure": "/breakout-structure",
+            "liquidity_grab": "/liquidity-grab",
+            "gold_smc": "/gold-smc",
+            "pullback": "/pullback",
+            "analyzer": "/analyzer",
+            "monitor": "/monitor",
+        },
+    }
+
+
 @router.get("/api/v1/signals")
 def list_accepted_signals(
     limit: int = Query(default=50, ge=1, le=200),

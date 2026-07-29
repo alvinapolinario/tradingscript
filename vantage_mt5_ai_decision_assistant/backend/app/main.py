@@ -145,6 +145,15 @@ def liquidity_grab_page():
     return FileResponse(page)
 
 
+@app.get("/breakout-structure")
+def breakout_structure_page():
+    """Breakout Structure Intelligence desk — advisory only, XAUUSD/Gold."""
+    page = STATIC_DIR / "breakout-structure.html"
+    if not page.exists():
+        return {"error": "breakout-structure.html missing", "path": str(page)}
+    return FileResponse(page)
+
+
 @app.get("/analyzer")
 def analyzer_page():
     """Smart Analyzer — advisory decision desk (Take/Ignore, no orders)."""

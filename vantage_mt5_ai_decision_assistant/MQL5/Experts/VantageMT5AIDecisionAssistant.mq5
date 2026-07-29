@@ -42,6 +42,7 @@
 #include <VantageAI/VantagePullback.mqh>
 #include <VantageAI/VantageGoldSMC.mqh>
 #include <VantageAI/VantageLiquidityGrab.mqh>
+#include <VantageAI/VantageBreakoutStructure.mqh>
 
 //--- Explicit compile-time advisory guard (do not import Trade.mqh / CTrade)
 #ifdef __MQL5__
@@ -332,6 +333,55 @@ input bool   InpLiqGrabAlertSound  = false;
 input int    InpLiqGrabAlertCool   = 300;
 input bool   InpLiqGrabDebug       = false;
 
+input group "AA. Breakout Structure — Core"
+input bool   InpBosEnable          = true;
+input bool   InpBosGoldOnly        = true;
+input string InpBosAliases         = "XAUUSD,GOLD";
+input bool   InpBosAllowSuffix     = true;
+input bool   InpBosAllowPrefix     = true;
+
+input group "AB. Breakout Structure — Timeframes"
+input ENUM_TIMEFRAMES InpBosTF_H4  = PERIOD_H4;
+input ENUM_TIMEFRAMES InpBosTF_H1  = PERIOD_H1;
+input ENUM_TIMEFRAMES InpBosTF_M15 = PERIOD_M15;
+input ENUM_TIMEFRAMES InpBosTF_M5  = PERIOD_M5;
+input ENUM_TIMEFRAMES InpBosTF_M1  = PERIOD_M1;
+
+input group "AC. Breakout Structure — Swings / BOS"
+input int    InpBosSwingLeft       = 3;
+input int    InpBosSwingRight      = 3;
+input double InpBosMinSwingStr     = 20.0;
+input int    InpBosAtrPeriod       = 14;
+input double InpBosMinBosAtr       = 0.08;
+input double InpBosMinBodyPct      = 0.45;
+
+input group "AD. Breakout Structure — Trendline / Break / Retest"
+input double InpBosMinBreakAtr    = 0.05;
+input double InpBosMinBreakBody   = 0.40;
+input int    InpBosMinTlTouches   = 3;
+input double InpBosTlTouchAtr     = 0.12;
+input int    InpBosRetestBars     = 8;
+input double InpBosRetestTolAtr   = 0.15;
+
+input group "AE. Breakout Structure — Scoring"
+input double InpBosWStructure   = 20.0;
+input double InpBosWTrendline   = 15.0;
+input double InpBosWBreakout    = 15.0;
+input double InpBosWRetest      = 15.0;
+input double InpBosWFlip        = 10.0;
+input double InpBosWLiquidity   = 10.0;
+input double InpBosWFvg         = 5.0;
+input double InpBosWOb          = 5.0;
+input double InpBosWHtf         = 5.0;
+input double InpBosRejectThresh = 75.0;
+
+input group "AF. Breakout Structure — Chart / HUD"
+input bool   InpBosShowDash     = true;
+input bool   InpBosChartObj     = true;
+input bool   InpBosAlertEnable  = false;
+input int    InpBosAlertCool    = 300;
+input bool   InpBosDebug        = false;
+
 //+------------------------------------------------------------------+
 //| Globals                                                          |
 //+------------------------------------------------------------------+
@@ -349,6 +399,8 @@ CVantageGoldSMC      g_goldsmc;
 VantageGoldSMCResult g_gsmsnap;
 CVantageLiquidityGrab g_liqgrab;
 VantageLiquidityGrabResult g_liqgrabsnap;
+CVantageBreakoutStructure g_breakout;
+VantageBosResult g_bossnap;
 
 datetime g_last_closed_candle = 0;
 datetime g_last_request_candle = 0;
@@ -803,6 +855,8 @@ string BuildHeartbeatPayload(void)
       j += ",\"gold_smc\":" + g_goldsmc.ToJson(g_gsmsnap);
    if(g_liqgrabsnap.valid)
       j += ",\"liquidity_grab\":" + g_liqgrab.ToJson(g_liqgrabsnap);
+   if(g_bossnap.valid)
+      j += ",\"breakout_structure\":" + g_breakout.ToJson(g_bossnap);
    j += "}";
    return j;
   }
@@ -1027,6 +1081,57 @@ void MaybeEvalLiquidityGrab(const bool force)
       g_liqgrabsnap = r;
   }
 
+void FillBreakoutStructureConfig(VantageBosConfig &cfg)
+  {
+   ZeroMemory(cfg);
+   cfg.enable = InpBosEnable;
+   cfg.gold_only = InpBosGoldOnly;
+   cfg.approved_aliases = InpBosAliases;
+   cfg.allow_broker_suffix = InpBosAllowSuffix;
+   cfg.allow_broker_prefix = InpBosAllowPrefix;
+   cfg.tf_primary_h4 = InpBosTF_H4;
+   cfg.tf_primary_h1 = InpBosTF_H1;
+   cfg.tf_primary_m15 = InpBosTF_M15;
+   cfg.tf_entry_m5 = InpBosTF_M5;
+   cfg.tf_entry_m1 = InpBosTF_M1;
+   cfg.swing_left = InpBosSwingLeft;
+   cfg.swing_right = InpBosSwingRight;
+   cfg.min_swing_strength = InpBosMinSwingStr;
+   cfg.atr_period = InpBosAtrPeriod;
+   cfg.min_bos_atr = InpBosMinBosAtr;
+   cfg.min_body_pct = InpBosMinBodyPct;
+   cfg.min_break_atr = InpBosMinBreakAtr;
+   cfg.min_body_break_pct = InpBosMinBreakBody;
+   cfg.min_tl_touches = InpBosMinTlTouches;
+   cfg.tl_touch_atr = InpBosTlTouchAtr;
+   cfg.min_tl_strength = 40.0;
+   cfg.retest_max_bars = InpBosRetestBars;
+   cfg.retest_tolerance_atr = InpBosRetestTolAtr;
+   cfg.w_structure = InpBosWStructure;
+   cfg.w_trendline = InpBosWTrendline;
+   cfg.w_breakout = InpBosWBreakout;
+   cfg.w_retest = InpBosWRetest;
+   cfg.w_flip = InpBosWFlip;
+   cfg.w_liquidity = InpBosWLiquidity;
+   cfg.w_fvg = InpBosWFvg;
+   cfg.w_ob = InpBosWOb;
+   cfg.w_htf = InpBosWHtf;
+   cfg.w_session = 5.0;
+   cfg.reject_threshold = InpBosRejectThresh;
+   cfg.show_chart = InpBosChartObj;
+   cfg.show_dashboard = InpBosShowDash;
+   cfg.alert_enable = InpBosAlertEnable;
+   cfg.alert_cooldown_sec = InpBosAlertCool;
+   cfg.debug_log = InpBosDebug;
+  }
+
+void MaybeEvalBreakoutStructure(const bool force)
+  {
+   VantageBosResult r;
+   if(g_breakout.Evaluate(force, r))
+      g_bossnap = r;
+  }
+
 void RefreshPlCalendar(const bool force)
   {
    // Rebuild when forced, when minute elapsed, or when requested month differs from loaded
@@ -1081,6 +1186,7 @@ void MaybeSendHeartbeat(void)
    MaybeEvalPullback(false);
    MaybeEvalGoldSmc(false);
    MaybeEvalLiquidityGrab(false);
+   MaybeEvalBreakoutStructure(false);
 
    static int s_last_pending_logged = -1;
    if(g_pending.count != s_last_pending_logged)
@@ -1416,17 +1522,20 @@ void RefreshDashboard(void)
    MaybeEvalPullback(false);
    MaybeEvalGoldSmc(false);
    MaybeEvalLiquidityGrab(false);
+   MaybeEvalBreakoutStructure(false);
    const bool show_gsm = InpGoldSmcShowDash &&
                          (InpGoldSmcEnable || InpGoldSmcShowWarn) &&
                          g_gsmsnap.valid;
    const bool show_lg = InpLiqGrabShowDash && InpLiqGrabEnable && g_liqgrabsnap.valid;
+   const bool show_bos = InpBosShowDash && InpBosEnable && g_bossnap.valid;
    g_dash.Render(g_acct, g_spec, g_px, g_backend_status, g_candle_status, g_dec,
                  g_pos, g_risk, ts, age,
                  g_equity, g_floating_pl_pct, InpFloatProfitTargetPct, g_float_profit_target_hit,
                  g_pl_cal.year, g_pl_cal.month, g_pl_cal.month_pl, g_pl_cal.month_pct, g_pl_cal.month_deals,
                  g_trade_stats, g_pbsnap, InpPbShowDash && InpPullbackEnable,
                  g_gsmsnap, show_gsm,
-                 g_liqgrabsnap, show_lg);
+                 g_liqgrabsnap, show_lg,
+                 g_bossnap, show_bos);
   }
 
 //+------------------------------------------------------------------+
@@ -1511,6 +1620,16 @@ int OnInit()
          MaybeEvalLiquidityGrab(true);
      }
 
+   if(InpBosEnable)
+     {
+      VantageBosConfig bcfg;
+      FillBreakoutStructureConfig(bcfg);
+      if(!g_breakout.Init(_Symbol, bcfg))
+         Print("[VantageAI] Breakout Structure Engine init failed.");
+      else
+         MaybeEvalBreakoutStructure(true);
+     }
+
    // Build chart-relative levels for BTC/etc. (AUTO) or gold manual map
    if(g_analysis.HasEnoughHistory(50))
       g_analysis.BuildSnapshot(g_tech);
@@ -1570,6 +1689,7 @@ void OnDeinit(const int reason)
    g_pullback.Release();
    g_goldsmc.Release();
    g_liqgrab.Release();
+   g_breakout.Release();
    g_dash.Clear();
    Comment("");
    Print("[VantageAI] Stopped. reason=", reason);

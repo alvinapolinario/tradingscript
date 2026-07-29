@@ -108,6 +108,8 @@ class EaSnapshot:
     gold_smc_supported: bool = False
     liquidity_grab: dict | None = None
     liquidity_grab_supported: bool = False
+    breakout_structure: dict | None = None
+    breakout_structure_supported: bool = False
     max_position_risk_pct: float | None = None
 
 
@@ -227,6 +229,9 @@ def _apply_heartbeat_fields(ea: EaSnapshot, payload: dict[str, Any]) -> None:
     if isinstance(payload.get("liquidity_grab"), dict):
         ea.liquidity_grab = payload["liquidity_grab"]
         ea.liquidity_grab_supported = True
+    if isinstance(payload.get("breakout_structure"), dict):
+        ea.breakout_structure = payload["breakout_structure"]
+        ea.breakout_structure_supported = True
 
 
 class MonitorStore:
@@ -550,6 +555,8 @@ class MonitorStore:
             "gold_smc_supported": ea.gold_smc_supported,
             "liquidity_grab": ea.liquidity_grab,
             "liquidity_grab_supported": ea.liquidity_grab_supported,
+            "breakout_structure": ea.breakout_structure,
+            "breakout_structure_supported": ea.breakout_structure_supported,
             "server_year": ea.server_year,
             "server_month": ea.server_month,
             "calendar_request": calendar_request,
