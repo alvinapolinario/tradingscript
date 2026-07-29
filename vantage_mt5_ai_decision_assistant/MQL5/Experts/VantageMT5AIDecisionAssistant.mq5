@@ -41,6 +41,7 @@
 #include <VantageAI/VantageM5Desk.mqh>
 #include <VantageAI/VantagePullback.mqh>
 #include <VantageAI/VantageGoldSMC.mqh>
+#include <VantageAI/VantageLiquidityGrab.mqh>
 
 //--- Explicit compile-time advisory guard (do not import Trade.mqh / CTrade)
 #ifdef __MQL5__
@@ -258,6 +259,79 @@ input double InpGoldSmcAlertScore  = 75.0;   // Min score for confidence alert
 input double InpGoldSmcAlertSpread = 120.0;  // Wide-spread alert (points)
 input bool   InpGoldSmcDebug       = false;  // Verbose [GoldSMC][*] logs (Phase 8)
 
+input group "U. Liquidity Grab Monitor — Core"
+input bool   InpLiqGrabEnable      = true;   // Enable Liquidity Grab Detection
+input bool   InpLiqGrabGoldOnly    = true;   // Gold / XAUUSD only
+input string InpLiqGrabAliases     = "XAUUSD,GOLD";
+input bool   InpLiqGrabAllowSuffix = true;
+input bool   InpLiqGrabAllowPrefix = true;
+input ENUM_TIMEFRAMES InpLiqGrabTFDetect = PERIOD_M5;
+input ENUM_TIMEFRAMES InpLiqGrabTFConfirm = PERIOD_M5;
+input ENUM_TIMEFRAMES InpLiqGrabTFConfirm2 = PERIOD_M15;
+input ENUM_TIMEFRAMES InpLiqGrabTFContext = PERIOD_H1;
+input ENUM_TIMEFRAMES InpLiqGrabTFMajor = PERIOD_H4;
+
+input group "V. Liquidity Grab — Swings / ATR / Sweep"
+input int    InpLiqGrabSwingLeft   = 3;
+input int    InpLiqGrabSwingRight  = 3;
+input int    InpLiqGrabAtrPeriod   = 14;
+input double InpLiqGrabMinSweepAtr = 0.03;
+input double InpLiqGrabMaxSweepAtr = 0.50;
+input double InpLiqGrabSpreadMult  = 2.0;
+input double InpLiqGrabEqualAtr    = 0.08;
+input double InpLiqGrabApproachAtr = 0.35;
+input double InpLiqGrabDispBodyAtr = 0.45;
+input double InpLiqGrabStrongDisp  = 0.75;
+
+input group "W. Liquidity Grab — Rejection / MSS"
+input double InpLiqGrabMinWick     = 0.35;
+input double InpLiqGrabWickBody    = 1.25;
+input bool   InpLiqGrabCloseInside = true;
+input int    InpLiqGrabRejectBars  = 1;
+input bool   InpLiqGrabRequireMss  = true;
+input bool   InpLiqGrabCloseMss    = true;
+input int    InpLiqGrabMssBars      = 1;
+input bool   InpLiqGrabInternalMss = true;
+input int    InpLiqGrabConfirmWin  = 5;
+
+input group "X. Liquidity Grab — Levels / Sessions"
+input bool   InpLiqGrabPdLevels    = true;
+input bool   InpLiqGrabPwLevels    = true;
+input bool   InpLiqGrabSessions    = true;
+input bool   InpLiqGrabSwings      = true;
+input bool   InpLiqGrabEqual       = true;
+input double InpLiqGrabMinStrength = 5.0;
+input int    InpLiqGrabUtcOffset   = 0;
+input int    InpLiqGrabAsianStart  = 0;
+input int    InpLiqGrabAsianEnd    = 8;
+input int    InpLiqGrabLondonStart = 7;
+input int    InpLiqGrabLondonEnd   = 16;
+input int    InpLiqGrabNyStart     = 12;
+input int    InpLiqGrabNyEnd       = 21;
+input bool   InpLiqGrabSessConf    = true;
+
+input group "Y. Liquidity Grab — Score / News / Volume"
+input bool   InpLiqGrabTickVol     = true;
+input int    InpLiqGrabVolPeriod   = 20;
+input double InpLiqGrabElevVol     = 1.35;
+input double InpLiqGrabConfThresh  = 70.0;
+input double InpLiqGrabHighConf    = 85.0;
+input double InpLiqGrabCtPenalty   = 10.0;
+input double InpLiqGrabNewsPenalty = 10.0;
+input int    InpLiqGrabNewsBefore  = 15;
+input int    InpLiqGrabNewsAfter   = 15;
+
+input group "Z. Liquidity Grab — Chart / Alerts / HUD"
+input bool   InpLiqGrabShowDash    = true;
+input bool   InpLiqGrabChartObj    = true;
+input int    InpLiqGrabChartBars   = 80;
+input bool   InpLiqGrabAlertEnable = false;
+input bool   InpLiqGrabAlertPopup  = false;
+input bool   InpLiqGrabAlertPush   = false;
+input bool   InpLiqGrabAlertSound  = false;
+input int    InpLiqGrabAlertCool   = 300;
+input bool   InpLiqGrabDebug       = false;
+
 //+------------------------------------------------------------------+
 //| Globals                                                          |
 //+------------------------------------------------------------------+
@@ -273,6 +347,8 @@ CVantagePullback     g_pullback;
 VantagePullbackResult g_pbsnap;
 CVantageGoldSMC      g_goldsmc;
 VantageGoldSMCResult g_gsmsnap;
+CVantageLiquidityGrab g_liqgrab;
+VantageLiquidityGrabResult g_liqgrabsnap;
 
 datetime g_last_closed_candle = 0;
 datetime g_last_request_candle = 0;
@@ -725,6 +801,8 @@ string BuildHeartbeatPayload(void)
       j += ",\"pullback\":" + g_pullback.ToJson(g_pbsnap);
    if(g_gsmsnap.valid)
       j += ",\"gold_smc\":" + g_goldsmc.ToJson(g_gsmsnap);
+   if(g_liqgrabsnap.valid)
+      j += ",\"liquidity_grab\":" + g_liqgrab.ToJson(g_liqgrabsnap);
    j += "}";
    return j;
   }
@@ -876,6 +954,79 @@ void MaybeEvalGoldSmc(const bool force)
       g_gsmsnap = r;
   }
 
+void FillLiquidityGrabConfig(VantageLiquidityGrabConfig &cfg)
+  {
+   ZeroMemory(cfg);
+   cfg.enable = InpLiqGrabEnable;
+   cfg.gold_only = InpLiqGrabGoldOnly;
+   cfg.approved_aliases = InpLiqGrabAliases;
+   cfg.allow_broker_suffix = InpLiqGrabAllowSuffix;
+   cfg.allow_broker_prefix = InpLiqGrabAllowPrefix;
+   cfg.tf_detect = InpLiqGrabTFDetect;
+   cfg.tf_confirm = InpLiqGrabTFConfirm;
+   cfg.tf_confirm2 = InpLiqGrabTFConfirm2;
+   cfg.tf_context = InpLiqGrabTFContext;
+   cfg.tf_major = InpLiqGrabTFMajor;
+   cfg.swing_left = InpLiqGrabSwingLeft;
+   cfg.swing_right = InpLiqGrabSwingRight;
+   cfg.atr_period = InpLiqGrabAtrPeriod;
+   cfg.min_sweep_atr = InpLiqGrabMinSweepAtr;
+   cfg.max_sweep_atr = InpLiqGrabMaxSweepAtr;
+   cfg.spread_mult = InpLiqGrabSpreadMult;
+   cfg.equal_level_atr_mult = InpLiqGrabEqualAtr;
+   cfg.approach_atr = InpLiqGrabApproachAtr;
+   cfg.disp_body_atr = InpLiqGrabDispBodyAtr;
+   cfg.strong_disp_atr = InpLiqGrabStrongDisp;
+   cfg.min_wick_ratio = InpLiqGrabMinWick;
+   cfg.min_wick_body_ratio = InpLiqGrabWickBody;
+   cfg.require_close_back = InpLiqGrabCloseInside;
+   cfg.rejection_confirm_bars = InpLiqGrabRejectBars;
+   cfg.require_mss = InpLiqGrabRequireMss;
+   cfg.require_close_mss = InpLiqGrabCloseMss;
+   cfg.mss_confirm_bars = InpLiqGrabMssBars;
+   cfg.allow_internal_mss = InpLiqGrabInternalMss;
+   cfg.enable_pdh_pdl = InpLiqGrabPdLevels;
+   cfg.enable_pwh_pwl = InpLiqGrabPwLevels;
+   cfg.enable_session = InpLiqGrabSessions;
+   cfg.enable_swing = InpLiqGrabSwings;
+   cfg.enable_equal = InpLiqGrabEqual;
+   cfg.min_level_strength = InpLiqGrabMinStrength;
+   cfg.server_utc_offset_hours = InpLiqGrabUtcOffset;
+   cfg.asian_start_utc = InpLiqGrabAsianStart;
+   cfg.asian_end_utc = InpLiqGrabAsianEnd;
+   cfg.london_start_utc = InpLiqGrabLondonStart;
+   cfg.london_end_utc = InpLiqGrabLondonEnd;
+   cfg.ny_start_utc = InpLiqGrabNyStart;
+   cfg.ny_end_utc = InpLiqGrabNyEnd;
+   cfg.session_confluence = InpLiqGrabSessConf;
+   cfg.enable_tick_volume = InpLiqGrabTickVol;
+   cfg.volume_avg_period = InpLiqGrabVolPeriod;
+   cfg.elevated_volume_ratio = InpLiqGrabElevVol;
+   cfg.confirmed_threshold = InpLiqGrabConfThresh;
+   cfg.high_conf_threshold = InpLiqGrabHighConf;
+   cfg.countertrend_penalty = InpLiqGrabCtPenalty;
+   cfg.news_penalty = InpLiqGrabNewsPenalty;
+   cfg.news_before_min = InpLiqGrabNewsBefore;
+   cfg.news_after_min = InpLiqGrabNewsAfter;
+   cfg.confirm_window_bars = InpLiqGrabConfirmWin;
+   cfg.alert_enable = InpLiqGrabAlertEnable;
+   cfg.alert_popup = InpLiqGrabAlertPopup;
+   cfg.alert_push = InpLiqGrabAlertPush && !g_replay_mode;
+   cfg.alert_sound = InpLiqGrabAlertSound;
+   cfg.alert_cooldown_sec = InpLiqGrabAlertCool;
+   cfg.show_chart_objects = InpLiqGrabChartObj;
+   cfg.show_dashboard = InpLiqGrabShowDash;
+   cfg.chart_retention_bars = InpLiqGrabChartBars;
+   cfg.debug_log = InpLiqGrabDebug;
+  }
+
+void MaybeEvalLiquidityGrab(const bool force)
+  {
+   VantageLiquidityGrabResult r;
+   if(g_liqgrab.Evaluate(force, r))
+      g_liqgrabsnap = r;
+  }
+
 void RefreshPlCalendar(const bool force)
   {
    // Rebuild when forced, when minute elapsed, or when requested month differs from loaded
@@ -929,6 +1080,7 @@ void MaybeSendHeartbeat(void)
       g_m5snap.valid = false;
    MaybeEvalPullback(false);
    MaybeEvalGoldSmc(false);
+   MaybeEvalLiquidityGrab(false);
 
    static int s_last_pending_logged = -1;
    if(g_pending.count != s_last_pending_logged)
@@ -1263,15 +1415,18 @@ void RefreshDashboard(void)
 
    MaybeEvalPullback(false);
    MaybeEvalGoldSmc(false);
+   MaybeEvalLiquidityGrab(false);
    const bool show_gsm = InpGoldSmcShowDash &&
                          (InpGoldSmcEnable || InpGoldSmcShowWarn) &&
                          g_gsmsnap.valid;
+   const bool show_lg = InpLiqGrabShowDash && InpLiqGrabEnable && g_liqgrabsnap.valid;
    g_dash.Render(g_acct, g_spec, g_px, g_backend_status, g_candle_status, g_dec,
                  g_pos, g_risk, ts, age,
                  g_equity, g_floating_pl_pct, InpFloatProfitTargetPct, g_float_profit_target_hit,
                  g_pl_cal.year, g_pl_cal.month, g_pl_cal.month_pl, g_pl_cal.month_pct, g_pl_cal.month_deals,
                  g_trade_stats, g_pbsnap, InpPbShowDash && InpPullbackEnable,
-                 g_gsmsnap, show_gsm);
+                 g_gsmsnap, show_gsm,
+                 g_liqgrabsnap, show_lg);
   }
 
 //+------------------------------------------------------------------+
@@ -1346,6 +1501,16 @@ int OnInit()
        MaybeEvalGoldSmc(true);
    }
 
+   if(InpLiqGrabEnable)
+     {
+      VantageLiquidityGrabConfig lcfg;
+      FillLiquidityGrabConfig(lcfg);
+      if(!g_liqgrab.Init(_Symbol, lcfg))
+         Print("[VantageAI] Liquidity Grab Monitor init failed.");
+      else
+         MaybeEvalLiquidityGrab(true);
+     }
+
    // Build chart-relative levels for BTC/etc. (AUTO) or gold manual map
    if(g_analysis.HasEnoughHistory(50))
       g_analysis.BuildSnapshot(g_tech);
@@ -1404,6 +1569,7 @@ void OnDeinit(const int reason)
    g_m5desk.Release();
    g_pullback.Release();
    g_goldsmc.Release();
+   g_liqgrab.Release();
    g_dash.Clear();
    Comment("");
    Print("[VantageAI] Stopped. reason=", reason);

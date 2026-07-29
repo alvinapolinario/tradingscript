@@ -136,6 +136,15 @@ def gold_smc_page():
     return FileResponse(page)
 
 
+@app.get("/liquidity-grab")
+def liquidity_grab_page():
+    """Liquidity Grab Monitor desk — advisory only, XAUUSD/Gold."""
+    page = STATIC_DIR / "liquidity-grab.html"
+    if not page.exists():
+        return {"error": "liquidity-grab.html missing", "path": str(page)}
+    return FileResponse(page)
+
+
 @app.get("/analyzer")
 def analyzer_page():
     """Smart Analyzer — advisory decision desk (Take/Ignore, no orders)."""

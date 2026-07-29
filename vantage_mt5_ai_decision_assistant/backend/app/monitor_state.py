@@ -106,6 +106,8 @@ class EaSnapshot:
     pullback_supported: bool = False
     gold_smc: dict | None = None
     gold_smc_supported: bool = False
+    liquidity_grab: dict | None = None
+    liquidity_grab_supported: bool = False
     max_position_risk_pct: float | None = None
 
 
@@ -222,6 +224,9 @@ def _apply_heartbeat_fields(ea: EaSnapshot, payload: dict[str, Any]) -> None:
     if isinstance(payload.get("gold_smc"), dict):
         ea.gold_smc = payload["gold_smc"]
         ea.gold_smc_supported = True
+    if isinstance(payload.get("liquidity_grab"), dict):
+        ea.liquidity_grab = payload["liquidity_grab"]
+        ea.liquidity_grab_supported = True
 
 
 class MonitorStore:
@@ -543,6 +548,8 @@ class MonitorStore:
             "pullback_supported": ea.pullback_supported,
             "gold_smc": ea.gold_smc,
             "gold_smc_supported": ea.gold_smc_supported,
+            "liquidity_grab": ea.liquidity_grab,
+            "liquidity_grab_supported": ea.liquidity_grab_supported,
             "server_year": ea.server_year,
             "server_month": ea.server_month,
             "calendar_request": calendar_request,

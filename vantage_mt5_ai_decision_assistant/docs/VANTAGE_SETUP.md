@@ -316,6 +316,7 @@ Keeps `.env` and the `vantage_signal_data` Docker volume (signal ledger). Rebuil
 ### Pullback Probability Desk (`/pullback`)
 - Backend: `GET /api/v1/pullback/status` + page `/pullback` (EA-scored H1/M15/M5 probabilities; passthrough only).
 - **Requires a recompiled EA** with `VantagePullback.mqh` that sends top-level `"pullback"` on heartbeat.
+- Full guide: [PULLBACK_PROBABILITY.md](PULLBACK_PROBABILITY.md).
 - Chart HUD + optional `VAI_PB_*` levels; alerts are candle-locked (popup/push/sound inputs).
 - Does **not** affect SETUP_OK, Signal Center, or Analyzer Take/Ignore. See [PULLBACK_PROBABILITY.md](PULLBACK_PROBABILITY.md).
 - VPS deploy updates the API only — recompile and reload the EA on Windows MT5 separately.
@@ -325,6 +326,12 @@ Keeps `.env` and the `vantage_signal_data` Docker volume (signal ledger). Rebuil
 - **Requires a recompiled EA** with `VantageGoldSMC*.mqh` sending top-level `"gold_smc"`.
 - Strict XAUUSD/GOLD alias validation — disabled on non-gold with an explicit HUD/web warning.
 - Does **not** trade or affect SETUP_OK. See [GOLD_SMC.md](GOLD_SMC.md).
+
+### Liquidity Grab Monitor (`/liquidity-grab`)
+- Backend: `GET /api/v1/liquidity-grab/status` + page `/liquidity-grab` (Gold-only sweep → rejection → MSS desk).
+- Sidebar: **Liquidity Grab Desk** under Workspace (shared `shell.js` nav).
+- **Requires a recompiled EA** with `VantageLiquidityGrab*.mqh` sending top-level `"liquidity_grab"` (inputs groups U–Z).
+- Does **not** trade or affect SETUP_OK. See [LIQUIDITY_GRAB.md](LIQUIDITY_GRAB.md).
 
 ## 15. Explicit warning — live automatic trading is disabled
 

@@ -341,6 +341,8 @@ class HeartbeatRequest(BaseModel):
     pullback: Optional[dict[str, Any]] = None
     # Gold SMC Intelligence Engine blob (advisory; Gold-only; Phase 1 scaffold)
     gold_smc: Optional[dict[str, Any]] = None
+    # Liquidity Grab Detection blob (advisory; Gold-only)
+    liquidity_grab: Optional[dict[str, Any]] = None
     # EA risk thresholds (optional; also may arrive via analyze extra)
     max_position_risk_pct: Optional[float] = None
 

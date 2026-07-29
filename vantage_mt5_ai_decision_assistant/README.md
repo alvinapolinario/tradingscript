@@ -27,10 +27,12 @@ vantage_mt5_ai_decision_assistant/
 4. Optional separate desk: **http://187.77.142.118:8000/dashboard** (M5 / M15 / H1 alignment playbook)
 5. Accepted signals: **http://187.77.142.118:8000/signals** (ledger cards when M5 desk is SETUP_OK)
 6. Smart Analyzer: **http://187.77.142.118:8000/analyzer** (Take/Ignore desk — no MT5 orders)
-7. Gold SMC Intelligence: **http://187.77.142.118:8000/gold-smc** (XAUUSD/Gold-only SMC desk — see [docs/GOLD_SMC.md](docs/GOLD_SMC.md))
-8. Allow `http://187.77.142.118:8000` in MT5 WebRequest settings.
-9. EA `InpBackendUrl` = `http://187.77.142.118:8000` · `InpBearerToken` = backend `LOCAL_API_TOKEN`
-10. Compile and attach the EA to your chart.
+7. Pullback Desk: **http://187.77.142.118:8000/pullback** (H1/M15/M5 probabilities — see [docs/PULLBACK_PROBABILITY.md](docs/PULLBACK_PROBABILITY.md))
+8. Gold SMC Intelligence: **http://187.77.142.118:8000/gold-smc** (XAUUSD/Gold-only SMC desk — see [docs/GOLD_SMC.md](docs/GOLD_SMC.md))
+9. Liquidity Grab Monitor: **http://187.77.142.118:8000/liquidity-grab** (sweep → rejection → MSS sequence — see [docs/LIQUIDITY_GRAB.md](docs/LIQUIDITY_GRAB.md))
+10. Allow `http://187.77.142.118:8000` in MT5 WebRequest settings.
+11. EA `InpBackendUrl` = `http://187.77.142.118:8000` · `InpBearerToken` = backend `LOCAL_API_TOKEN`
+12. Compile and attach the EA to your chart.
 
 The monitor shows API status, EA connection, dual decisions, risk, and a **Decision Brief** (analysis + recommendations).
 

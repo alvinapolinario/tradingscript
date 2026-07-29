@@ -9,8 +9,8 @@
 #include "VantageAccount.mqh"
 #include "VantageDecision.mqh"
 #include "VantageHistory.mqh"
-#include "VantagePullback.mqh"
 #include "VantageGoldSMC.mqh"
+#include "VantageLiquidityGrab.mqh"
 
 class CVantageDashboard
   {
@@ -73,7 +73,9 @@ public:
                const VantagePullbackResult &pb,
                const bool show_pullback,
                const VantageGoldSMCResult &gsm,
-               const bool show_gold_smc)
+               const bool show_gold_smc,
+               const VantageLiquidityGrabResult &lg,
+               const bool show_liq_grab)
      {
       int r = 0;
       color riskCol = clrSilver;
@@ -229,6 +231,31 @@ public:
             SetLabel("tsmc11", r++, StringSubstr(gsm.recommendation != "" ? gsm.recommendation : gsm.displacement_status, 0, 96), clrGold);
             if(gsm.last_alert != "")
                SetLabel("tsmc12", r++, StringSubstr("Alert: " + gsm.last_alert, 0, 96), clrOrange);
+           }
+        }
+
+      if(show_liq_grab)
+        {
+         SetLabel("tlg0", r++, "--- LIQUIDITY GRAB MONITOR (advisory) ---", clrAqua);
+         if(!lg.gold_symbol_valid && lg.disable_reason != "")
+            SetLabel("tlg1", r++, StringSubstr(lg.disable_reason, 0, 96), clrOrange);
+         else if(lg.status == LG_STATUS_NO_VALID_SETUP)
+           {
+            SetLabel("tlg1", r++, "Status: NO VALID SETUP | HTF " + lg.higher_timeframe_bias, clrSilver);
+            SetLabel("tlg2", r++, "Session: " + lg.session_name + " | " + lg.action_guidance, clrGray);
+           }
+         else
+           {
+            SetLabel("tlg1", r++, "Status: " + lg.status_line + " | Score " + DoubleToString(lg.confidence_score, 0), clrYellow);
+            SetLabel("tlg2", r++, "Dir: " + LgDirectionToString(lg.direction), clrWhite);
+            SetLabel("tlg3", r++, "Level: " + lg.liquidity_level_type + " @ " +
+                     DoubleToString(lg.liquidity_level_price, _Digits), clrSilver);
+            SetLabel("tlg4", r++, "Sweep " + DoubleToString(lg.sweep_price, _Digits) +
+                     " | MSS " + (lg.mss_detected ? "yes" : "no") +
+                     " | Disp " + (lg.displacement_detected ? "yes" : "no"), clrSilver);
+            SetLabel("tlg5", r++, StringSubstr(lg.action_guidance, 0, 96), clrGold);
+            if(lg.news_restricted)
+               SetLabel("tlg6", r++, "NEWS_RESTRICTED — reduced confidence", clrOrange);
            }
         }
 

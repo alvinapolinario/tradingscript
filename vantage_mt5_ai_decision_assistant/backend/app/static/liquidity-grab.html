@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Liquidity Grab · Vantage</title>
+  <link rel="stylesheet" href="/static/shell.css" />
+  <style>
+    :root {
+      --bg: #0b0f14; --panel: #121820; --line: #2a3544; --text: #e8eef5;
+      --muted: #8a9bb0; --buy: #3dd68c; --sell: #f07575; --warn: #e8c547;
+      --accent: #6eb5ff; --mono: "Cascadia Code", "Consolas", ui-monospace, monospace;
+      --sans: "Segoe UI", system-ui, sans-serif;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; font-family: var(--sans); color: var(--text); min-height: 100vh;
+      background: radial-gradient(700px 320px at 90% 0%, #1a2433 0%, transparent 55%), var(--bg);
+    }
+    header {
+      display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap;
+      padding: .85rem 1.25rem; border-bottom: 1px solid var(--line);
+      background: rgba(11,15,20,.92); position: sticky; top: 0; z-index: 5;
+    }
+    header h1 { margin: 0; font-size: 1.05rem; }
+    header .sub { color: var(--muted); font-size: .78rem; margin-top: .15rem; }
+    .pill {
+      display: inline-flex; align-items: center; gap: .35rem;
+      border: 1px solid var(--line); border-radius: 999px;
+      padding: .35rem .7rem; font-size: .78rem; background: var(--panel);
+    }
+    main { max-width: 960px; margin: 0 auto; padding: 1rem 1.1rem 2.5rem; }
+    .card {
+      background: var(--panel); border: 1px solid var(--line); border-radius: 16px;
+      padding: 1rem 1.1rem; margin-bottom: .85rem;
+    }
+    .state { font-size: 1.15rem; font-weight: 800; color: var(--accent); }
+    .meta { color: var(--muted); font-size: .78rem; margin-top: .35rem; line-height: 1.45; }
+    .empty {
+      border: 1px dashed var(--line); border-radius: 14px; padding: 1.5rem;
+      color: var(--muted); text-align: center; line-height: 1.5;
+    }
+    .warn-box {
+      border: 1px solid rgba(232,197,71,.45); background: rgba(232,197,71,.08);
+      border-radius: 14px; padding: 1rem 1.1rem; color: var(--warn); line-height: 1.5;
+    }
+    .k { font-size: .68rem; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+    .v { font-family: var(--mono); font-size: .95rem; font-weight: 650; margin-top: .2rem; }
+    .grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: .55rem; margin-top: .75rem; }
+    .score { font-size: 2rem; font-weight: 800; color: var(--accent); }
+    .evidence { font-size: .82rem; line-height: 1.5; color: var(--muted); margin-top: .75rem; }
+    @media (max-width: 700px) { .grid { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body data-nav="liquidity-grab">
+  <header>
+    <div>
+      <h1>Liquidity Grab Monitor</h1>
+      <div class="sub">XAUUSD / Gold · rule-based SMC · advisory only · sessions shown in Asia/Manila on web</div>
+    </div>
+    <span class="pill" id="statusPill">—</span>
+  </header>
+  <main id="main"><div class="empty">Loading…</div></main>
+  <script src="/static/shell.js"></script>
+  <script>
+    function fmtPx(v, d) {
+      if (v == null || v === 0) return "—";
+      return Number(v).toFixed(d ?? 2);
+    }
+
+    function dirLabel(d) {
+      if (d === "BUY_SIDE_GRAB_BEARISH_REVERSAL") return "Potential buy-side grab / bearish reversal";
+      if (d === "SELL_SIDE_GRAB_BULLISH_REVERSAL") return "Potential sell-side grab / bullish reversal";
+      return "—";
+    }
+
+    function render(payload) {
+      const root = document.getElementById("main");
+      const lg = payload.liquidity_grab;
+      const dig = payload.digits || 2;
+
+      if (!payload.ea_online) {
+        document.getElementById("statusPill").textContent = "offline";
+        root.innerHTML = `<div class="empty">EA offline. Attach the Vantage EA on XAUUSD and wait for heartbeat.</div>`;
+        return;
+      }
+
+      if (!payload.liquidity_grab_supported || !lg) {
+        document.getElementById("statusPill").textContent = "unsupported";
+        root.innerHTML = `<div class="empty">This EA build is not sending <b>liquidity_grab</b> yet.<br/>
+          Recompile <code>VantageMT5AIDecisionAssistant.mq5</code> with Liquidity Grab groups U–Z enabled.</div>`;
+        return;
+      }
+
+      if (!lg.gold_symbol_valid) {
+        document.getElementById("statusPill").textContent = "wrong symbol";
+        root.innerHTML = `<div class="warn-box">${lg.disable_reason || "Gold / XAUUSD only."}</div>`;
+        return;
+      }
+
+      document.getElementById("statusPill").textContent = (lg.status || "—").replace(/_/g, " ");
+
+      const news = lg.news_restricted
+        ? `<div class="warn-box" style="margin-bottom:.85rem">NEWS_RESTRICTED — high-impact USD window; confidence may be reduced.</div>`
+        : "";
+
+      const evidence = (lg.evidence || "").split(";").filter(Boolean)
+        .map((e) => `<li>${e}</li>`).join("");
+
+      root.innerHTML = `
+        ${news}
+        <div class="card">
+          <div class="k">Status</div>
+          <div class="state">${lg.status_line || lg.status || "NO VALID SETUP"}</div>
+          <div class="meta">${lg.technical_narrative || ""}</div>
+          <div class="grid">
+            <div><div class="k">Confidence</div><div class="score">${Math.round(lg.confidence_score || 0)}</div></div>
+            <div><div class="k">Action</div><div class="v">${lg.action_guidance || "WAIT"}</div></div>
+            <div><div class="k">Direction</div><div class="v">${dirLabel(lg.direction)}</div></div>
+            <div><div class="k">Session</div><div class="v">${lg.session_name || "—"}</div></div>
+            <div><div class="k">Level</div><div class="v">${lg.liquidity_level_type || "—"} @ ${fmtPx(lg.liquidity_level_price, dig)}</div></div>
+            <div><div class="k">Sweep</div><div class="v">${fmtPx(lg.sweep_price, dig)} (+${fmtPx(lg.sweep_distance, dig)})</div></div>
+            <div><div class="k">Rejection</div><div class="v">Close ${fmtPx(lg.rejection_close_price, dig)} · wick ${((lg.wick_ratio || 0) * 100).toFixed(0)}%</div></div>
+            <div><div class="k">Displacement</div><div class="v">${lg.displacement_detected ? "Yes" : "No"}</div></div>
+            <div><div class="k">MSS</div><div class="v">${lg.mss_detected ? lg.mss_type + " @ " + fmtPx(lg.mss_level, dig) : "Not yet"}</div></div>
+            <div><div class="k">FVG</div><div class="v">${lg.fvg_detected ? "Detected" : "No"}</div></div>
+            <div><div class="k">HTF bias</div><div class="v">${lg.higher_timeframe_bias || "—"} · ${lg.ema_alignment || ""}</div></div>
+            <div><div class="k">Countdown</div><div class="v">${lg.confirmation_countdown ?? "—"} bars · age ${lg.setup_age_bars ?? 0}</div></div>
+          </div>
+          ${evidence ? `<ul class="evidence">${evidence}</ul>` : ""}
+          <div class="meta" style="margin-top:1rem">${lg.recommendation || ""}. Probabilistic structural read — not a trade signal.</div>
+        </div>`;
+    }
+
+    async function tick() {
+      try {
+        const r = await fetch("/api/v1/liquidity-grab/status");
+        render(await r.json());
+      } catch (e) {
+        document.getElementById("main").innerHTML = `<div class="empty">Failed to load liquidity grab status</div>`;
+      }
+    }
+    tick();
+    setInterval(tick, 5000);
+  </script>
+</body>
+</html>
