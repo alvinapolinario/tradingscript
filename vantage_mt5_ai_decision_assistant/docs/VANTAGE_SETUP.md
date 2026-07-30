@@ -333,12 +333,21 @@ Keeps `.env` and the `vantage_signal_data` Docker volume (signal ledger). Rebuil
 - **Requires a recompiled EA** with `VantageLiquidityGrab*.mqh` sending top-level `"liquidity_grab"` (inputs groups U–Z).
 - Does **not** trade or affect SETUP_OK. See [LIQUIDITY_GRAB.md](LIQUIDITY_GRAB.md).
 
-## 15. Explicit warning — live automatic trading is disabled
+### Demo auto-execution (optional — separate package)
 
-> **This release is advisory-only.**  
+- **Not part of the advisory EA.** Live auto-trading remains disabled in `VantageMT5AIDecisionAssistant`.
+- Separate EA: `vantage_mt5_execution/MQL5/Experts/VantageSwingExecutor.mq5`
+- Backend: `GET /api/v1/execution/next`, `POST /api/v1/execution/ack`, journal at `/execution`
+- **Demo account only** — executor refuses init on live accounts
+- Signal source: Swing Strategy **STRONG SWING BUY/SELL** only (confidence ≥ 85, Good/Excellent entry quality)
+- Full guide: [../vantage_mt5_execution/docs/EXECUTION_SETUP.md](../vantage_mt5_execution/docs/EXECUTION_SETUP.md)
+
+## 15. Explicit warning — advisory EA is not an auto-trader
+
+> **The advisory EA release is advisory-only.**  
 > It must not call `OrderSend`, must not import `CTrade`, and must not modify positions.  
 > `InpAdvisoryOnly=false` causes init failure.  
-> Any future live-trading capability would be a separate, explicitly reviewed release.
+> Optional demo execution uses a **separate** `VantageSwingExecutor` EA (demo account only).
 
 ---
 

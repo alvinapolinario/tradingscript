@@ -172,6 +172,15 @@ def swing_strategy_page():
     return FileResponse(page)
 
 
+@app.get("/execution")
+def execution_page():
+    """Demo execution journal — VantageSwingExecutor fills (demo only)."""
+    page = STATIC_DIR / "execution.html"
+    if not page.exists():
+        return {"error": "execution.html missing", "path": str(page)}
+    return FileResponse(page)
+
+
 @app.get("/analyzer")
 def analyzer_page():
     """Smart Analyzer — advisory decision desk (Take/Ignore, no orders)."""

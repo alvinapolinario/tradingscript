@@ -547,6 +547,84 @@ def lab_reset() -> dict:
     return build_lab(monitor_store.status())
 
 
+@router.get("/api/v1/execution/next")
+def execution_next(
+    symbol: str = Query(default="XAUUSD"),
+    min_confidence: float = Query(default=85.0, ge=0, le=100),
+    max_m5_bars: int = Query(default=2, ge=1, le=10),
+    tp_level: str = Query(default="TP1"),
+    _: None = Depends(require_bearer),
+) -> dict:
+    """Demo executor poll — reserve one STRONG Swing Strategy order spec."""
+    from app.execution_queue import reserve_next
+
+    return reserve_next(
+        monitor_store.status(),
+        symbol=symbol,
+        min_confidence=min_confidence,
+        max_m5_bars=max_m5_bars,
+        tp_level=tp_level,
+    )
+
+
+@router.post("/api/v1/execution/ack")
+def execution_ack(
+    body: dict,
+    _: None = Depends(require_bearer),
+) -> dict:
+    """Demo executor ack — FILLED / REJECTED / SKIPPED."""
+    from app.execution_queue import ack_execution
+    from app.ws_hub import push_monitor_update
+
+    signal_id = str((body or {}).get("signal_id") or "").strip()
+    status = str((body or {}).get("status") or "").upper()
+    ticket = (body or {}).get("ticket")
+    reason = str((body or {}).get("reason") or "")
+    if not signal_id:
+        raise HTTPException(status_code=400, detail="signal_id required")
+    try:
+        updated = ack_execution(
+            signal_id,
+            status,
+            ticket=int(ticket) if ticket is not None else None,
+            reason=reason or None,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if not updated:
+        raise HTTPException(status_code=404, detail="Signal not found")
+    monitor_store.add_log(
+        "INFO",
+        "execution",
+        f"Demo exec {status} {updated.get('side')} {updated.get('symbol')}",
+        signal_id=signal_id,
+    )
+    push_monitor_update("execution_ack")
+    return {
+        "demo_execution": True,
+        "ok": True,
+        "signal": updated,
+    }
+
+
+@router.get("/api/v1/execution/history")
+def execution_history(
+    limit: int = Query(default=50, ge=1, le=200),
+    symbol: str | None = Query(default=None),
+) -> dict:
+    """Demo execution journal."""
+    from app.execution_queue import execution_summary, list_history
+
+    items = list_history(limit=limit, symbol=(symbol.strip().upper() if symbol else None))
+    summary = execution_summary(monitor_store.status())
+    return {
+        "demo_execution": True,
+        "count": len(items),
+        "items": items,
+        "summary": summary,
+    }
+
+
 @router.get("/api/v1/monitor/logs")
 def monitor_logs(limit: int = Query(default=100, ge=1, le=300)) -> dict:
     return {"items": monitor_store.logs(limit)}

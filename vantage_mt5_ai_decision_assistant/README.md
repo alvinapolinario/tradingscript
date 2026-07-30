@@ -33,9 +33,10 @@ vantage_mt5_ai_decision_assistant/
 10. Breakout Structure: **http://187.77.142.118:8000/breakout-structure** (trendline breakout + structure grade — see [docs/BREAKOUT_STRUCTURE.md](docs/BREAKOUT_STRUCTURE.md))
 11. Market State Engine v2: **http://187.77.142.118:8000/market-state** (lifecycle intelligence + timeline — see [docs/MARKET_STATE.md](docs/MARKET_STATE.md))
 12. Swing Strategy Engine: **http://187.77.142.118:8000/swing-strategy** (multi-TF SMC swing validation — see [docs/SWING_STRATEGY.md](docs/SWING_STRATEGY.md))
-13. Allow `http://187.77.142.118:8000` in MT5 WebRequest settings.
-14. EA `InpBackendUrl` = `http://187.77.142.118:8000` · `InpBearerToken` = backend `LOCAL_API_TOKEN`
-15. Compile and attach the EA to your chart.
+13. Demo Execution journal (optional): **http://187.77.142.118:8000/execution** — requires separate `VantageSwingExecutor` EA; see [../vantage_mt5_execution/docs/EXECUTION_SETUP.md](../vantage_mt5_execution/docs/EXECUTION_SETUP.md)
+14. Allow `http://187.77.142.118:8000` in MT5 WebRequest settings.
+15. EA `InpBackendUrl` = `http://187.77.142.118:8000` · `InpBearerToken` = backend `LOCAL_API_TOKEN`
+16. Compile and attach the EA to your chart.
 
 The monitor shows API status, EA connection, dual decisions, risk, and a **Decision Brief** (analysis + recommendations).
 
@@ -46,6 +47,19 @@ When the desk reaches **SETUP_OK**, the backend stores an advisory BUY/SELL on t
 **Smart Analyzer** (`/analyzer`) is the live decision desk: STANDARD/SCALPING modes, score gauge, **TradingView Advanced Chart** (with EMA 20/50/200), desk entry/SL/TP strip, and **TAKE / Ignore** buttons that only record your choice — never send an MT5 order.
 
 Also live: **Pattern Strategy** (`/patterns`), **Strategy Scanner** (`/scanner`), and **Strategy Lab** (`/lab`) — advisory pattern catalog, multi-pair desk ranking, and session playbook what-ifs. Shared left sidebar links the full workspace.
+
+## Demo auto-execution (optional, separate package)
+
+The advisory EA **never** auto-trades. For **demo account testing only**, a separate executor package polls the backend for Swing Strategy **STRONG** signals:
+
+| Item | Location |
+|------|----------|
+| Executor EA | `../vantage_mt5_execution/MQL5/Experts/VantageSwingExecutor.mq5` |
+| Setup guide | [../vantage_mt5_execution/docs/EXECUTION_SETUP.md](../vantage_mt5_execution/docs/EXECUTION_SETUP.md) |
+| Web journal | **http://187.77.142.118:8000/execution** |
+| API | `GET /api/v1/execution/next`, `POST /api/v1/execution/ack` |
+
+Requires demo account, advisory EA heartbeat (Swing Strategy groups AK–AO), and both EAs attached on XAUUSD.
 
 
 ## Design guarantees
