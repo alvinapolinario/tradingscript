@@ -14,6 +14,7 @@
 #include "VantageLiquidityGrab.mqh"
 #include "VantageBreakoutStructure.mqh"
 #include "VantageMarketStateManager.mqh"
+#include "VantageSwingStrategy.mqh"
 
 class CVantageDashboard
   {
@@ -82,7 +83,9 @@ public:
                const VantageBosResult &bos,
                const bool show_breakout,
                const VantageMseResult &mse,
-               const bool show_mse)
+               const bool show_mse,
+               const VantageSwingStratResult &swing,
+               const bool show_swing)
      {
       int r = 0;
       color riskCol = clrSilver;
@@ -300,6 +303,22 @@ public:
             SetLabel("tms6", r++, "ML cont " + DoubleToString(mse.ml.trend_continuation_pct, 0) + "% | fail BO " +
                      DoubleToString(mse.ml.failed_breakout_pct, 0) + "%", clrGold);
             SetLabel("tms7", r++, StringSubstr(mse.what_is_happening, 0, 96), clrAqua);
+           }
+        }
+
+      if(show_swing)
+        {
+         SetLabel("tsw0", r++, "--- SWING STRATEGY ENGINE (advisory) ---", clrAqua);
+         if(!swing.gold_symbol_valid && swing.disable_reason != "")
+            SetLabel("tsw1", r++, StringSubstr(swing.disable_reason, 0, 96), clrOrange);
+         else
+           {
+            SetLabel("tsw1", r++, swing.signal + " | Conf " + DoubleToString(swing.confidence, 0) + "%", clrYellow);
+            SetLabel("tsw2", r++, swing.trend + " | " + swing.market_structure + " | Phase " + swing.current_phase, clrSilver);
+            SetLabel("tsw3", r++, "Bias " + swing.trade_bias + " | Entry " + swing.entry_quality_label, clrWhite);
+            SetLabel("tsw4", r++, "RR " + swing.risk_reward_label + " SL " + DoubleToString(swing.stop_loss, _Digits), clrSilver);
+            SetLabel("tsw5", r++, "SMC " + DoubleToString(swing.smc_score, 0) + " Mom " + DoubleToString(swing.momentum_score, 0), clrGold);
+            SetLabel("tsw6", r++, StringSubstr(swing.reason, 0, 96), clrAqua);
            }
         }
 

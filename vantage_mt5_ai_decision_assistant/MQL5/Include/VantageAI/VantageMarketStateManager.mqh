@@ -15,10 +15,10 @@
 // Shared bar cache for all engines (no duplicate CopyRates)
 struct VantageMseBarCache
   {
-   MqlRates h4[120];
-   MqlRates h1[150];
-   MqlRates m15[120];
-   MqlRates m5[150];
+   MqlRates h4[];
+   MqlRates h1[];
+   MqlRates m15[];
+   MqlRates m5[];
    int      n_h4, n_h1, n_m15, n_m5;
    double   atr_h4, atr_h1, atr_m15, atr_m5;
    double   rsi_m5, adx_h1, ema20, ema50, ema200;

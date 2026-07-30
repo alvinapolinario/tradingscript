@@ -163,6 +163,15 @@ def market_state_page():
     return FileResponse(page)
 
 
+@app.get("/swing-strategy")
+def swing_strategy_page():
+    """Swing Strategy Engine desk — advisory only, XAUUSD/Gold."""
+    page = STATIC_DIR / "swing-strategy.html"
+    if not page.exists():
+        return {"error": "swing-strategy.html missing", "path": str(page)}
+    return FileResponse(page)
+
+
 @app.get("/analyzer")
 def analyzer_page():
     """Smart Analyzer — advisory decision desk (Take/Ignore, no orders)."""

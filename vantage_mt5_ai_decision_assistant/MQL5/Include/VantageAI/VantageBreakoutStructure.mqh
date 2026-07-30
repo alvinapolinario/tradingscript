@@ -39,7 +39,7 @@ private:
       Print("[BreakoutStructure] ", msg);
      }
 
-   double ClampD(const double v, const double lo, const double hi)
+   double ClampD(const double v, const double lo, const double hi) const
      {
       if(v < lo) return lo;
       if(v > hi) return hi;

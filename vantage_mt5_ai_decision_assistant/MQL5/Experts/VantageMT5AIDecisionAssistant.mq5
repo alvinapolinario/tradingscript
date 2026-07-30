@@ -44,6 +44,7 @@
 #include <VantageAI/VantageLiquidityGrab.mqh>
 #include <VantageAI/VantageBreakoutStructure.mqh>
 #include <VantageAI/VantageMarketStateManager.mqh>
+#include <VantageAI/VantageSwingStrategy.mqh>
 
 //--- Explicit compile-time advisory guard (do not import Trade.mqh / CTrade)
 #ifdef __MQL5__
@@ -410,6 +411,42 @@ input bool   InpMseShowDash     = true;
 input bool   InpMseChartObj     = true;
 input bool   InpMseDebug        = false;
 
+input group "AK. Swing Strategy Engine — Core"
+input bool   InpSwingEnable     = true;
+input bool   InpSwingGoldOnly   = true;
+input string InpSwingAliases    = "XAUUSD,GOLD";
+
+input group "AL. Swing Strategy — Timeframes"
+input ENUM_TIMEFRAMES InpSwingTF_D1  = PERIOD_D1;
+input ENUM_TIMEFRAMES InpSwingTF_H4  = PERIOD_H4;
+input ENUM_TIMEFRAMES InpSwingTF_H1  = PERIOD_H1;
+input ENUM_TIMEFRAMES InpSwingTF_M15 = PERIOD_M15;
+input ENUM_TIMEFRAMES InpSwingTF_M5  = PERIOD_M5;
+
+input group "AM. Swing Strategy — Detection"
+input int    InpSwingDepthLeft  = 3;
+input int    InpSwingDepthRight = 3;
+input double InpSwingMinAtr     = 0.15;
+input int    InpSwingMinCandles = 3;
+input int    InpSwingAtrPeriod  = 14;
+input double InpSwingAtrMult    = 0.35;
+input double InpSwingMaxPbPct   = 68.0;
+input double InpSwingMinBosAtr  = 0.08;
+input double InpSwingMinBodyPct = 0.40;
+
+input group "AN. Swing Strategy — Scoring / Risk"
+input double InpSwingMinConf    = 72.0;
+input double InpSwingMinRR      = 2.0;
+input double InpSwingRsiBull    = 52.0;
+input double InpSwingRsiBear    = 48.0;
+input double InpSwingMacdMin    = 0.0;
+input double InpSwingMinVolRat  = 1.05;
+
+input group "AO. Swing Strategy — HUD / Chart"
+input bool   InpSwingShowDash   = true;
+input bool   InpSwingChartObj   = true;
+input bool   InpSwingDebug      = false;
+
 //+------------------------------------------------------------------+
 //| Globals                                                          |
 //+------------------------------------------------------------------+
@@ -431,6 +468,8 @@ CVantageBreakoutStructure g_breakout;
 VantageBosResult g_bossnap;
 CMarketStateManager g_marketstate;
 VantageMseResult g_msesnap;
+CVantageSwingStrategy g_swingstrat;
+VantageSwingStratResult g_swingsnap;
 
 datetime g_last_closed_candle = 0;
 datetime g_last_request_candle = 0;
@@ -889,6 +928,8 @@ string BuildHeartbeatPayload(void)
       j += ",\"breakout_structure\":" + g_breakout.ToJson(g_bossnap);
    if(g_msesnap.valid)
       j += ",\"market_state_engine\":" + g_marketstate.ToJson(g_msesnap);
+   if(g_swingsnap.valid)
+      j += ",\"swing_strategy\":" + g_swingstrat.ToJson(g_swingsnap);
    j += "}";
    return j;
   }
@@ -1199,6 +1240,46 @@ void MaybeEvalMarketState(const bool force)
       g_msesnap = r;
   }
 
+void FillSwingStrategyConfig(VantageSwingStratConfig &cfg)
+  {
+   ZeroMemory(cfg);
+   cfg.enable = InpSwingEnable;
+   cfg.gold_only = InpSwingGoldOnly;
+   cfg.approved_aliases = InpSwingAliases;
+   cfg.allow_suffix = true;
+   cfg.allow_prefix = true;
+   cfg.tf_d1 = InpSwingTF_D1;
+   cfg.tf_h4 = InpSwingTF_H4;
+   cfg.tf_h1 = InpSwingTF_H1;
+   cfg.tf_m15 = InpSwingTF_M15;
+   cfg.tf_m5 = InpSwingTF_M5;
+   cfg.swing_left = InpSwingDepthLeft;
+   cfg.swing_right = InpSwingDepthRight;
+   cfg.min_swing_atr = InpSwingMinAtr;
+   cfg.min_swing_candles = InpSwingMinCandles;
+   cfg.atr_period = InpSwingAtrPeriod;
+   cfg.atr_multiplier = InpSwingAtrMult;
+   cfg.max_pullback_pct = InpSwingMaxPbPct;
+   cfg.min_rr = InpSwingMinRR;
+   cfg.min_confidence = InpSwingMinConf;
+   cfg.rsi_bull = InpSwingRsiBull;
+   cfg.rsi_bear = InpSwingRsiBear;
+   cfg.macd_min_hist = InpSwingMacdMin;
+   cfg.min_volume_ratio = InpSwingMinVolRat;
+   cfg.bos_min_atr = InpSwingMinBosAtr;
+   cfg.min_body_pct = InpSwingMinBodyPct;
+   cfg.show_chart = InpSwingChartObj;
+   cfg.show_dashboard = InpSwingShowDash;
+   cfg.debug_log = InpSwingDebug;
+  }
+
+void MaybeEvalSwingStrategy(const bool force)
+  {
+   VantageSwingStratResult r;
+   if(g_swingstrat.Evaluate(force, r))
+      g_swingsnap = r;
+  }
+
 void RefreshPlCalendar(const bool force)
   {
    // Rebuild when forced, when minute elapsed, or when requested month differs from loaded
@@ -1255,6 +1336,7 @@ void MaybeSendHeartbeat(void)
    MaybeEvalLiquidityGrab(false);
    MaybeEvalBreakoutStructure(false);
    MaybeEvalMarketState(false);
+   MaybeEvalSwingStrategy(false);
 
    static int s_last_pending_logged = -1;
    if(g_pending.count != s_last_pending_logged)
@@ -1592,12 +1674,14 @@ void RefreshDashboard(void)
    MaybeEvalLiquidityGrab(false);
    MaybeEvalBreakoutStructure(false);
    MaybeEvalMarketState(false);
+   MaybeEvalSwingStrategy(false);
    const bool show_gsm = InpGoldSmcShowDash &&
                          (InpGoldSmcEnable || InpGoldSmcShowWarn) &&
                          g_gsmsnap.valid;
    const bool show_lg = InpLiqGrabShowDash && InpLiqGrabEnable && g_liqgrabsnap.valid;
    const bool show_bos = InpBosShowDash && InpBosEnable && g_bossnap.valid;
    const bool show_mse = InpMseShowDash && InpMseEnable && g_msesnap.valid;
+   const bool show_swing = InpSwingShowDash && InpSwingEnable && g_swingsnap.valid;
    g_dash.Render(g_acct, g_spec, g_px, g_backend_status, g_candle_status, g_dec,
                  g_pos, g_risk, ts, age,
                  g_equity, g_floating_pl_pct, InpFloatProfitTargetPct, g_float_profit_target_hit,
@@ -1606,7 +1690,8 @@ void RefreshDashboard(void)
                  g_gsmsnap, show_gsm,
                  g_liqgrabsnap, show_lg,
                  g_bossnap, show_bos,
-                 g_msesnap, show_mse);
+                 g_msesnap, show_mse,
+                 g_swingsnap, show_swing);
   }
 
 //+------------------------------------------------------------------+
@@ -1711,6 +1796,16 @@ int OnInit()
          MaybeEvalMarketState(true);
      }
 
+   if(InpSwingEnable)
+     {
+      VantageSwingStratConfig scfg;
+      FillSwingStrategyConfig(scfg);
+      if(!g_swingstrat.Init(_Symbol, scfg))
+         Print("[VantageAI] Swing Strategy Engine init failed.");
+      else
+         MaybeEvalSwingStrategy(true);
+     }
+
    // Build chart-relative levels for BTC/etc. (AUTO) or gold manual map
    if(g_analysis.HasEnoughHistory(50))
       g_analysis.BuildSnapshot(g_tech);
@@ -1772,6 +1867,7 @@ void OnDeinit(const int reason)
    g_liqgrab.Release();
    g_breakout.Release();
    g_marketstate.Release();
+   g_swingstrat.Release();
    g_dash.Clear();
    Comment("");
    Print("[VantageAI] Stopped. reason=", reason);

@@ -403,6 +403,39 @@ def market_state_status() -> dict:
     }
 
 
+@router.get("/api/v1/swing-strategy/status")
+def swing_strategy_status() -> dict:
+    """Swing Strategy Engine — EA-computed advisory blob (passthrough; Gold-only)."""
+    st = monitor_store.status()
+    ea = st.get("vantage_ea") or {}
+    link = st.get("link_health") or {}
+    blob = ea.get("swing_strategy")
+    selected = str(st.get("selected_symbol") or ea.get("symbol") or "").upper()
+    return {
+        "advisory_only": True,
+        "caption": "Advisory only — never places, modifies, or cancels MT5 orders. Gold / XAUUSD only.",
+        "ea_online": bool(link.get("ea_online") or ea.get("connected")),
+        "swing_strategy_supported": bool(ea.get("swing_strategy_supported")),
+        "selected_symbol": selected,
+        "symbol": str(ea.get("symbol") or selected).upper(),
+        "available_symbols": list(st.get("available_symbols") or []),
+        "symbols": list(st.get("symbols") or []),
+        "digits": int(ea.get("digits") or 5) or 5,
+        "bid": ea.get("bid"),
+        "ask": ea.get("ask"),
+        "swing_strategy": blob,
+        "links": {
+            "swing_strategy": "/swing-strategy",
+            "market_state": "/market-state",
+            "breakout_structure": "/breakout-structure",
+            "gold_smc": "/gold-smc",
+            "pullback": "/pullback",
+            "analyzer": "/analyzer",
+            "monitor": "/monitor",
+        },
+    }
+
+
 @router.get("/api/v1/signals")
 def list_accepted_signals(
     limit: int = Query(default=50, ge=1, le=200),

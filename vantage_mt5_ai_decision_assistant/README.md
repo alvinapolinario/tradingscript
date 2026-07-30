@@ -32,9 +32,10 @@ vantage_mt5_ai_decision_assistant/
 9. Liquidity Grab Monitor: **http://187.77.142.118:8000/liquidity-grab** (sweep → rejection → MSS sequence — see [docs/LIQUIDITY_GRAB.md](docs/LIQUIDITY_GRAB.md))
 10. Breakout Structure: **http://187.77.142.118:8000/breakout-structure** (trendline breakout + structure grade — see [docs/BREAKOUT_STRUCTURE.md](docs/BREAKOUT_STRUCTURE.md))
 11. Market State Engine v2: **http://187.77.142.118:8000/market-state** (lifecycle intelligence + timeline — see [docs/MARKET_STATE.md](docs/MARKET_STATE.md))
-12. Allow `http://187.77.142.118:8000` in MT5 WebRequest settings.
-13. EA `InpBackendUrl` = `http://187.77.142.118:8000` · `InpBearerToken` = backend `LOCAL_API_TOKEN`
-14. Compile and attach the EA to your chart.
+12. Swing Strategy Engine: **http://187.77.142.118:8000/swing-strategy** (multi-TF SMC swing validation — see [docs/SWING_STRATEGY.md](docs/SWING_STRATEGY.md))
+13. Allow `http://187.77.142.118:8000` in MT5 WebRequest settings.
+14. EA `InpBackendUrl` = `http://187.77.142.118:8000` · `InpBearerToken` = backend `LOCAL_API_TOKEN`
+15. Compile and attach the EA to your chart.
 
 The monitor shows API status, EA connection, dual decisions, risk, and a **Decision Brief** (analysis + recommendations).
 
