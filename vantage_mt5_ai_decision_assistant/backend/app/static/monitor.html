@@ -631,6 +631,18 @@
               <div><span>Heartbeat count</span><strong id="hbCount">—</strong></div>
             </div>
           </div>
+          <div>
+            <h2 style="margin-top:0">Alert channels</h2>
+            <div class="kv">
+              <div><span>Telegram</span><strong id="opsTgStatus">—</strong></div>
+              <div><span>Discord</span><strong id="opsDcStatus">—</strong></div>
+            </div>
+            <div class="ai-actions" style="margin-top:.65rem">
+              <button type="button" id="btnTestDiscord" title="Send test message to Discord">Test Discord</button>
+              <button type="button" id="btnTestTelegram" title="Send test message to Telegram">Test Telegram</button>
+              <span class="hint" id="alertTestHint"></span>
+            </div>
+          </div>
         </div>
       </div>
     </details>
@@ -1364,13 +1376,24 @@
       }
     }
 
+    let lastTelegram = {};
+    let lastDiscord = {};
+
+    function alertChannelLabel(ch) {
+      if (ch.configured) return "LIVE";
+      if (ch.enabled) return "SETUP";
+      return "OFF";
+    }
+
     function markTelegram(tg) {
       const T = tg || {};
+      lastTelegram = T;
       const pill = $("tgPill");
+      const btn = $("btnTestTelegram");
       if (T.configured) {
         $("tgText").textContent = "TG LIVE";
         setDot($("tgDot"), "ok");
-        pill.title = "Telegram alerts active · cooldown " + (T.cooldown_sec || 300) + "s";
+        pill.title = "Telegram alerts active · cooldown " + (T.cooldown_sec || 300) + "s · click to test";
       } else if (T.enabled) {
         $("tgText").textContent = "TG SETUP";
         setDot($("tgDot"), "warn");
@@ -1380,15 +1403,19 @@
         setDot($("tgDot"), "muted");
         pill.title = "Telegram disabled — set TELEGRAM_ENABLED=true in .env";
       }
+      if ($("opsTgStatus")) $("opsTgStatus").textContent = alertChannelLabel(T);
+      if (btn) btn.disabled = !T.configured;
     }
 
     function markDiscord(dc) {
       const D = dc || {};
+      lastDiscord = D;
       const pill = $("dcPill");
+      const btn = $("btnTestDiscord");
       if (D.configured) {
         $("dcText").textContent = "DC LIVE";
         setDot($("dcDot"), "ok");
-        pill.title = "Discord alerts active · cooldown " + (D.cooldown_sec || 300) + "s";
+        pill.title = "Discord alerts active · cooldown " + (D.cooldown_sec || 300) + "s · click to test";
       } else if (D.enabled) {
         $("dcText").textContent = "DC SETUP";
         setDot($("dcDot"), "warn");
@@ -1397,6 +1424,37 @@
         $("dcText").textContent = "DC OFF";
         setDot($("dcDot"), "muted");
         pill.title = "Discord disabled — set DISCORD_ENABLED=true in .env";
+      }
+      if ($("opsDcStatus")) $("opsDcStatus").textContent = alertChannelLabel(D);
+      if (btn) btn.disabled = !D.configured;
+    }
+
+    async function testAlertChannel(channel) {
+      const path = channel === "discord" ? "/api/v1/monitor/discord/test" : "/api/v1/monitor/telegram/test";
+      const btn = $(channel === "discord" ? "btnTestDiscord" : "btnTestTelegram");
+      const hint = $("alertTestHint");
+      if (btn) btn.disabled = true;
+      if (hint) {
+        hint.textContent = "Sending " + channel + " test…";
+        hint.style.color = "var(--muted)";
+      }
+      try {
+        const r = await fetch(path, { method: "POST" });
+        const body = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(body.detail || (channel + " test failed"));
+        if (hint) {
+          hint.textContent = channel.charAt(0).toUpperCase() + channel.slice(1) + " test sent ✓";
+          hint.style.color = "var(--ok)";
+        }
+      } catch (err) {
+        if (hint) {
+          hint.textContent = err.message || (channel + " test failed");
+          hint.style.color = "var(--bad)";
+        }
+      } finally {
+        const ch = channel === "discord" ? lastDiscord : lastTelegram;
+        if (btn) btn.disabled = !ch.configured;
+        setTimeout(() => { if (hint) hint.textContent = ""; }, 5000);
       }
     }
 
@@ -1517,6 +1575,12 @@
 
     $("btnCopyBrief").onclick = () => copyAiBrief();
     $("btnAiAnalyze").onclick = () => runAiAnalyze();
+    $("btnTestDiscord").onclick = () => testAlertChannel("discord");
+    $("btnTestTelegram").onclick = () => testAlertChannel("telegram");
+    $("dcPill").onclick = () => testAlertChannel("discord");
+    $("tgPill").onclick = () => testAlertChannel("telegram");
+    $("dcPill").style.cursor = "pointer";
+    $("tgPill").style.cursor = "pointer";
 
     (async () => {
       const pref = preferredPair();

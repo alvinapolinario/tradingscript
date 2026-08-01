@@ -115,3 +115,13 @@ def test_health_shows_discord_block():
 def test_discord_test_requires_auth():
     r = client.post("/api/v1/discord/test")
     assert r.status_code == 401
+
+
+@patch("app.discord_notify.get_settings")
+@patch("app.discord_notify.httpx.Client")
+def test_monitor_discord_test(mock_client_cls, mock_settings):
+    mock_settings.return_value = _settings()
+    mock_client_cls.return_value.__enter__.return_value.post.side_effect = _mock_post_ok
+    r = client.post("/api/v1/monitor/discord/test")
+    assert r.status_code == 200
+    assert r.json()["ok"] is True

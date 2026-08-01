@@ -229,6 +229,8 @@ curl -X POST http://187.77.142.118:8000/api/v1/discord/test \
 
 7. Check Discord for **Vantage AI Discord test**.
 
+**From the web UI:** open `/monitor` → expand **Ops / link diagnostics** → **Test Discord** (or click the **DC LIVE** pill in the header).
+
 ### What triggers alerts
 
 Same categories as Telegram (§10b). Toggle with `TELEGRAM_ALERT_*` in `.env` — those flags apply to **both** Telegram and Discord when each channel is enabled.

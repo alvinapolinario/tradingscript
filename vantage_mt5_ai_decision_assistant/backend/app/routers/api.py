@@ -184,6 +184,43 @@ def get_llm_status() -> dict:
     return {"status": "ok", "llm": _llm_public()}
 
 
+_monitor_alert_test_at: dict[str, float] = {}
+
+
+def _monitor_alert_test_cooldown(channel: str, *, sec: float = 30.0) -> None:
+    import time
+
+    now = time.time()
+    last = _monitor_alert_test_at.get(channel, 0.0)
+    if now - last < sec:
+        raise HTTPException(status_code=429, detail=f"Wait {int(sec)}s between {channel} tests")
+    _monitor_alert_test_at[channel] = now
+
+
+@router.post("/api/v1/monitor/discord/test")
+def monitor_discord_test() -> dict:
+    """Send Discord test from monitor UI (no Bearer — same as other /monitor routes)."""
+    from app.discord_notify import discord_status, send_test_message
+
+    _monitor_alert_test_cooldown("discord")
+    ok, detail = send_test_message()
+    if not ok:
+        raise HTTPException(status_code=400, detail=detail or "Discord send failed")
+    return {"ok": True, "detail": detail, "discord": discord_status()}
+
+
+@router.post("/api/v1/monitor/telegram/test")
+def monitor_telegram_test() -> dict:
+    """Send Telegram test from monitor UI (no Bearer — same as other /monitor routes)."""
+    from app.telegram_notify import send_test_message, telegram_status
+
+    _monitor_alert_test_cooldown("telegram")
+    ok, detail = send_test_message()
+    if not ok:
+        raise HTTPException(status_code=400, detail=detail or "Telegram send failed")
+    return {"ok": True, "detail": detail, "telegram": telegram_status()}
+
+
 def _llm_public() -> dict:
     from app.analysis.openai_client import llm_status
 
