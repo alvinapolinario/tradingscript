@@ -36,6 +36,7 @@ def require_bearer(
 
 @router.get("/health", response_model=HealthResponse)
 def health(settings: Settings = Depends(get_settings)) -> HealthResponse:
+    from app.discord_notify import discord_status
     from app.telegram_notify import telegram_status
 
     base = (settings.public_base_url or "http://187.77.142.118:8000").rstrip("/")
@@ -46,6 +47,7 @@ def health(settings: Settings = Depends(get_settings)) -> HealthResponse:
         version="1.2.0",
         monitor_url=f"{base}/monitor",
         telegram=telegram_status(settings),
+        discord=discord_status(settings),
     )
 
 
@@ -74,11 +76,11 @@ def heartbeat(
         )
         push_monitor_update("signal")
     try:
-        from app.telegram_notify import process_heartbeat
+        from app.alert_notify import process_heartbeat
 
         process_heartbeat(req.model_dump(), accepted)
     except Exception as exc:
-        monitor_store.add_log("WARN", "telegram", f"Heartbeat notify failed: {exc}")
+        monitor_store.add_log("WARN", "alerts", f"Heartbeat notify failed: {exc}")
     cy, cm = monitor_store.calendar_request()
     # Default request to whatever month EA just sent if UI has not chosen yet
     if cy <= 0 and req.pl_calendar and req.pl_calendar.get("year") and req.pl_calendar.get("month"):
@@ -612,11 +614,11 @@ def execution_ack(
     )
     push_monitor_update("execution_ack")
     try:
-        from app.telegram_notify import notify_execution_ack
+        from app.alert_notify import notify_execution_ack
 
         notify_execution_ack(updated, status)
     except Exception as exc:
-        monitor_store.add_log("WARN", "telegram", f"Execution notify failed: {exc}")
+        monitor_store.add_log("WARN", "alerts", f"Execution notify failed: {exc}")
     return {
         "demo_execution": True,
         "ok": True,
@@ -661,3 +663,14 @@ def telegram_test(_: None = Depends(require_bearer)) -> dict:
     if not ok:
         raise HTTPException(status_code=400, detail=detail or "Telegram send failed")
     return {"ok": True, "detail": detail, "telegram": telegram_status()}
+
+
+@router.post("/api/v1/discord/test")
+def discord_test(_: None = Depends(require_bearer)) -> dict:
+    """Send a test message using DISCORD_* settings in .env."""
+    from app.discord_notify import discord_status, send_test_message
+
+    ok, detail = send_test_message()
+    if not ok:
+        raise HTTPException(status_code=400, detail=detail or "Discord send failed")
+    return {"ok": True, "detail": detail, "discord": discord_status()}

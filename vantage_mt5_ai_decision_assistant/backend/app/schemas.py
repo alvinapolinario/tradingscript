@@ -272,6 +272,7 @@ class HealthResponse(BaseModel):
     version: str = "1.2.0"
     monitor_url: str = "http://187.77.142.118:8000/monitor"
     telegram: Optional[dict[str, Any]] = None
+    discord: Optional[dict[str, Any]] = None
 
 
 class HeartbeatRequest(BaseModel):

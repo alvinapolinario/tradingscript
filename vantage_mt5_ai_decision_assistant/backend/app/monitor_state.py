@@ -697,15 +697,23 @@ class MonitorStore:
                 "detail": "LLM status unavailable",
             }
         try:
+            from app.discord_notify import discord_status
             from app.telegram_notify import telegram_status
 
             result["telegram"] = telegram_status()
+            result["discord"] = discord_status()
         except Exception:
             result["telegram"] = {
                 "enabled": False,
                 "configured": False,
                 "cooldown_sec": 300,
                 "chat_id_set": False,
+            }
+            result["discord"] = {
+                "enabled": False,
+                "configured": False,
+                "cooldown_sec": 300,
+                "webhook_set": False,
             }
         return result
 

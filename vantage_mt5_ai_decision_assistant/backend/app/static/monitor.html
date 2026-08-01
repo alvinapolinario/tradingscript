@@ -429,6 +429,7 @@
       <span class="pill" id="riskPill"><span class="dot" id="riskDot"></span><span id="riskPillText">Risk …</span></span>
       <span class="pill" id="wsPill"><span class="dot" id="wsDot"></span><span id="wsText">WS …</span></span>
       <span class="pill" id="tgPill" title="Telegram alerts"><span class="dot" id="tgDot"></span><span id="tgText">TG …</span></span>
+      <span class="pill" id="dcPill" title="Discord alerts"><span class="dot" id="dcDot"></span><span id="dcText">DC …</span></span>
       <span class="pill advisory">Advisory only</span>
     </div>
   </header>
@@ -1338,6 +1339,7 @@
       renderChips(ea);
       updateLlmHint(s.llm);
       markTelegram(s.telegram);
+      markDiscord(s.discord);
       renderBrief(brief);
       updateThesisMeta(ea, brief);
       renderEquityPie(ea, brief);
@@ -1377,6 +1379,24 @@
         $("tgText").textContent = "TG OFF";
         setDot($("tgDot"), "muted");
         pill.title = "Telegram disabled — set TELEGRAM_ENABLED=true in .env";
+      }
+    }
+
+    function markDiscord(dc) {
+      const D = dc || {};
+      const pill = $("dcPill");
+      if (D.configured) {
+        $("dcText").textContent = "DC LIVE";
+        setDot($("dcDot"), "ok");
+        pill.title = "Discord alerts active · cooldown " + (D.cooldown_sec || 300) + "s";
+      } else if (D.enabled) {
+        $("dcText").textContent = "DC SETUP";
+        setDot($("dcDot"), "warn");
+        pill.title = "Discord enabled — add DISCORD_WEBHOOK_URL in .env";
+      } else {
+        $("dcText").textContent = "DC OFF";
+        setDot($("dcDot"), "muted");
+        pill.title = "Discord disabled — set DISCORD_ENABLED=true in .env";
       }
     }
 

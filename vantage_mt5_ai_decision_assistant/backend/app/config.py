@@ -35,6 +35,13 @@ class Settings(BaseSettings):
     telegram_bot_token: str | None = None
     telegram_chat_id: str | None = None
     telegram_cooldown_sec: int = 300
+
+    # Discord webhook alerts (backend only)
+    discord_enabled: bool = False
+    discord_webhook_url: str | None = None
+    discord_cooldown_sec: int = 300
+
+    # Alert category toggles (Telegram + Discord when each is enabled)
     telegram_alert_risk: bool = True
     telegram_alert_float_target: bool = True
     telegram_alert_entry: bool = True

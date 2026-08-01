@@ -202,6 +202,41 @@ Toggle each category with `TELEGRAM_ALERT_*=true/false` in `.env`.
 
 `GET /health` includes a `telegram` block (`enabled`, `configured`, `cooldown_sec`).
 
+## 10c. Discord alerts (recommended if Telegram bot creation is blocked)
+
+Alerts are sent from the **VPS backend** via a channel webhook (no bot token needed).
+
+### Setup
+
+1. Discord → your server → create or pick a channel (e.g. `#trading-alerts`).
+2. Channel settings → **Integrations** → **Webhooks** → **New Webhook**.
+3. Name it (e.g. `Vantage AI`) → **Copy Webhook URL**.
+4. On the VPS, edit `backend/.env`:
+
+```env
+DISCORD_ENABLED=true
+DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/123456789/abcdef...
+DISCORD_COOLDOWN_SEC=300
+```
+
+5. Restart backend / run deploy script.
+6. Test (replace with your `LOCAL_API_TOKEN`):
+
+```bash
+curl -X POST http://187.77.142.118:8000/api/v1/discord/test \
+  -H "Authorization: Bearer YOUR_LOCAL_API_TOKEN"
+```
+
+7. Check Discord for **Vantage AI Discord test**.
+
+### What triggers alerts
+
+Same categories as Telegram (§10b). Toggle with `TELEGRAM_ALERT_*` in `.env` — those flags apply to **both** Telegram and Discord when each channel is enabled.
+
+`GET /health` includes a `discord` block (`enabled`, `configured`, `cooldown_sec`).
+
+On `/monitor`, the header pill shows **DC LIVE** when configured.
+
 ## 11. Testing on demo
 
 1. Run with `InpRunDiagnostics = true`.
