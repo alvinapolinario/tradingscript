@@ -50,15 +50,22 @@ vantage_mt5_execution/MQL5/Include/VantageExecution/*
 
 ## Signal rules (phase 1)
 
-The backend reserves orders only when the advisory heartbeat `swing_strategy` blob has:
+### Swing mode (`InpTradingMode` / `InpSwingTradeMode` = Swing)
 
 - `signal` = `STRONG SWING BUY` or `STRONG SWING SELL`
 - `confidence` ≥ 85
 - `entry_quality` = Good or Excellent
 - Fresh `eval_bar_m5` (≤ 2 M5 bars)
-- Valid `stop_loss` and `tp1`
 
-Non-STRONG signals (`SWING BUY`, `WAIT`, etc.) are **never** executed.
+### Scalping mode (`InpTradingMode` / `InpSwingTradeMode` = Scalping)
+
+- `signal` = `SCALP BUY` or `SCALP SELL`
+- `confidence` ≥ 72 (set `InpMinConfidence=72` on executor)
+- `entry_quality` = Average, Good, or Excellent
+- Fresh `eval_bar_m5` (≤ 1 M5 bar)
+- Tighter SL/TP from M5 ATR (0.6 / 1.2 ATR)
+
+**Both EAs must use the same mode** — advisory `InpSwingTradeMode` must match executor `InpTradingMode`.
 
 ## API flow
 

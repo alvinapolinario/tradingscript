@@ -12,7 +12,7 @@
       --bad: #f07178; --mono: "Cascadia Code", Consolas, ui-monospace, monospace;
     }
     body { margin: 0; font-family: "Segoe UI", system-ui, sans-serif; color: var(--text); background: var(--bg); min-height: 100vh; }
-    header { padding: .9rem 1.25rem; border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; align-items: flex-start; }
+    header { padding: .9rem 1.25rem; border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; align-items: flex-start; gap: .5rem; }
     header h1 { margin: 0; font-size: 1.05rem; }
     .sub { color: var(--muted); font-size: .76rem; margin-top: .25rem; }
     main { max-width: 1080px; margin: 0 auto; padding: 1rem 1rem 2.5rem; }
@@ -42,6 +42,7 @@
       <h1>Swing Strategy Engine</h1>
       <div class="sub">XAUUSD / Gold only · multi-TF SMC swing validation · advisory — never auto-trades</div>
     </div>
+    <span id="modePill" class="pill wait">—</span>
     <span id="pill" class="pill wait">—</span>
   </header>
   <main id="main"><div class="empty">Loading…</div></main>
@@ -50,6 +51,8 @@
     function fmt(n, d = 2) { return n == null || isNaN(Number(n)) ? "—" : Number(n).toFixed(d); }
     function sigClass(s) {
       const u = String(s || "").toUpperCase();
+      if (u.includes("SCALP") && u.includes("BUY")) return "buy";
+      if (u.includes("SCALP") && u.includes("SELL")) return "sell";
       if (u.includes("BUY")) return "buy";
       if (u.includes("SELL")) return "sell";
       return "wait";
@@ -70,8 +73,11 @@
 
       const sig = signature(s);
       const pill = document.getElementById("pill");
+      const modePill = document.getElementById("modePill");
       pill.textContent = s.signal || "NO TRADE";
       pill.className = "pill " + sigClass(s.signal);
+      modePill.textContent = s.trade_mode || "SWING";
+      modePill.className = "pill " + ((s.trade_mode || "").toUpperCase() === "SCALPING" ? "sell" : "wait");
       if (sig === lastSig && root.dataset.ready === "1") return;
       lastSig = sig; root.dataset.ready = "1";
 

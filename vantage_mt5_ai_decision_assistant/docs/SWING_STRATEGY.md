@@ -23,7 +23,7 @@ Advisory-only swing trade validation for **XAUUSD / Gold**. Never places MT5 ord
 
 | Group | Purpose |
 |-------|---------|
-| AK | Enable, Gold-only gate |
+| AK | Enable, **Trade mode (Swing / Scalping)**, Gold-only gate |
 | AL | D1, H4, H1, M15, M5 timeframes |
 | AM | Swing depth, ATR, pullback limits |
 | AN | Min confidence, min R:R, RSI/MACD/volume thresholds |

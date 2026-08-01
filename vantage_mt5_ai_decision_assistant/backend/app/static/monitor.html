@@ -233,6 +233,31 @@
     .headline.critical { border-color: rgba(243,18,96,.45); color: #ffb3c7; }
     .headline.warn { border-color: rgba(245,165,36,.4); color: #ffd59a; }
     .headline.info { border-color: rgba(102,211,250,.35); }
+    .master-verdict {
+      margin: 0 0 1rem; padding: .85rem 1rem; border-radius: 10px;
+      border: 1px solid var(--line); background: linear-gradient(135deg, #151c26 0%, #121820 100%);
+      display: grid; grid-template-columns: auto 1fr; gap: .35rem 1rem; align-items: center;
+    }
+    .master-verdict.ok { border-color: rgba(61,214,140,.45); }
+    .master-verdict.warn { border-color: rgba(245,165,36,.4); }
+    .master-verdict.critical { border-color: rgba(243,18,96,.45); }
+    .master-verdict.muted { opacity: .92; }
+    .mv-label {
+      grid-column: 1 / -1; font-size: .68rem; text-transform: uppercase;
+      letter-spacing: .08em; color: var(--muted); font-weight: 650;
+    }
+    .mv-verdict {
+      font-size: 1.45rem; font-weight: 800; letter-spacing: .02em; line-height: 1.1;
+    }
+    .mv-meta { font-size: .82rem; color: var(--muted); }
+    .mv-summary { grid-column: 1 / -1; font-size: .88rem; line-height: 1.4; color: var(--text); margin-top: .15rem; }
+    .mv-modules { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: .35rem; margin-top: .35rem; }
+    .mv-mod {
+      font-size: .72rem; padding: .2rem .45rem; border-radius: 6px;
+      border: 1px solid var(--line); background: #121a24;
+    }
+    .mv-mod.ok { border-color: rgba(61,214,140,.35); color: #9af0c2; }
+    .mv-mod.warn { border-color: rgba(245,165,36,.35); color: #ffd59a; }
     .brief-grid {
       display: grid;
       grid-template-columns: 1.4fr 1fr 1fr;
@@ -403,6 +428,7 @@
       <span class="pill" id="overallPill"><span class="dot" id="overallDot"></span><span id="overallText">…</span></span>
       <span class="pill" id="riskPill"><span class="dot" id="riskDot"></span><span id="riskPillText">Risk …</span></span>
       <span class="pill" id="wsPill"><span class="dot" id="wsDot"></span><span id="wsText">WS …</span></span>
+      <span class="pill" id="tgPill" title="Telegram alerts"><span class="dot" id="tgDot"></span><span id="tgText">TG …</span></span>
       <span class="pill advisory">Advisory only</span>
     </div>
   </header>
@@ -411,6 +437,13 @@
     <!-- B. Decision strip -->
     <section class="card" id="decisionStrip">
       <h2>Decision strip · what to do now</h2>
+      <div class="master-verdict muted" id="masterVerdictBox">
+        <div class="mv-label">Master verdict · all modules</div>
+        <div class="mv-verdict" id="masterVerdict">—</div>
+        <div class="mv-meta" id="masterMeta">Score — · Side —</div>
+        <div class="mv-summary" id="masterSummary">Waiting for EA modules…</div>
+        <div class="mv-modules" id="masterModules"></div>
+      </div>
       <div class="hero">
         <div class="hero-action info" id="heroActionBox">
           <div class="hero-label">Primary action</div>
@@ -1036,8 +1069,24 @@
       }
     }
 
+    function renderMasterVerdict(mv) {
+      const m = mv || {};
+      const box = $("masterVerdictBox");
+      const tone = m.tone || "muted";
+      box.className = "master-verdict " + tone;
+      $("masterVerdict").textContent = m.verdict || "—";
+      const side = m.side && m.side !== "—" ? " · Side " + m.side : "";
+      $("masterMeta").textContent = "Score " + (m.score != null ? m.score : "—") + side;
+      $("masterSummary").textContent = m.summary || "—";
+      const mods = m.modules || [];
+      $("masterModules").innerHTML = mods.length
+        ? mods.map((x) => `<span class="mv-mod ${esc(x.tone || 'muted')}" title="${esc(x.detail || '')}">${esc(x.name)}: ${esc(x.status)}</span>`).join("")
+        : '<span class="mv-mod muted">No module data</span>';
+    }
+
     function renderBrief(brief) {
       const b = brief || {};
+      renderMasterVerdict(b.master_verdict);
       const hl = $("briefHeadline");
       hl.textContent = b.headline || "No analysis yet — waiting for EA heartbeat.";
       hl.className = "headline " + (b.severity || "info");
@@ -1216,6 +1265,10 @@
       $("eaMode").textContent = (ea.margin_mode || "—") + (ea.currency ? " · " + ea.currency : "");
 
       $("symbol").textContent = ea.symbol || s.selected_symbol || "—";
+      const brokerSym = ea.broker_symbol && ea.broker_symbol !== ea.symbol ? ea.broker_symbol : "";
+      if (brokerSym) {
+        $("pairHint").textContent = `(broker: ${brokerSym})`;
+      }
       $("bidAsk").textContent = (ea.bid && ea.ask) ? (ea.bid + " / " + ea.ask) : "—";
       $("spread").textContent = ea.spread_points != null ? (ea.spread_points + " pts" + (ea.high_spread ? " · HIGH" : "")) : "—";
       $("spread").style.color = ea.high_spread ? "var(--bad)" : "var(--text)";
@@ -1284,6 +1337,7 @@
 
       renderChips(ea);
       updateLlmHint(s.llm);
+      markTelegram(s.telegram);
       renderBrief(brief);
       updateThesisMeta(ea, brief);
       renderEquityPie(ea, brief);
@@ -1305,6 +1359,24 @@
       } else {
         $("wsText").textContent = "WS DOWN";
         setDot($("wsDot"), "bad");
+      }
+    }
+
+    function markTelegram(tg) {
+      const T = tg || {};
+      const pill = $("tgPill");
+      if (T.configured) {
+        $("tgText").textContent = "TG LIVE";
+        setDot($("tgDot"), "ok");
+        pill.title = "Telegram alerts active · cooldown " + (T.cooldown_sec || 300) + "s";
+      } else if (T.enabled) {
+        $("tgText").textContent = "TG SETUP";
+        setDot($("tgDot"), "warn");
+        pill.title = "Telegram enabled — add bot token + chat ID in .env";
+      } else {
+        $("tgText").textContent = "TG OFF";
+        setDot($("tgDot"), "muted");
+        pill.title = "Telegram disabled — set TELEGRAM_ENABLED=true in .env";
       }
     }
 

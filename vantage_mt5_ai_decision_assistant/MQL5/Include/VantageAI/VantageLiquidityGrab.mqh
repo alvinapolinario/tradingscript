@@ -942,7 +942,7 @@ private:
       datetime t1 = t0 + PeriodSeconds(m_cfg.tf_detect) * 3;
 
       // Active best level line
-      if(r.liquidity_level_price > 0)
+      if(m_cfg.show_hlines && r.liquidity_level_price > 0)
         {
          string lid = LG_OBJ_PREFIX + "LVL";
          if(ObjectFind(0, lid) < 0) ObjectCreate(0, lid, OBJ_HLINE, 0, 0, r.liquidity_level_price);
@@ -950,6 +950,8 @@ private:
          ObjectSetInteger(0, lid, OBJPROP_COLOR, r.direction == LG_DIR_BUY_SIDE_GRAB_BEARISH ? clrOrangeRed : clrDodgerBlue);
          ObjectSetString(0, lid, OBJPROP_TEXT, r.liquidity_level_type);
         }
+      else if(ObjectFind(0, LG_OBJ_PREFIX + "LVL") >= 0)
+         ObjectDelete(0, LG_OBJ_PREFIX + "LVL");
 
       if(r.sweep_price > 0)
         {
@@ -959,7 +961,7 @@ private:
          ObjectSetInteger(0, sid, OBJPROP_COLOR, clrYellow);
         }
 
-      if(r.mss_detected && r.mss_level > 0)
+      if(m_cfg.show_hlines && r.mss_detected && r.mss_level > 0)
         {
          string mid = LG_OBJ_PREFIX + "MSS";
          if(ObjectFind(0, mid) < 0) ObjectCreate(0, mid, OBJ_HLINE, 0, 0, r.mss_level);
@@ -967,6 +969,8 @@ private:
          ObjectSetInteger(0, mid, OBJPROP_STYLE, STYLE_DASH);
          ObjectSetInteger(0, mid, OBJPROP_COLOR, clrMagenta);
         }
+      else if(ObjectFind(0, LG_OBJ_PREFIX + "MSS") >= 0)
+         ObjectDelete(0, LG_OBJ_PREFIX + "MSS");
 
       string lbl = LG_OBJ_PREFIX + "LBL";
       if(ObjectFind(0, lbl) < 0) ObjectCreate(0, lbl, OBJ_TEXT, 0, t1, r.sweep_price > 0 ? r.sweep_price : r.liquidity_level_price);

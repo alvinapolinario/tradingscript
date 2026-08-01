@@ -759,25 +759,33 @@ private:
    void DrawObjects(const VantageBosResult &r)
      {
       if(!m_cfg.show_chart) return;
+      if(!m_cfg.show_hlines)
+        {
+         if(ObjectFind(0, BOS_OBJ_PREFIX + "TL_BULL") >= 0) ObjectDelete(0, BOS_OBJ_PREFIX + "TL_BULL");
+         if(ObjectFind(0, BOS_OBJ_PREFIX + "TL_BEAR") >= 0) ObjectDelete(0, BOS_OBJ_PREFIX + "TL_BEAR");
+        }
+      else
+        {
+         if(m_tl_bull.active)
+           {
+            string id = BOS_OBJ_PREFIX + "TL_BULL";
+            if(ObjectFind(0, id) < 0) ObjectCreate(0, id, OBJ_TREND, 0, m_tl_bull.time2, m_tl_bull.price2, m_tl_bull.time1, m_tl_bull.price1);
+            ObjectMove(0, id, 0, m_tl_bull.time2, m_tl_bull.price2);
+            ObjectMove(0, id, 1, m_tl_bull.time1, m_tl_bull.price1);
+            ObjectSetInteger(0, id, OBJPROP_COLOR, clrDodgerBlue);
+            ObjectSetInteger(0, id, OBJPROP_RAY_RIGHT, true);
+           }
+         if(m_tl_bear.active)
+           {
+            string id = BOS_OBJ_PREFIX + "TL_BEAR";
+            if(ObjectFind(0, id) < 0) ObjectCreate(0, id, OBJ_TREND, 0, m_tl_bear.time2, m_tl_bear.price2, m_tl_bear.time1, m_tl_bear.price1);
+            ObjectMove(0, id, 0, m_tl_bear.time2, m_tl_bear.price2);
+            ObjectMove(0, id, 1, m_tl_bear.time1, m_tl_bear.price1);
+            ObjectSetInteger(0, id, OBJPROP_COLOR, clrOrangeRed);
+            ObjectSetInteger(0, id, OBJPROP_RAY_RIGHT, true);
+           }
+        }
       datetime t0 = iTime(m_symbol, PERIOD_M5, 0);
-      if(m_tl_bull.active)
-        {
-         string id = BOS_OBJ_PREFIX + "TL_BULL";
-         if(ObjectFind(0, id) < 0) ObjectCreate(0, id, OBJ_TREND, 0, m_tl_bull.time2, m_tl_bull.price2, m_tl_bull.time1, m_tl_bull.price1);
-         ObjectMove(0, id, 0, m_tl_bull.time2, m_tl_bull.price2);
-         ObjectMove(0, id, 1, m_tl_bull.time1, m_tl_bull.price1);
-         ObjectSetInteger(0, id, OBJPROP_COLOR, clrDodgerBlue);
-         ObjectSetInteger(0, id, OBJPROP_RAY_RIGHT, true);
-        }
-      if(m_tl_bear.active)
-        {
-         string id = BOS_OBJ_PREFIX + "TL_BEAR";
-         if(ObjectFind(0, id) < 0) ObjectCreate(0, id, OBJ_TREND, 0, m_tl_bear.time2, m_tl_bear.price2, m_tl_bear.time1, m_tl_bear.price1);
-         ObjectMove(0, id, 0, m_tl_bear.time2, m_tl_bear.price2);
-         ObjectMove(0, id, 1, m_tl_bear.time1, m_tl_bear.price1);
-         ObjectSetInteger(0, id, OBJPROP_COLOR, clrOrangeRed);
-         ObjectSetInteger(0, id, OBJPROP_RAY_RIGHT, true);
-        }
       string lbl = BOS_OBJ_PREFIX + "LBL";
       if(ObjectFind(0, lbl) < 0) ObjectCreate(0, lbl, OBJ_TEXT, 0, t0, SymbolInfoDouble(m_symbol, SYMBOL_BID));
       ObjectSetString(0, lbl, OBJPROP_TEXT, r.grade_label + " " + DoubleToString(r.confidence_score, 0));

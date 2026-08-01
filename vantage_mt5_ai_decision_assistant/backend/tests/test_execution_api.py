@@ -20,6 +20,7 @@ SAMPLE_SWING = {
     "valid": True,
     "gold_symbol_valid": True,
     "symbol": "XAUUSD",
+    "trade_mode": "SWING",
     "trend": "Bullish",
     "confidence": 91.0,
     "signal": "STRONG SWING BUY",
@@ -29,6 +30,16 @@ SAMPLE_SWING = {
     "tp2": 4068.0,
     "tp3": 4090.0,
     "eval_bar_m5": int(time.time()) - 60,
+}
+
+SAMPLE_SCALP = {
+    **SAMPLE_SWING,
+    "trade_mode": "SCALPING",
+    "signal": "SCALP BUY",
+    "confidence": 78.0,
+    "entry_quality": "Average",
+    "stop_loss": 4035.0,
+    "tp1": 4042.0,
 }
 
 WEAK_SWING = {
@@ -78,7 +89,7 @@ def test_execution_next_offline_empty(tmp_exec_db):
 
 def test_execution_next_strong_signal(tmp_exec_db):
     _monitor_with_swing(SAMPLE_SWING)
-    r = client.get("/api/v1/execution/next?symbol=XAUUSD", headers=_auth_headers())
+    r = client.get("/api/v1/execution/next?symbol=XAUUSD&mode=SWING", headers=_auth_headers())
     assert r.status_code == 200
     body = r.json()
     assert body["has_signal"] is True
@@ -89,19 +100,36 @@ def test_execution_next_strong_signal(tmp_exec_db):
     assert order["signal_id"]
 
 
-def test_execution_next_rejects_non_strong(tmp_exec_db):
-    _monitor_with_swing(WEAK_SWING)
-    r = client.get("/api/v1/execution/next?symbol=XAUUSD", headers=_auth_headers())
+def test_execution_next_scalping_signal(tmp_exec_db):
+    _monitor_with_swing(SAMPLE_SCALP)
+    r = client.get("/api/v1/execution/next?symbol=XAUUSD&mode=SCALPING", headers=_auth_headers())
+    body = r.json()
+    assert body["has_signal"] is True
+    assert body["trade_mode"] == "SCALPING"
+    assert body["order"]["side"] == "BUY"
+
+
+def test_execution_mode_mismatch(tmp_exec_db):
+    _monitor_with_swing(SAMPLE_SWING)
+    r = client.get("/api/v1/execution/next?symbol=XAUUSD&mode=SCALPING", headers=_auth_headers())
     body = r.json()
     assert body["has_signal"] is False
-    assert body["reason"] == "not_strong_signal"
+    assert body["reason"] == "trade_mode_mismatch"
+
+
+def test_execution_next_rejects_non_strong(tmp_exec_db):
+    _monitor_with_swing(WEAK_SWING)
+    r = client.get("/api/v1/execution/next?symbol=XAUUSD&mode=SWING", headers=_auth_headers())
+    body = r.json()
+    assert body["has_signal"] is False
+    assert body["reason"] == "signal_not_allowed_for_mode"
 
 
 def test_execution_dedup_pending(tmp_exec_db):
     _monitor_with_swing(SAMPLE_SWING)
     h = _auth_headers()
-    r1 = client.get("/api/v1/execution/next?symbol=XAUUSD", headers=h)
-    r2 = client.get("/api/v1/execution/next?symbol=XAUUSD", headers=h)
+    r1 = client.get("/api/v1/execution/next?symbol=XAUUSD&mode=SWING", headers=h)
+    r2 = client.get("/api/v1/execution/next?symbol=XAUUSD&mode=SWING", headers=h)
     id1 = r1.json()["order"]["signal_id"]
     id2 = r2.json()["order"]["signal_id"]
     assert id1 == id2
@@ -113,7 +141,7 @@ def test_execution_dedup_pending(tmp_exec_db):
 def test_execution_ack_filled(tmp_exec_db):
     _monitor_with_swing(SAMPLE_SWING)
     h = _auth_headers()
-    nxt = client.get("/api/v1/execution/next?symbol=XAUUSD", headers=h).json()
+    nxt = client.get("/api/v1/execution/next?symbol=XAUUSD&mode=SWING", headers=h).json()
     sig_id = nxt["order"]["signal_id"]
     ack = client.post(
         "/api/v1/execution/ack",
@@ -124,7 +152,7 @@ def test_execution_ack_filled(tmp_exec_db):
     assert ack.json()["signal"]["status"] == "FILLED"
     assert ack.json()["signal"]["ticket"] == 12345
     # Same swing should not re-fire
-    again = client.get("/api/v1/execution/next?symbol=XAUUSD", headers=h).json()
+    again = client.get("/api/v1/execution/next?symbol=XAUUSD&mode=SWING", headers=h).json()
     assert again["has_signal"] is False
     assert again["reason"] == "already_filled"
 

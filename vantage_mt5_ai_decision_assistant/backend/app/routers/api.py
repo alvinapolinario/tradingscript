@@ -36,6 +36,8 @@ def require_bearer(
 
 @router.get("/health", response_model=HealthResponse)
 def health(settings: Settings = Depends(get_settings)) -> HealthResponse:
+    from app.telegram_notify import telegram_status
+
     base = (settings.public_base_url or "http://187.77.142.118:8000").rstrip("/")
     return HealthResponse(
         status="ok",
@@ -43,6 +45,7 @@ def health(settings: Settings = Depends(get_settings)) -> HealthResponse:
         advisory_only=True,
         version="1.2.0",
         monitor_url=f"{base}/monitor",
+        telegram=telegram_status(settings),
     )
 
 
@@ -70,6 +73,12 @@ def heartbeat(
             signal_id=accepted.get("id"),
         )
         push_monitor_update("signal")
+    try:
+        from app.telegram_notify import process_heartbeat
+
+        process_heartbeat(req.model_dump(), accepted)
+    except Exception as exc:
+        monitor_store.add_log("WARN", "telegram", f"Heartbeat notify failed: {exc}")
     cy, cm = monitor_store.calendar_request()
     # Default request to whatever month EA just sent if UI has not chosen yet
     if cy <= 0 and req.pl_calendar and req.pl_calendar.get("year") and req.pl_calendar.get("month"):
@@ -550,17 +559,19 @@ def lab_reset() -> dict:
 @router.get("/api/v1/execution/next")
 def execution_next(
     symbol: str = Query(default="XAUUSD"),
-    min_confidence: float = Query(default=85.0, ge=0, le=100),
-    max_m5_bars: int = Query(default=2, ge=1, le=10),
+    mode: str = Query(default="SWING"),
+    min_confidence: float | None = Query(default=None, ge=0, le=100),
+    max_m5_bars: int | None = Query(default=None, ge=1, le=10),
     tp_level: str = Query(default="TP1"),
     _: None = Depends(require_bearer),
 ) -> dict:
-    """Demo executor poll — reserve one STRONG Swing Strategy order spec."""
+    """Demo executor poll — reserve one Swing or Scalping order spec."""
     from app.execution_queue import reserve_next
 
     return reserve_next(
         monitor_store.status(),
         symbol=symbol,
+        mode=mode,
         min_confidence=min_confidence,
         max_m5_bars=max_m5_bars,
         tp_level=tp_level,
@@ -600,6 +611,12 @@ def execution_ack(
         signal_id=signal_id,
     )
     push_monitor_update("execution_ack")
+    try:
+        from app.telegram_notify import notify_execution_ack
+
+        notify_execution_ack(updated, status)
+    except Exception as exc:
+        monitor_store.add_log("WARN", "telegram", f"Execution notify failed: {exc}")
     return {
         "demo_execution": True,
         "ok": True,
@@ -611,11 +628,16 @@ def execution_ack(
 def execution_history(
     limit: int = Query(default=50, ge=1, le=200),
     symbol: str | None = Query(default=None),
+    mode: str | None = Query(default=None),
 ) -> dict:
     """Demo execution journal."""
     from app.execution_queue import execution_summary, list_history
 
-    items = list_history(limit=limit, symbol=(symbol.strip().upper() if symbol else None))
+    items = list_history(
+        limit=limit,
+        symbol=(symbol.strip().upper() if symbol else None),
+        mode=(mode.strip().upper() if mode else None),
+    )
     summary = execution_summary(monitor_store.status())
     return {
         "demo_execution": True,
@@ -628,3 +650,14 @@ def execution_history(
 @router.get("/api/v1/monitor/logs")
 def monitor_logs(limit: int = Query(default=100, ge=1, le=300)) -> dict:
     return {"items": monitor_store.logs(limit)}
+
+
+@router.post("/api/v1/telegram/test")
+def telegram_test(_: None = Depends(require_bearer)) -> dict:
+    """Send a test message using TELEGRAM_* settings in .env."""
+    from app.telegram_notify import send_test_message, telegram_status
+
+    ok, detail = send_test_message()
+    if not ok:
+        raise HTTPException(status_code=400, detail=detail or "Telegram send failed")
+    return {"ok": True, "detail": detail, "telegram": telegram_status()}

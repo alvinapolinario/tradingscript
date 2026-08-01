@@ -56,7 +56,7 @@
 //+------------------------------------------------------------------+
 input group "A. Backend (local FastAPI)"
 input string InpBackendUrl        = "http://187.77.142.118:8000"; // Backend base URL (VPS)
-input string InpBearerToken       = ""; // Paste LOCAL_API_TOKEN from backend/.env (do not commit secrets)
+input string InpBearerToken       = "2ZGrxytB0N3X6AMWK4ghT8uwklcq5FPCsvEmj9Hzibnpf1LI"; // LOCAL_API_TOKEN — match backend/.env
 input int    InpHttpTimeoutMs     = 8000;   // WebRequest timeout (ms)
 input int    InpMaxResponseAgeSec = 120;    // Max acceptable AI response age (sec)
 input int    InpTimerSec          = 5;      // Timer poll (seconds)
@@ -88,6 +88,8 @@ input int    InpBiasLookback      = 20;     // Closed candles for bullish/bearis
 
 input group "D. Notifications & UI"
 input bool   InpShowDashboard     = true;
+input bool   InpApiOnlyUi         = false;  // Hide chart HUD/lines; data still sent via heartbeat/API
+input bool   InpChartHideHorizontalLines = true; // Hide H-lines/trendlines; keep Gold SMC vertical zones
 input bool   InpPushNotify        = false;
 input int    InpNotifyCooldownSec = 300;     // Notification cooldown (seconds)
 input bool   InpRunDiagnostics    = true;   // Run diagnostics on init
@@ -413,6 +415,7 @@ input bool   InpMseDebug        = false;
 
 input group "AK. Swing Strategy Engine — Core"
 input bool   InpSwingEnable     = true;
+input ENUM_SWING_STRAT_TRADE_MODE InpSwingTradeMode = SWING_TRADE_SWING; // Swing (multi-TF) or Scalping (M5 fast)
 input bool   InpSwingGoldOnly   = true;
 input string InpSwingAliases    = "XAUUSD,GOLD";
 
@@ -516,6 +519,58 @@ int      g_bt_sell = 0;
 int      g_bt_wait = 0;
 int      g_bt_none = 0;
 bool     g_bt_summary_printed = false;
+
+//+------------------------------------------------------------------+
+//| Chart UI gates — InpApiOnlyUi hides all on-chart visuals         |
+//+------------------------------------------------------------------+
+bool WantMainDashboard(void)
+  {
+   return InpShowDashboard && !InpApiOnlyUi;
+  }
+
+bool WantModuleDashboard(void)
+  {
+   return !InpApiOnlyUi;
+  }
+
+bool WantModuleChart(void)
+  {
+   return !InpApiOnlyUi;
+  }
+
+bool WantChartHorizontalLines(void)
+  {
+   return !InpChartHideHorizontalLines && WantModuleChart();
+  }
+
+void ClearHorizontalChartLines(void)
+  {
+   const int total = ObjectsTotal(0, 0, -1);
+   for(int i = total - 1; i >= 0; i--)
+     {
+      const string name = ObjectName(0, i, 0, -1);
+      if(StringFind(name, "VAI_") != 0)
+         continue;
+      const long typ = ObjectGetInteger(0, name, OBJPROP_TYPE);
+      if(typ == OBJ_HLINE || typ == OBJ_TREND)
+         ObjectDelete(0, name);
+     }
+   ChartRedraw(0);
+  }
+
+void ClearAllChartVisuals(void)
+  {
+   g_dash.Clear();
+   Comment("");
+   const int total = ObjectsTotal(0, 0, -1);
+   for(int i = total - 1; i >= 0; i--)
+     {
+      const string name = ObjectName(0, i, 0, -1);
+      if(StringFind(name, "VAI_") == 0)
+         ObjectDelete(0, name);
+     }
+   ChartRedraw(0);
+  }
 
 //+------------------------------------------------------------------+
 //| Strategy Tester / forced local replay                            |
@@ -973,8 +1028,9 @@ void FillPullbackConfig(VantagePullbackConfig &cfg)
    cfg.thr_extension = InpPbThrExtension;
    cfg.alert_cooldown_sec = InpPbAlertCoolSec;
    cfg.server_utc_offset_hours = InpPbUtcOffsetHrs;
-   cfg.show_chart_objects = InpPbShowChartObj;
-   cfg.show_dashboard = InpPbShowDash;
+   cfg.show_chart_objects = InpPbShowChartObj && WantModuleChart();
+   cfg.show_dashboard = InpPbShowDash && WantModuleDashboard();
+   cfg.show_hlines = WantChartHorizontalLines();
   }
 
 void MaybeEvalPullback(const bool force)
@@ -993,9 +1049,11 @@ void FillGoldSmcConfig(VantageGoldSMCConfig &cfg)
    cfg.approved_aliases = InpGoldSmcAliases;
    cfg.allow_broker_suffix = InpGoldSmcAllowSuffix;
    cfg.allow_broker_prefix = InpGoldSmcAllowPrefix;
-   cfg.show_nongold_warning = InpGoldSmcShowWarn;
-   cfg.show_dashboard = InpGoldSmcShowDash;
-   cfg.show_chart_objects = InpGoldSmcShowChartObj;
+   cfg.show_nongold_warning = InpGoldSmcShowWarn && WantModuleDashboard();
+   cfg.show_dashboard = InpGoldSmcShowDash && WantModuleDashboard();
+   const bool gsm_chart = WantModuleChart() && InpGoldSmcShowChartObj;
+   cfg.show_chart_objects = gsm_chart;
+   cfg.chart_show_hlines = WantChartHorizontalLines();
    cfg.tf_macro = InpGoldSmcTF_D1;
    cfg.tf_major = InpGoldSmcTF_H4;
    cfg.tf_bias = InpGoldSmcTF_H1;
@@ -1057,12 +1115,12 @@ void FillGoldSmcConfig(VantageGoldSMCConfig &cfg)
    cfg.w_ote = InpGoldSmcWOte;
    cfg.w_ltf = InpGoldSmcWLtf;
    cfg.w_vol_spread = InpGoldSmcWVol;
-   cfg.chart_show_range = InpGoldSmcChartRange;
-   cfg.chart_show_liquidity = InpGoldSmcChartLiq;
-   cfg.chart_show_sessions = InpGoldSmcChartSess;
-   cfg.chart_show_poi = InpGoldSmcChartPoi;
-   cfg.chart_show_ote = InpGoldSmcChartOte;
-   cfg.chart_show_setup = InpGoldSmcChartSetup;
+   cfg.chart_show_range = gsm_chart && InpGoldSmcChartRange;
+   cfg.chart_show_liquidity = gsm_chart && InpGoldSmcChartLiq;
+   cfg.chart_show_sessions = gsm_chart && InpGoldSmcChartSess;
+   cfg.chart_show_poi = gsm_chart && InpGoldSmcChartPoi;
+   cfg.chart_show_ote = gsm_chart && InpGoldSmcChartOte;
+   cfg.chart_show_setup = gsm_chart && InpGoldSmcChartSetup;
    cfg.chart_lookback_bars = InpGoldSmcChartBars;
    cfg.alert_enable = InpGoldSmcAlertEnable;
    cfg.alert_popup = InpGoldSmcAlertPopup;
@@ -1141,8 +1199,9 @@ void FillLiquidityGrabConfig(VantageLiquidityGrabConfig &cfg)
    cfg.alert_push = InpLiqGrabAlertPush && !g_replay_mode;
    cfg.alert_sound = InpLiqGrabAlertSound;
    cfg.alert_cooldown_sec = InpLiqGrabAlertCool;
-   cfg.show_chart_objects = InpLiqGrabChartObj;
-   cfg.show_dashboard = InpLiqGrabShowDash;
+   cfg.show_chart_objects = InpLiqGrabChartObj && WantModuleChart();
+   cfg.show_dashboard = InpLiqGrabShowDash && WantModuleDashboard();
+   cfg.show_hlines = WantChartHorizontalLines();
    cfg.chart_retention_bars = InpLiqGrabChartBars;
    cfg.debug_log = InpLiqGrabDebug;
   }
@@ -1191,8 +1250,9 @@ void FillBreakoutStructureConfig(VantageBosConfig &cfg)
    cfg.w_htf = InpBosWHtf;
    cfg.w_session = 5.0;
    cfg.reject_threshold = InpBosRejectThresh;
-   cfg.show_chart = InpBosChartObj;
-   cfg.show_dashboard = InpBosShowDash;
+   cfg.show_chart = InpBosChartObj && WantModuleChart();
+   cfg.show_dashboard = InpBosShowDash && WantModuleDashboard();
+   cfg.show_hlines = WantChartHorizontalLines();
    cfg.alert_enable = InpBosAlertEnable;
    cfg.alert_cooldown_sec = InpBosAlertCool;
    cfg.debug_log = InpBosDebug;
@@ -1228,8 +1288,9 @@ void FillMarketStateConfig(VantageMseConfig &cfg)
    cfg.tl_touch_atr = 0.15;
    cfg.retest_max_bars = InpMseRetestBars;
    cfg.retest_tol_atr = 0.25;
-   cfg.show_chart = InpMseChartObj;
-   cfg.show_dashboard = InpMseShowDash;
+   cfg.show_chart = InpMseChartObj && WantModuleChart();
+   cfg.show_dashboard = InpMseShowDash && WantModuleDashboard();
+   cfg.show_hlines = WantChartHorizontalLines();
    cfg.debug_log = InpMseDebug;
   }
 
@@ -1244,6 +1305,7 @@ void FillSwingStrategyConfig(VantageSwingStratConfig &cfg)
   {
    ZeroMemory(cfg);
    cfg.enable = InpSwingEnable;
+   cfg.trade_mode = InpSwingTradeMode;
    cfg.gold_only = InpSwingGoldOnly;
    cfg.approved_aliases = InpSwingAliases;
    cfg.allow_suffix = true;
@@ -1268,8 +1330,9 @@ void FillSwingStrategyConfig(VantageSwingStratConfig &cfg)
    cfg.min_volume_ratio = InpSwingMinVolRat;
    cfg.bos_min_atr = InpSwingMinBosAtr;
    cfg.min_body_pct = InpSwingMinBodyPct;
-   cfg.show_chart = InpSwingChartObj;
-   cfg.show_dashboard = InpSwingShowDash;
+   cfg.show_chart = InpSwingChartObj && WantModuleChart();
+   cfg.show_dashboard = InpSwingShowDash && WantModuleDashboard();
+   cfg.show_hlines = WantChartHorizontalLines();
    cfg.debug_log = InpSwingDebug;
   }
 
@@ -1509,10 +1572,10 @@ void ProcessReplayBar(const datetime closed_time)
       return;
      }
 
-   if(!g_analysis.BuildSnapshot(g_tech))
+   if(!g_analysis.BuildSnapshotAt(g_tech, closed_time))
      {
       g_last_action = "DATA_UNAVAILABLE";
-      g_note = "Failed to build technical snapshot.";
+      g_note = "Failed to build technical snapshot for replay bar.";
       WriteBacktestSignalRow(closed_time);
       return;
      }
@@ -1542,11 +1605,18 @@ void ProcessReplayBar(const datetime closed_time)
          g_dec.primary_action = "NO_NEW_TRADE";
      }
 
+   MaybeEvalPullback(false);
+   MaybeEvalGoldSmc(false);
+   MaybeEvalLiquidityGrab(false);
+   MaybeEvalBreakoutStructure(false);
+   MaybeEvalMarketState(false);
+   MaybeEvalSwingStrategy(false);
+
    g_last_action = g_dec.primary_action;
    g_last_request_candle = closed_time;
    WriteBacktestSignalRow(closed_time);
 
-   if(!InpShowDashboard || (bool)MQLInfoInteger(MQL_OPTIMIZATION))
+   if(!WantMainDashboard() || (bool)MQLInfoInteger(MQL_OPTIMIZATION))
       return;
    Comment("Vantage SIGNAL REPLAY | ", _Symbol, " M30\n",
            TimeToString(closed_time, TIME_DATE | TIME_MINUTES),
@@ -1653,7 +1723,7 @@ void ProcessClosedCandle(const datetime closed_time)
 //+------------------------------------------------------------------+
 void RefreshDashboard(void)
   {
-   if(!InpShowDashboard)
+   if(!WantMainDashboard())
       return;
    VantageCapturePrices(_Symbol, InpMaxSpreadPoints, g_px);
    VantageLoadPositions(_Symbol, g_pos);
@@ -1675,18 +1745,18 @@ void RefreshDashboard(void)
    MaybeEvalBreakoutStructure(false);
    MaybeEvalMarketState(false);
    MaybeEvalSwingStrategy(false);
-   const bool show_gsm = InpGoldSmcShowDash &&
+   const bool show_gsm = WantModuleDashboard() && InpGoldSmcShowDash &&
                          (InpGoldSmcEnable || InpGoldSmcShowWarn) &&
                          g_gsmsnap.valid;
-   const bool show_lg = InpLiqGrabShowDash && InpLiqGrabEnable && g_liqgrabsnap.valid;
-   const bool show_bos = InpBosShowDash && InpBosEnable && g_bossnap.valid;
-   const bool show_mse = InpMseShowDash && InpMseEnable && g_msesnap.valid;
-   const bool show_swing = InpSwingShowDash && InpSwingEnable && g_swingsnap.valid;
+   const bool show_lg = WantModuleDashboard() && InpLiqGrabShowDash && InpLiqGrabEnable && g_liqgrabsnap.valid;
+   const bool show_bos = WantModuleDashboard() && InpBosShowDash && InpBosEnable && g_bossnap.valid;
+   const bool show_mse = WantModuleDashboard() && InpMseShowDash && InpMseEnable && g_msesnap.valid;
+   const bool show_swing = WantModuleDashboard() && InpSwingShowDash && InpSwingEnable && g_swingsnap.valid;
    g_dash.Render(g_acct, g_spec, g_px, g_backend_status, g_candle_status, g_dec,
                  g_pos, g_risk, ts, age,
                  g_equity, g_floating_pl_pct, InpFloatProfitTargetPct, g_float_profit_target_hit,
                  g_pl_cal.year, g_pl_cal.month, g_pl_cal.month_pl, g_pl_cal.month_pct, g_pl_cal.month_deals,
-                 g_trade_stats, g_pbsnap, InpPbShowDash && InpPullbackEnable,
+                 g_trade_stats, g_pbsnap, WantModuleDashboard() && InpPbShowDash && InpPullbackEnable,
                  g_gsmsnap, show_gsm,
                  g_liqgrabsnap, show_lg,
                  g_bossnap, show_bos,
@@ -1820,7 +1890,9 @@ int OnInit()
       OpenBacktestCsv();
       // Start at 0 so the first closed M30 bar in the test range is logged
       g_last_closed_candle = 0;
+      EventSetTimer(1); // backup driver when tick model is sparse (e.g. Open prices on H1)
       Print("[VantageAI] Replay ready. Strategy Tester will log local signals (no WebRequest, no orders).");
+      Print("[VantageAI] Use this EA — not VantageSwingExecutor. Expect 0 deals; check Journal + CSV.");
       return INIT_SUCCEEDED;
      }
 
@@ -1844,8 +1916,19 @@ int OnInit()
 
    EventSetTimer(MathMax(1, InpTimerSec));
    RefreshPlCalendar(true);
+   if(InpApiOnlyUi)
+     {
+      ClearAllChartVisuals();
+      Print("[VantageAI] API-only UI enabled — chart HUD/lines hidden; heartbeat + web UI unchanged.");
+     }
+   else if(InpChartHideHorizontalLines)
+     {
+      ClearHorizontalChartLines();
+      Print("[VantageAI] Horizontal chart lines hidden — Gold SMC vertical zones kept; data still in API.");
+     }
    MaybeSendHeartbeat();
-   RefreshDashboard();
+   if(!InpApiOnlyUi)
+      RefreshDashboard();
    return INIT_SUCCEEDED;
   }
 
@@ -1868,8 +1951,7 @@ void OnDeinit(const int reason)
    g_breakout.Release();
    g_marketstate.Release();
    g_swingstrat.Release();
-   g_dash.Clear();
-   Comment("");
+   ClearAllChartVisuals();
    Print("[VantageAI] Stopped. reason=", reason);
   }
 
@@ -1890,7 +1972,10 @@ double OnTester()
 void OnTimer()
   {
    if(g_replay_mode)
+     {
+      ReplayDriveClosedBars();
       return;
+     }
 
    datetime t[];
    if(CopyTime(_Symbol, PERIOD_M30, 1, 1, t) != 1)
@@ -1923,6 +2008,38 @@ void OnTimer()
   }
 
 //+------------------------------------------------------------------+
+//| Replay — process every newly closed M30 bar (handles H1 chart)   |
+//+------------------------------------------------------------------+
+void ReplayDriveClosedBars(void)
+  {
+   datetime last_closed[];
+   if(CopyTime(_Symbol, PERIOD_M30, 1, 1, last_closed) != 1)
+      return;
+   const datetime upto = last_closed[0];
+   if(upto <= g_last_closed_candle)
+      return;
+
+   datetime times[];
+   const int bars_avail = Bars(_Symbol, PERIOD_M30) - 1;
+   const int want = (bars_avail > 5000 ? 5000 : bars_avail);
+   if(want <= 0)
+      return;
+   const int n = CopyTime(_Symbol, PERIOD_M30, 1, want, times);
+   if(n <= 0)
+      return;
+
+   for(int i = 0; i < n; i++)
+     {
+      if(times[i] <= g_last_closed_candle)
+         continue;
+      if(times[i] > upto)
+         break;
+      ProcessReplayBar(times[i]);
+      g_last_closed_candle = times[i];
+     }
+  }
+
+//+------------------------------------------------------------------+
 //| Tick — live: prices only; replay: drive closed M30 bars          |
 //+------------------------------------------------------------------+
 void OnTick()
@@ -1930,15 +2047,7 @@ void OnTick()
    if(!g_replay_mode)
       return; // live analysis waits for closed candle via OnTimer
 
-   datetime t[];
-   if(CopyTime(_Symbol, PERIOD_M30, 1, 1, t) != 1)
-      return;
-
-   if(t[0] == g_last_closed_candle)
-      return;
-
-   g_last_closed_candle = t[0];
-   ProcessReplayBar(t[0]);
+   ReplayDriveClosedBars();
   }
 
 //+------------------------------------------------------------------+

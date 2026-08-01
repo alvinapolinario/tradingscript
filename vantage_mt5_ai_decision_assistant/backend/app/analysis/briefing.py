@@ -246,9 +246,14 @@ def build_decision_brief(ea: dict[str, Any], stats: dict[str, Any] | None = None
     last_analyze = stats.get("last_analyze_utc")
     analyze_age = stats.get("seconds_since_analyze")
 
+    from app.analysis.master_verdict import build_master_verdict
+
+    master = build_master_verdict(ea)
+
     return {
         "severity": severity,
         "headline": headline,
+        "master_verdict": master,
         "situation": situation,
         "recommendations": recommendations,
         "checklist": checklist,

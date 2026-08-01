@@ -30,6 +30,21 @@ class Settings(BaseSettings):
     float_profit_target_pct: float = 10.0
     rsi_exhaust: float = 32.0
 
+    # Telegram Bot alerts (backend only — never in EA)
+    telegram_enabled: bool = False
+    telegram_bot_token: str | None = None
+    telegram_chat_id: str | None = None
+    telegram_cooldown_sec: int = 300
+    telegram_alert_risk: bool = True
+    telegram_alert_float_target: bool = True
+    telegram_alert_entry: bool = True
+    telegram_alert_signals: bool = True
+    telegram_alert_swing: bool = True
+    telegram_alert_liquidity_grab: bool = True
+    telegram_alert_gold_smc: bool = True
+    telegram_alert_execution: bool = True
+    telegram_gold_smc_min_score: float = 75.0
+
 
 @lru_cache
 def get_settings() -> Settings:

@@ -200,13 +200,15 @@ public:
    string LastError(void) const { return m_last_error; }
    int    LastHttp(void) const { return m_last_http; }
 
-   bool PollNext(const string symbol, const double min_confidence, VantageExecOrderSpec &spec)
+   bool PollNext(const string symbol, const double min_confidence, const string mode, VantageExecOrderSpec &spec)
      {
       ZeroMemory(spec);
       spec.valid = false;
       string path = "/api/v1/execution/next?symbol=" + symbol;
       if(min_confidence > 0)
          path += "&min_confidence=" + DoubleToString(min_confidence, 0);
+      if(mode != "")
+         path += "&mode=" + mode;
       string body = "";
       if(!WebGet(path, body))
          return false;

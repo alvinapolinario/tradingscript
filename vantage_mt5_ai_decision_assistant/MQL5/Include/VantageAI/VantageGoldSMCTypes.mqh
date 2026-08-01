@@ -367,6 +367,7 @@ struct VantageGoldSMCConfig
    bool   chart_show_poi;             // primary POI rectangle
    bool   chart_show_ote;             // OTE zone
    bool   chart_show_setup;           // entry / invalidation / targets
+   bool   chart_show_hlines;          // PDH/BSL/TP/invalidation H-lines (rectangles unaffected)
    int    chart_lookback_bars;        // rectangle horizontal span
    bool   alert_enable;
    bool   alert_popup;

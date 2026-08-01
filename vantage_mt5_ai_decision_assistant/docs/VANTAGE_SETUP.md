@@ -143,7 +143,10 @@ The web monitor has a **Pair** selector (**XAUUSD** / **BTCUSD**). Each chart ne
    - `InpAdvisoryOnly` = **true** (required)
    - On BTCUSD: keep `InpLevelSource=AUTO_NON_GOLD` or `AUTO`; raise `InpMaxSpreadPoints` or set `0`
 4. Enable Algo Trading (for timers/WebRequest; the EA still never sends orders).
-5. Check Experts log for masked login, symbol specs, and backend health.
+5. **Clean chart (optional):**
+   - `InpApiOnlyUi = true` — hide all on-chart HUD/lines/zones; data still in `/monitor`, `/gold-smc`, etc.
+   - `InpChartHideHorizontalLines = true` (default) — hide PDH/BSL/TP/invalidation **H-lines** but **keep Gold SMC vertical premium/discount/OTE zones** on chart.
+6. Check Experts log for masked login, symbol specs, and backend health.
 
 ## 10. Enabling MT5 push notifications
 
@@ -151,6 +154,53 @@ The web monitor has a **Pair** selector (**XAUUSD** / **BTCUSD**). Each chart ne
 2. Configure MetaQuotes ID / push.
 3. In EA inputs: `InpPushNotify = true`.
 4. Notifications fire only on **state changes** with cooldown + one-per-closed-candle rules.
+
+## 10b. Telegram alerts (recommended)
+
+Alerts are sent from the **VPS backend** (bot token never goes in the EA).
+
+### Setup
+
+1. Telegram → [@BotFather](https://t.me/BotFather) → `/newbot` → copy **bot token**.
+2. Open a chat with your bot and send any message (e.g. `hi`).
+3. Open in a browser (replace `TOKEN`):
+   `https://api.telegram.org/botTOKEN/getUpdates`
+   Copy `"chat":{"id": ...}` → that is **TELEGRAM_CHAT_ID**.
+4. On the VPS, edit `backend/.env`:
+
+```env
+TELEGRAM_ENABLED=true
+TELEGRAM_BOT_TOKEN=your_bot_token
+TELEGRAM_CHAT_ID=your_chat_id
+TELEGRAM_COOLDOWN_SEC=300
+```
+
+5. Restart backend / run deploy script.
+6. Test (replace with your `LOCAL_API_TOKEN`):
+
+```bash
+curl -X POST http://187.77.142.118:8000/api/v1/telegram/test \
+  -H "Authorization: Bearer YOUR_LOCAL_API_TOKEN"
+```
+
+7. Check Telegram for **Vantage AI Telegram test**.
+
+### What triggers alerts (default)
+
+| Alert | Trigger |
+|--------|---------|
+| CRITICAL risk | `risk_status=CRITICAL` or over max position risk |
+| Float profit target | Floating P/L ≥ target % of equity |
+| New entry watch | `BUY_ALLOWED` / `SELL_ALLOWED` (on change) |
+| Accepted signal | M5 desk SETUP_OK → signal ledger |
+| Swing STRONG | `STRONG SWING BUY/SELL`, confidence ≥ 85 |
+| Liquidity grab | `GRAB_CONFIRMED` / `HIGH_CONFIDENCE` |
+| Gold SMC setup | Named setup, score ≥ 75 |
+| Demo execution | Executor FILLED / REJECTED / SKIPPED |
+
+Toggle each category with `TELEGRAM_ALERT_*=true/false` in `.env`.
+
+`GET /health` includes a `telegram` block (`enabled`, `configured`, `cooldown_sec`).
 
 ## 11. Testing on demo
 
@@ -211,10 +261,26 @@ Columns: `time,symbol,bid,spread,trend,market_state,bullish_pct,bearish_pct,rsi,
 
 No FastAPI / WebRequest is used in tester. A separate trading EA would be required for profit-factor style backtests.
 
+**Do not backtest `VantageSwingExecutor`** — it polls the live VPS for signals via `WebRequest` and will show **0 trades** in Strategy Tester. Use the advisory EA above for signal replay; use the executor only on a **demo chart** with the backend running.
+
+### Strategy Tester checklist
+
+| Symptom | Cause | Fix |
+|--------|--------|-----|
+| 0 trades, empty equity | Wrong EA (`VantageSwingExecutor`) or expected (advisory never orders) | Use `VantageMT5AIDecisionAssistant`; read CSV / Journal, not the Results tab |
+| Journal shows no `SIGNAL REPLAY MODE` | Old `.ex5` or wrong expert | Recompile (F7), sync to `MQL5/Experts/`, pick advisory EA in tester |
+| CSV missing / 0 rows | `InpBacktestLogSignals=false` or init failed | Enable logging; check Experts for `Symbol spec failed` / `Backtest CSV open failed` |
+| Only a few CSV rows on H1 chart | Coarse tick model skipped M30 closes | Prefer **M30** period; or use **1 minute OHLC** / **Every tick** (replay now catches missed M30 bars) |
+| All rows `INCOMPLETE_HISTORY` | Range too short for EMA200 | Start date needs **220+ M30 bars** of history before first signal |
+
+Journal success looks like: `SIGNAL REPLAY MODE` → `Signal journal: MQL5/Files/vantage_signals_XAUUSD.csv` → end summary `Bars logged: N`.
+
 ## 13. Troubleshooting common WebRequest errors
 
 | Symptom | Likely cause | Fix |
 |--------|---------------|-----|
+| XAUUSD not syncing on **live** account (demo OK) | Live broker symbol differs (`XAUUSD+`, `GOLD`, `XAUUSD.a`) — heartbeat stored under wrong key | Deploy latest backend (maps broker gold → **XAUUSD**). Re-attach EA on your **live gold chart**; Pair = **XAUUSD** on `/monitor`. |
+| EA offline after switching MT5 login | EA not re-attached / Algo Trading off on new account | Remove & re-drag EA on live XAUUSD M30; enable Algo Trading; check Experts log for heartbeat OK |
 | err 4014 / 4060 | URL not allow-listed | Add `http://187.77.142.118:8000` |
 | Connection failure | Backend not running | Start `python run.py` |
 | HTTP 401 | Token mismatch | Align EA token and `.env` |

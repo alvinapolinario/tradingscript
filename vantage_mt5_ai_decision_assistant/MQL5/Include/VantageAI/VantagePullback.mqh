@@ -49,6 +49,7 @@ struct VantagePullbackConfig
    int    alert_cooldown_sec;
    int    server_utc_offset_hours;
    bool   show_chart_objects;
+   bool   show_hlines;
    bool   show_dashboard;
   };
 
@@ -455,6 +456,12 @@ private:
 
    void SetHLine(const string key, const double price, const color clr, const string text)
      {
+      if(!m_cfg.show_hlines)
+        {
+         string drop = m_obj_prefix + key;
+         if(ObjectFind(0, drop) >= 0) ObjectDelete(0, drop);
+         return;
+        }
       string id = m_obj_prefix + key;
       if(price <= 0) { if(ObjectFind(0, id) >= 0) ObjectDelete(0, id); return; }
       if(ObjectFind(0, id) < 0)

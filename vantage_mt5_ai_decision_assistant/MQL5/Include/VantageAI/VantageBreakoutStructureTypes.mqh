@@ -141,6 +141,7 @@ struct VantageBosConfig
    double w_session;
    double reject_threshold;
    bool   show_chart;
+   bool   show_hlines;
    bool   show_dashboard;
    bool   alert_enable;
    int    alert_cooldown_sec;

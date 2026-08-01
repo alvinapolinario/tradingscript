@@ -198,6 +198,7 @@ struct VantageLiquidityGrabConfig
    bool   alert_sound;
    int    alert_cooldown_sec;
    bool   show_chart_objects;
+   bool   show_hlines;              // liquidity/MSS H-lines (labels/arrows unaffected)
    bool   show_dashboard;
    int    chart_retention_bars;
    bool   debug_log;

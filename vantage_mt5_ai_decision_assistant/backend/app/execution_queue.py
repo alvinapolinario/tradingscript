@@ -1,8 +1,8 @@
 """
-Demo execution queue — Swing Strategy STRONG signals only.
+Demo execution queue — Swing Strategy signals by trade mode.
 
-Reserves signals in SQLite so duplicate polls do not double-fire.
-Does not replace advisory EA; consumes swing_strategy heartbeat blob.
+SWING mode: STRONG SWING BUY/SELL
+SCALPING mode: SCALP BUY/SELL (M5 fast profile from advisory engine)
 """
 from __future__ import annotations
 
@@ -19,10 +19,29 @@ _DATA_DIR = __import__("pathlib").Path(__file__).resolve().parent.parent / "data
 _DB_PATH = _DATA_DIR / "execution_ledger.db"
 _lock = threading.Lock()
 
-STRONG_SIGNALS = frozenset({"STRONG SWING BUY", "STRONG SWING SELL"})
-ALLOWED_ENTRY_QUALITY = frozenset({"GOOD", "EXCELLENT"})
+SWING_SIGNALS = frozenset({"STRONG SWING BUY", "STRONG SWING SELL"})
+SCALP_SIGNALS = frozenset({"SCALP BUY", "SCALP SELL"})
+ALLOWED_ENTRY_QUALITY_SWING = frozenset({"GOOD", "EXCELLENT"})
+ALLOWED_ENTRY_QUALITY_SCALP = frozenset({"AVERAGE", "GOOD", "EXCELLENT"})
 M5_SECONDS = 300
 DEFAULT_EXPIRES_SEC = 600
+
+MODE_DEFAULTS: dict[str, dict[str, Any]] = {
+    "SWING": {
+        "signals": SWING_SIGNALS,
+        "entry_quality": ALLOWED_ENTRY_QUALITY_SWING,
+        "min_confidence": 85.0,
+        "max_m5_bars": 2,
+        "caption": "Demo execution — Swing mode (STRONG SWING signals).",
+    },
+    "SCALPING": {
+        "signals": SCALP_SIGNALS,
+        "entry_quality": ALLOWED_ENTRY_QUALITY_SCALP,
+        "min_confidence": 72.0,
+        "max_m5_bars": 1,
+        "caption": "Demo execution — Scalping mode (SCALP BUY/SELL signals).",
+    },
+}
 
 
 def _utc_now() -> str:
@@ -34,6 +53,12 @@ def _connect() -> sqlite3.Connection:
     conn = sqlite3.connect(str(_DB_PATH), check_same_thread=False)
     conn.row_factory = sqlite3.Row
     return conn
+
+
+def _ensure_column(conn: sqlite3.Connection, name: str, ddl: str) -> None:
+    cols = {r[1] for r in conn.execute("PRAGMA table_info(executions)").fetchall()}
+    if name not in cols:
+        conn.execute(f"ALTER TABLE executions ADD COLUMN {ddl}")
 
 
 def init_db() -> None:
@@ -59,10 +84,12 @@ def init_db() -> None:
                     expires_utc TEXT,
                     ticket INTEGER,
                     reason TEXT,
-                    swing_json TEXT
+                    swing_json TEXT,
+                    trade_mode TEXT NOT NULL DEFAULT 'SWING'
                 )
                 """
             )
+            _ensure_column(conn, "trade_mode", "trade_mode TEXT NOT NULL DEFAULT 'SWING'")
             conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_exec_fp ON executions(fingerprint, status)"
             )
@@ -72,6 +99,13 @@ def init_db() -> None:
             conn.commit()
         finally:
             conn.close()
+
+
+def _normalize_mode(mode: str) -> str:
+    m = str(mode or "").upper().strip()
+    if m in {"SCALPING", "SCALP"}:
+        return "SCALPING"
+    return "SWING"
 
 
 def _safe_float(v: Any, default: float = 0.0) -> float:
@@ -107,8 +141,8 @@ def _symbols_match(a: str, b: str) -> bool:
     return na.startswith("XAU") and nb.startswith("XAU")
 
 
-def _fingerprint(symbol: str, signal: str, eval_bar_m5: int, stop_loss: float) -> str:
-    raw = f"{_normalize_symbol(symbol)}|{signal}|{eval_bar_m5}|{stop_loss:.5f}"
+def _fingerprint(symbol: str, signal: str, eval_bar_m5: int, stop_loss: float, mode: str) -> str:
+    raw = f"{_normalize_symbol(symbol)}|{mode}|{signal}|{eval_bar_m5}|{stop_loss:.5f}"
     return hashlib.sha256(raw.encode()).hexdigest()[:32]
 
 
@@ -121,9 +155,9 @@ def _parse_side(signal: str) -> Optional[str]:
     return None
 
 
-def _entry_quality_ok(quality: Any) -> bool:
+def _entry_quality_ok(quality: Any, allowed: frozenset[str]) -> bool:
     q = str(quality or "").upper().strip()
-    return q in ALLOWED_ENTRY_QUALITY
+    return q in allowed
 
 
 def _is_fresh(eval_bar_m5: int, max_m5_bars: int = 2) -> bool:
@@ -147,6 +181,7 @@ def _expire_stale_pending(conn: sqlite3.Connection) -> None:
 
 
 def _row_to_dict(row: sqlite3.Row) -> dict[str, Any]:
+    keys = row.keys()
     return {
         "signal_id": row["id"],
         "symbol": row["symbol"],
@@ -162,10 +197,12 @@ def _row_to_dict(row: sqlite3.Row) -> dict[str, Any]:
         "ticket": row["ticket"],
         "reason": row["reason"],
         "signal_label": row["signal_label"],
+        "trade_mode": row["trade_mode"] if "trade_mode" in keys else "SWING",
     }
 
 
 def _order_payload(row: sqlite3.Row, expires_in_sec: int = DEFAULT_EXPIRES_SEC) -> dict[str, Any]:
+    keys = row.keys()
     return {
         "signal_id": row["id"],
         "symbol": row["symbol"],
@@ -176,6 +213,7 @@ def _order_payload(row: sqlite3.Row, expires_in_sec: int = DEFAULT_EXPIRES_SEC) 
         "confidence": row["confidence"],
         "eval_bar_m5": row["eval_bar_m5"],
         "expires_in_sec": expires_in_sec,
+        "trade_mode": row["trade_mode"] if "trade_mode" in keys else "SWING",
     }
 
 
@@ -192,12 +230,20 @@ def reserve_next(
     monitor_status: dict[str, Any],
     symbol: str,
     *,
-    min_confidence: float = 85.0,
-    max_m5_bars: int = 2,
+    mode: str = "SWING",
+    min_confidence: float | None = None,
+    max_m5_bars: int | None = None,
     tp_level: str = "TP1",
 ) -> dict[str, Any]:
     """Return next actionable order or empty has_signal=false."""
     import json
+
+    trade_mode = _normalize_mode(mode)
+    cfg = MODE_DEFAULTS[trade_mode]
+    min_conf = float(min_confidence if min_confidence is not None else cfg["min_confidence"])
+    max_bars = int(max_m5_bars if max_m5_bars is not None else cfg["max_m5_bars"])
+    allowed_signals = cfg["signals"]
+    allowed_quality = cfg["entry_quality"]
 
     sym = str(symbol or "").upper().strip() or "XAUUSD"
     ea = _ea_blob(monitor_status)
@@ -206,7 +252,8 @@ def reserve_next(
     base: dict[str, Any] = {
         "demo_execution": True,
         "has_signal": False,
-        "caption": "Demo execution — Swing Strategy STRONG signals only.",
+        "trade_mode": trade_mode,
+        "caption": cfg["caption"],
         "symbol": sym,
     }
 
@@ -220,26 +267,34 @@ def reserve_next(
         base["reason"] = swing.get("disable_reason") or "gold_only"
         return base
 
+    blob_mode = _normalize_mode(str(swing.get("trade_mode") or "SWING"))
+    if blob_mode != trade_mode:
+        base["reason"] = "trade_mode_mismatch"
+        base["expected_mode"] = trade_mode
+        base["blob_mode"] = blob_mode
+        return base
+
     ea_sym = str(swing.get("symbol") or ea.get("symbol") or sym)
     if not _symbols_match(ea_sym, sym):
         base["reason"] = "symbol_mismatch"
         return base
 
     signal_label = str(swing.get("signal") or "").upper()
-    if signal_label not in STRONG_SIGNALS:
-        base["reason"] = "not_strong_signal"
+    if signal_label not in allowed_signals:
+        base["reason"] = "signal_not_allowed_for_mode"
+        base["signal"] = signal_label
         return base
 
     confidence = _safe_float(swing.get("confidence"))
-    if confidence < min_confidence:
+    if confidence < min_conf:
         base["reason"] = "low_confidence"
         return base
-    if not _entry_quality_ok(swing.get("entry_quality")):
+    if not _entry_quality_ok(swing.get("entry_quality"), allowed_quality):
         base["reason"] = "entry_quality"
         return base
 
     eval_bar = _safe_int(swing.get("eval_bar_m5"))
-    if not _is_fresh(eval_bar, max_m5_bars=max_m5_bars):
+    if not _is_fresh(eval_bar, max_m5_bars=max_bars):
         base["reason"] = "stale_eval_bar"
         return base
 
@@ -254,7 +309,7 @@ def reserve_next(
         base["reason"] = "invalid_levels"
         return base
 
-    fp = _fingerprint(ea_sym, signal_label, eval_bar, stop_loss)
+    fp = _fingerprint(ea_sym, signal_label, eval_bar, stop_loss, trade_mode)
     now = _utc_now()
     expires_dt = datetime.now(timezone.utc).timestamp() + DEFAULT_EXPIRES_SEC
     expires_utc = datetime.fromtimestamp(expires_dt, tz=timezone.utc).isoformat()
@@ -277,20 +332,18 @@ def reserve_next(
                     base["reason"] = "already_filled"
                     conn.commit()
                     return base
-                # Re-return same pending reservation for idempotent poll
                 base["has_signal"] = True
                 base["order"] = _order_payload(row)
                 conn.commit()
                 return base
 
-            # Block new signals while another pending exists for symbol
             pending_sym = conn.execute(
                 """
                 SELECT id FROM executions
-                WHERE symbol = ? AND status = 'PENDING'
+                WHERE symbol = ? AND status = 'PENDING' AND trade_mode = ?
                 LIMIT 1
                 """,
-                (_normalize_symbol(ea_sym),),
+                (_normalize_symbol(ea_sym), trade_mode),
             ).fetchone()
             if pending_sym:
                 base["reason"] = "pending_exists"
@@ -304,8 +357,8 @@ def reserve_next(
                     id, created_utc, updated_utc, status, fingerprint,
                     symbol, side, signal_label, order_type,
                     stop_loss, take_profit, confidence, eval_bar_m5,
-                    expires_utc, ticket, reason, swing_json
-                ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                    expires_utc, ticket, reason, swing_json, trade_mode
+                ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                 """,
                 (
                     sig_id,
@@ -325,6 +378,7 @@ def reserve_next(
                     None,
                     None,
                     json.dumps(swing),
+                    trade_mode,
                 ),
             )
             conn.commit()
@@ -381,30 +435,31 @@ def ack_execution(
 def list_history(
     limit: int = 50,
     symbol: str | None = None,
+    mode: str | None = None,
 ) -> list[dict[str, Any]]:
     with _lock:
         conn = _connect()
         try:
             _expire_stale_pending(conn)
             conn.commit()
+            params: list[Any] = []
+            clauses: list[str] = []
             if symbol:
-                sym = _normalize_symbol(symbol)
-                rows = conn.execute(
-                    """
-                    SELECT * FROM executions
-                    WHERE symbol = ?
-                    ORDER BY created_utc DESC LIMIT ?
-                    """,
-                    (sym, limit),
-                ).fetchall()
-            else:
-                rows = conn.execute(
-                    """
-                    SELECT * FROM executions
-                    ORDER BY created_utc DESC LIMIT ?
-                    """,
-                    (limit,),
-                ).fetchall()
+                clauses.append("symbol = ?")
+                params.append(_normalize_symbol(symbol))
+            if mode:
+                clauses.append("trade_mode = ?")
+                params.append(_normalize_mode(mode))
+            where = (" WHERE " + " AND ".join(clauses)) if clauses else ""
+            params.append(limit)
+            rows = conn.execute(
+                f"""
+                SELECT * FROM executions
+                {where}
+                ORDER BY created_utc DESC LIMIT ?
+                """,
+                tuple(params),
+            ).fetchall()
             return [_row_to_dict(r) for r in rows]
         finally:
             conn.close()
@@ -419,6 +474,7 @@ def execution_summary(monitor_status: dict[str, Any]) -> dict[str, Any]:
     return {
         "demo_execution": True,
         "ea_online": _ea_is_connected(monitor_status, ea),
+        "blob_trade_mode": (swing or {}).get("trade_mode") if swing else None,
         "current_signal": (swing or {}).get("signal") if swing else None,
         "current_confidence": (swing or {}).get("confidence") if swing else None,
         "pending_count": pending,

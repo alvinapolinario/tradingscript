@@ -33,6 +33,12 @@ enum ENUM_SWING_STRAT_PHASE
    SWING_PHASE_RANGE
   };
 
+enum ENUM_SWING_STRAT_TRADE_MODE
+  {
+   SWING_TRADE_SWING = 0,   // Multi-TF swing — STRONG SWING signals
+   SWING_TRADE_SCALPING = 1  // M5/M15 fast profile — SCALP BUY/SELL
+  };
+
 enum ENUM_SWING_STRAT_SIGNAL
   {
    SWING_SIG_NO_TRADE = 0,
@@ -40,7 +46,9 @@ enum ENUM_SWING_STRAT_SIGNAL
    SWING_SIG_SWING_BUY,
    SWING_SIG_STRONG_SWING_BUY,
    SWING_SIG_SWING_SELL,
-   SWING_SIG_STRONG_SWING_SELL
+   SWING_SIG_STRONG_SWING_SELL,
+   SWING_SIG_SCALP_BUY,
+   SWING_SIG_SCALP_SELL
   };
 
 enum ENUM_SWING_STRAT_ENTRY_QUALITY
@@ -73,6 +81,7 @@ struct VantageSwingStratSwing
 struct VantageSwingStratConfig
   {
    bool   enable;
+   ENUM_SWING_STRAT_TRADE_MODE trade_mode;
    bool   gold_only;
    string approved_aliases;
    bool   allow_suffix;
@@ -98,6 +107,7 @@ struct VantageSwingStratConfig
    double bos_min_atr;
    double min_body_pct;
    bool   show_chart;
+   bool   show_hlines;
    bool   show_dashboard;
    bool   debug_log;
   };
@@ -110,6 +120,7 @@ struct VantageSwingStratResult
    bool   analysis_active;
    string symbol;
    string base_symbol;
+   string trade_mode;
    string disable_reason;
    string status_line;
    // Structure
@@ -200,12 +211,20 @@ string SwingStratTrendToString(const ENUM_SWING_STRAT_TREND t)
    return "Sideways";
   }
 
+string SwingStratTradeModeToString(const ENUM_SWING_STRAT_TRADE_MODE m)
+  {
+   if(m == SWING_TRADE_SCALPING) return "SCALPING";
+   return "SWING";
+  }
+
 string SwingStratSignalToString(const ENUM_SWING_STRAT_SIGNAL s)
   {
    if(s == SWING_SIG_STRONG_SWING_BUY) return "STRONG SWING BUY";
    if(s == SWING_SIG_SWING_BUY) return "SWING BUY";
    if(s == SWING_SIG_STRONG_SWING_SELL) return "STRONG SWING SELL";
    if(s == SWING_SIG_SWING_SELL) return "SWING SELL";
+   if(s == SWING_SIG_SCALP_BUY) return "SCALP BUY";
+   if(s == SWING_SIG_SCALP_SELL) return "SCALP SELL";
    if(s == SWING_SIG_WAIT) return "WAIT";
    return "NO TRADE";
   }

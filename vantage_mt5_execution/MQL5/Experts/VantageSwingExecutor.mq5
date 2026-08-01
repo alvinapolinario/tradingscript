@@ -19,7 +19,7 @@
 //--- A. Connection
 input group "A. Connection"
 input string InpBackendUrl     = "http://187.77.142.118:8000";
-input string InpApiToken       = "local-dev-token-change-me";
+input string InpApiToken       = "2ZGrxytB0N3X6AMWK4ghT8uwklcq5FPCsvEmj9Hzibnpf1LI";
 input int    InpPollSeconds    = 5;
 input int    InpRequestTimeoutMs = 8000;
 
@@ -35,9 +35,10 @@ input double InpRiskPct        = 0.50;
 input double InpMaxLot         = 1.0;
 input int    InpMaxSpreadPoints = 450;
 
-//--- D. Signal
-input group "D. Signal"
-input double InpMinConfidence  = 85.0;
+//--- D. Signal / Mode
+input group "D. Signal / Mode"
+input ENUM_EXEC_TRADE_MODE InpTradingMode = EXEC_MODE_SWING; // Swing or Scalping — must match advisory InpSwingTradeMode
+input double InpMinConfidence  = 85.0;   // Swing default 85; use 72 for scalping
 input ENUM_EXEC_TP_LEVEL InpTakeProfitLevel = EXEC_TP1;
 
 //--- E. Logging
@@ -107,21 +108,37 @@ bool SendAck(const string signal_id, const string status, const ulong ticket, co
    return true;
   }
 
+string ExecModeToApi(const ENUM_EXEC_TRADE_MODE mode)
+  {
+   if(mode == EXEC_MODE_SCALPING) return "SCALPING";
+   return "SWING";
+  }
+
+long ExecMagicForMode(const ENUM_EXEC_TRADE_MODE mode, const long base_magic)
+  {
+   if(mode == EXEC_MODE_SCALPING) return base_magic + 1;
+   return base_magic;
+  }
+
 void ProcessPoll(void)
   {
-   if(ExecCountOpenPositions(_Symbol, InpMagicNumber) >= InpMaxOpenPositions)
+   const long magic = ExecMagicForMode(InpTradingMode, InpMagicNumber);
+   const int max_spread = (InpTradingMode == EXEC_MODE_SCALPING && InpMaxSpreadPoints > 250)
+                          ? 250 : InpMaxSpreadPoints;
+
+   if(ExecCountOpenPositions(_Symbol, magic) >= InpMaxOpenPositions)
      {
       LogDbg("Skip poll — max open positions reached.");
       return;
      }
-   if(!ExecSpreadOk(_Symbol, InpMaxSpreadPoints))
+   if(!ExecSpreadOk(_Symbol, max_spread))
      {
       LogDbg("Skip poll — spread too high.");
       return;
      }
 
    VantageExecOrderSpec spec;
-   if(!g_client.PollNext(_Symbol, InpMinConfidence, spec))
+   if(!g_client.PollNext(_Symbol, InpMinConfidence, ExecModeToApi(InpTradingMode), spec))
      {
       LogDbg("Poll failed: " + g_client.LastError());
       return;
@@ -172,7 +189,7 @@ int OnInit(void)
       return INIT_FAILED;
 
    g_client.Configure(InpBackendUrl, InpApiToken, InpRequestTimeoutMs);
-   g_trade.Configure(InpMagicNumber, "VantageSwingExecutor");
+   g_trade.Configure(ExecMagicForMode(InpTradingMode, InpMagicNumber), "VantageSwingExecutor");
 
    if(InpJournalCsv)
      {
@@ -195,8 +212,9 @@ int OnInit(void)
    EventSetTimer(g_poll_timer);
 
    Print("[VantageExec] Started v", VANTAGE_EXEC_VERSION,
-         " | DEMO ONLY | Symbol=", _Symbol,
-         " | Magic=", InpMagicNumber,
+         " | DEMO ONLY | Mode=", ExecModeToApi(InpTradingMode),
+         " | Symbol=", _Symbol,
+         " | Magic=", ExecMagicForMode(InpTradingMode, InpMagicNumber),
          " | Poll=", sec, "s");
    Print("[VantageExec] Allow WebRequest for: ", InpBackendUrl);
    return INIT_SUCCEEDED;

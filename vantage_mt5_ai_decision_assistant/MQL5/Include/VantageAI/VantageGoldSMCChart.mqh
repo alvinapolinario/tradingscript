@@ -34,6 +34,11 @@ private:
    void SetHLine(const string key, const double price, const color clr,
                  const ENUM_LINE_STYLE style, const int width, const string text)
      {
+      if(!m_cfg.chart_show_hlines)
+        {
+         ClearKey(key);
+         return;
+        }
       string id = m_prefix + key;
       if(price <= 0.0)
         {

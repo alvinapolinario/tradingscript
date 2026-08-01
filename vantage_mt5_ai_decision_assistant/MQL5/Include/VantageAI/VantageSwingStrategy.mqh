@@ -146,6 +146,8 @@ private:
                     MqlRates &d1[], MqlRates &h4[], MqlRates &h1[], MqlRates &m15[], MqlRates &m5[],
                     const int n_d1, const int n_h4, const int n_h1, const int n_m15, const int n_m5)
      {
+      const bool is_scalp = (m_cfg.trade_mode == SWING_TRADE_SCALPING);
+      r.trade_mode = SwingStratTradeModeToString(m_cfg.trade_mode);
       double atr_d1 = GetAtrTf(PERIOD_D1);
       double atr_h4 = GetAtrTf(PERIOD_H4);
       double atr_h1 = GetAtrTf(PERIOD_H1);
@@ -335,7 +337,40 @@ private:
 
       // Step 10 — risk
       double bid = px;
-      if(bullish_bias)
+      if(is_scalp)
+        {
+         if(bullish_bias)
+           {
+            r.invalidation = bid - atr_m5 * 0.6;
+            r.stop_loss = r.invalidation;
+            r.entry_zone_lo = bid - atr_m5 * 0.12;
+            r.entry_zone_hi = bid + atr_m5 * 0.08;
+            r.tp1 = bid + atr_m5 * 1.2;
+            r.tp2 = bid + atr_m5 * 1.8;
+            r.tp3 = bid + atr_m5 * 2.4;
+            r.max_risk_zone = r.invalidation;
+            r.max_risk_zone_label = "Scalp invalidation below M5 micro-structure";
+           }
+         else if(bearish_bias)
+           {
+            r.invalidation = bid + atr_m5 * 0.6;
+            r.stop_loss = r.invalidation;
+            r.entry_zone_hi = bid + atr_m5 * 0.12;
+            r.entry_zone_lo = bid - atr_m5 * 0.08;
+            r.tp1 = bid - atr_m5 * 1.2;
+            r.tp2 = bid - atr_m5 * 1.8;
+            r.tp3 = bid - atr_m5 * 2.4;
+            r.max_risk_zone = r.invalidation;
+            r.max_risk_zone_label = "Scalp invalidation above M5 micro-structure";
+           }
+         else
+           {
+            r.entry_zone_lo = bid - atr_m5 * 0.1;
+            r.entry_zone_hi = bid + atr_m5 * 0.1;
+            r.stop_loss = 0; r.tp1 = 0; r.tp2 = 0; r.tp3 = 0;
+           }
+        }
+      else if(bullish_bias)
         {
          r.invalidation = (sl > 0 ? sl - atr_m5 * m_cfg.atr_multiplier : bid - atr_h4 * 2);
          r.stop_loss = r.invalidation;
@@ -376,12 +411,41 @@ private:
       r.trade_bias = "Neutral";
 
       bool can_buy = bullish_bias && r.trend_class <= SWING_TREND_WEAK_BULL &&
-                     r.momentum_score >= 45 && r.confidence >= m_cfg.min_confidence &&
+                     r.momentum_score >= (is_scalp ? 40 : 45) && r.confidence >= m_cfg.min_confidence &&
                      !lifecycle_failed_buy(r);
       bool can_sell = bearish_bias && r.trend_class >= SWING_TREND_WEAK_BEAR &&
-                      r.momentum_score >= 45 && r.confidence >= m_cfg.min_confidence;
+                      r.momentum_score >= (is_scalp ? 40 : 45) && r.confidence >= m_cfg.min_confidence;
 
-      if(can_buy && r.risk_reward >= m_cfg.min_rr && r.entry_quality >= SWING_EQ_GOOD)
+      if(is_scalp)
+        {
+         const double min_rr_scalp = 1.2;
+         if(can_buy && r.risk_reward >= min_rr_scalp && r.entry_quality >= SWING_EQ_AVERAGE)
+           {
+            r.signal_class = SWING_SIG_SCALP_BUY;
+            r.trade_bias = "Bullish Scalp";
+           }
+         else if(can_buy && r.confidence >= m_cfg.min_confidence - 5)
+           {
+            r.signal_class = SWING_SIG_WAIT;
+            r.trade_bias = "Bullish scalp — awaiting confirmation";
+           }
+         else if(can_sell && r.risk_reward >= min_rr_scalp && r.entry_quality >= SWING_EQ_AVERAGE)
+           {
+            r.signal_class = SWING_SIG_SCALP_SELL;
+            r.trade_bias = "Bearish Scalp";
+           }
+         else if(can_sell)
+           {
+            r.signal_class = SWING_SIG_WAIT;
+            r.trade_bias = "Bearish scalp — awaiting confirmation";
+           }
+         else if(r.confidence >= 50)
+           {
+            r.signal_class = SWING_SIG_WAIT;
+            r.trade_bias = "Monitor — insufficient scalp confirmations";
+           }
+        }
+      else if(can_buy && r.risk_reward >= m_cfg.min_rr && r.entry_quality >= SWING_EQ_GOOD)
         {
          r.signal_class = (r.confidence >= 85 ? SWING_SIG_STRONG_SWING_BUY : SWING_SIG_SWING_BUY);
          r.trade_bias = "Bullish Swing";
@@ -466,13 +530,15 @@ private:
    void DrawChart(const VantageSwingStratResult &r)
      {
       if(!m_cfg.show_chart) return;
-      if(r.invalidation > 0)
+      if(m_cfg.show_hlines && r.invalidation > 0)
         {
          string id = SWING_STRAT_OBJ_PREFIX + "INV";
          if(ObjectFind(0, id) < 0) ObjectCreate(0, id, OBJ_HLINE, 0, 0, r.invalidation);
          ObjectSetDouble(0, id, OBJPROP_PRICE, r.invalidation);
          ObjectSetInteger(0, id, OBJPROP_COLOR, clrOrangeRed);
         }
+      else if(ObjectFind(0, SWING_STRAT_OBJ_PREFIX + "INV") >= 0)
+         ObjectDelete(0, SWING_STRAT_OBJ_PREFIX + "INV");
       if(r.entry_zone_lo > 0 && r.entry_zone_hi > 0)
         {
          string id = SWING_STRAT_OBJ_PREFIX + "ZONE";
@@ -577,6 +643,7 @@ public:
       string j = "{";
       j += "\"module\":\"swing_strategy\",";
       j += "\"version\":\"" + VANTAGE_SWING_STRAT_VERSION + "\",";
+      j += "\"trade_mode\":\"" + JsonEscape(r.trade_mode) + "\",";
       j += "\"valid\":" + (r.valid ? "true" : "false") + ",";
       j += "\"gold_symbol_valid\":" + (r.gold_symbol_valid ? "true" : "false") + ",";
       j += "\"symbol\":\"" + JsonEscape(r.symbol) + "\",";

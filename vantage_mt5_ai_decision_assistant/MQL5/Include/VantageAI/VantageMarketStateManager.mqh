@@ -621,6 +621,12 @@ private:
    void DrawChart(void)
      {
       if(!m_cfg.show_chart) return;
+      if(!m_cfg.show_hlines)
+        {
+         if(ObjectFind(0, MSE_OBJ_PREFIX + "RES") >= 0) ObjectDelete(0, MSE_OBJ_PREFIX + "RES");
+         if(ObjectFind(0, MSE_OBJ_PREFIX + "SUP") >= 0) ObjectDelete(0, MSE_OBJ_PREFIX + "SUP");
+         return;
+        }
       if(m_bus.horizontal_res > 0)
         {
          string id = MSE_OBJ_PREFIX + "RES";

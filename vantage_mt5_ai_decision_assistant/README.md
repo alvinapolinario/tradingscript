@@ -34,9 +34,10 @@ vantage_mt5_ai_decision_assistant/
 11. Market State Engine v2: **http://187.77.142.118:8000/market-state** (lifecycle intelligence + timeline — see [docs/MARKET_STATE.md](docs/MARKET_STATE.md))
 12. Swing Strategy Engine: **http://187.77.142.118:8000/swing-strategy** (multi-TF SMC swing validation — see [docs/SWING_STRATEGY.md](docs/SWING_STRATEGY.md))
 13. Demo Execution journal (optional): **http://187.77.142.118:8000/execution** — requires separate `VantageSwingExecutor` EA; see [../vantage_mt5_execution/docs/EXECUTION_SETUP.md](../vantage_mt5_execution/docs/EXECUTION_SETUP.md)
-14. Allow `http://187.77.142.118:8000` in MT5 WebRequest settings.
-15. EA `InpBackendUrl` = `http://187.77.142.118:8000` · `InpBearerToken` = backend `LOCAL_API_TOKEN`
-16. Compile and attach the EA to your chart.
+14. **Telegram alerts:** configure `TELEGRAM_*` in backend `.env` — see [docs/VANTAGE_SETUP.md](docs/VANTAGE_SETUP.md) §10b
+15. Allow `http://187.77.142.118:8000` in MT5 WebRequest settings.
+16. EA `InpBackendUrl` = `http://187.77.142.118:8000` · `InpBearerToken` = backend `LOCAL_API_TOKEN`
+17. Compile and attach the EA to your chart.
 
 The monitor shows API status, EA connection, dual decisions, risk, and a **Decision Brief** (analysis + recommendations).
 

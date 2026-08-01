@@ -159,6 +159,7 @@ struct VantageMseConfig
    int    retest_max_bars;
    double retest_tol_atr;
    bool   show_chart;
+   bool   show_hlines;
    bool   show_dashboard;
    bool   debug_log;
   };

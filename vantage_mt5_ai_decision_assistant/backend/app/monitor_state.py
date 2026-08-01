@@ -26,6 +26,33 @@ def _norm_symbol(symbol: str | None) -> str:
     return s or "UNKNOWN"
 
 
+def _canonical_monitor_symbol(symbol: str | None) -> str:
+    """Map broker symbols (XAUUSD+, GOLD.pro, BTCUSDm) to monitor pair keys."""
+    from app.analysis.gold_symbol_validator import is_approved_gold_symbol
+
+    u = _norm_symbol(symbol)
+    if u == "UNKNOWN":
+        return u
+
+    ok, base = is_approved_gold_symbol(u)
+    if ok:
+        # UI pair selector uses XAUUSD for all gold aliases.
+        return "XAUUSD" if base in ("XAUUSD", "GOLD") else base
+
+    core = u
+    for suffix in ("+", ".", "M", "I"):
+        if core.endswith(suffix) and len(core) > len(suffix) + 2:
+            core = core[: -len(suffix)]
+
+    if core in DEFAULT_MONITOR_PAIRS:
+        return core
+    if core.startswith("BTC"):
+        return "BTCUSD"
+    if core.startswith("XAU"):
+        return "XAUUSD"
+    return core
+
+
 @dataclass
 class LogEntry:
     ts: str
@@ -45,6 +72,7 @@ class EaSnapshot:
     margin_mode: str = ""
     currency: str = ""
     symbol: str = ""
+    broker_symbol: str = ""
     digits: int = 0
     contract_size: float = 0.0
     stops_level: int = 0
@@ -124,6 +152,8 @@ def _apply_heartbeat_fields(ea: EaSnapshot, payload: dict[str, Any]) -> None:
     ea.account_masked = str(payload.get("account_login_masked", ea.account_masked))
     ea.margin_mode = str(payload.get("margin_mode", ea.margin_mode))
     ea.currency = str(payload.get("currency", ea.currency))
+    raw = str(payload.get("broker_symbol") or payload.get("symbol", ea.symbol) or ea.symbol)
+    ea.broker_symbol = _norm_symbol(raw)
     ea.symbol = str(payload.get("symbol", ea.symbol) or ea.symbol)
     ea.digits = int(payload.get("digits", ea.digits) or 0)
     ea.contract_size = float(payload.get("contract_size", ea.contract_size) or 0)
@@ -326,7 +356,7 @@ class MonitorStore:
             return out
 
     def _get_or_create(self, symbol: str) -> EaSnapshot:
-        key = _norm_symbol(symbol)
+        key = _canonical_monitor_symbol(symbol)
         if key not in self._eas:
             self._eas[key] = EaSnapshot(symbol=key)
         return self._eas[key]
@@ -346,7 +376,7 @@ class MonitorStore:
             self._logs.appendleft(entry)
 
     def select_symbol(self, symbol: str) -> dict[str, Any]:
-        key = _norm_symbol(symbol)
+        key = _canonical_monitor_symbol(symbol)
         with self._lock:
             self._get_or_create(key)
             self._selected_symbol = key
@@ -355,13 +385,16 @@ class MonitorStore:
 
     def record_heartbeat(self, payload: dict[str, Any]) -> None:
         now = _utc_now()
-        sym = _norm_symbol(str(payload.get("symbol", "")))
+        raw_sym = _norm_symbol(str(payload.get("symbol", "")))
+        sym = _canonical_monitor_symbol(raw_sym)
         with self._lock:
             self._heartbeat_count += 1
             ea = self._get_or_create(sym)
             ea.last_seen_utc = now
             ea.symbol = sym
-            _apply_heartbeat_fields(ea, {**payload, "symbol": sym})
+            _apply_heartbeat_fields(
+                ea, {**payload, "symbol": sym, "broker_symbol": raw_sym}
+            )
 
             if isinstance(payload.get("pl_calendar"), dict):
                 cal = payload["pl_calendar"]
@@ -398,7 +431,7 @@ class MonitorStore:
 
     def update_pending_orders(self, symbol: str, pending_orders: dict[str, Any], **extra: Any) -> None:
         """Merge pending-order blob from analyze/heartbeat without a full heartbeat log."""
-        sym = _norm_symbol(symbol)
+        sym = _canonical_monitor_symbol(symbol)
         with self._lock:
             ea = self._get_or_create(sym)
             items = pending_orders.get("items") if isinstance(pending_orders.get("items"), list) else []
@@ -429,7 +462,7 @@ class MonitorStore:
 
     def record_analyze(self, req_summary: dict[str, Any], action: str) -> None:
         now = _utc_now()
-        sym = _norm_symbol(str(req_summary.get("symbol", "")))
+        sym = _canonical_monitor_symbol(str(req_summary.get("symbol", "")))
         with self._lock:
             self._analyze_count += 1
             self._last_analyze_utc = now
@@ -502,6 +535,7 @@ class MonitorStore:
             "margin_mode": ea.margin_mode,
             "currency": ea.currency,
             "symbol": ea.symbol or self._selected_symbol,
+            "broker_symbol": ea.broker_symbol or ea.symbol,
             "digits": ea.digits,
             "contract_size": ea.contract_size,
             "stops_level": ea.stops_level,
@@ -661,6 +695,17 @@ class MonitorStore:
                 "ready": False,
                 "model": "",
                 "detail": "LLM status unavailable",
+            }
+        try:
+            from app.telegram_notify import telegram_status
+
+            result["telegram"] = telegram_status()
+        except Exception:
+            result["telegram"] = {
+                "enabled": False,
+                "configured": False,
+                "cooldown_sec": 300,
+                "chat_id_set": False,
             }
         return result
 

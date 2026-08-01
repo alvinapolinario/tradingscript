@@ -199,8 +199,24 @@ public:
    // shift=1 => last CLOSED candle (never shift 0 for confirmed signals)
    bool BuildSnapshot(VantageTechnicalSnap &snap)
      {
+      return BuildSnapshotAtShift(snap, 1);
+     }
+
+   // Strategy Tester replay: snapshot for a specific closed M30 bar time
+   bool BuildSnapshotAt(VantageTechnicalSnap &snap, const datetime bar_time)
+     {
+      const int sh = iBarShift(m_symbol, m_tf, bar_time, true);
+      if(sh < 1)
+         return false;
+      return BuildSnapshotAtShift(snap, sh);
+     }
+
+private:
+   bool BuildSnapshotAtShift(VantageTechnicalSnap &snap, const int sh)
+     {
       ZeroMemory(snap);
-      const int sh = 1;
+      if(sh < 1)
+         return false;
       MqlRates rates[];
       if(CopyRates(m_symbol, m_tf, sh, 3, rates) < 3)
          return false;
@@ -339,6 +355,7 @@ public:
       return true;
      }
 
+public:
    string TrendName(const ENUM_VANTAGE_TREND t) const
      {
       if(t == VTREND_BULLISH) return "BULLISH";
