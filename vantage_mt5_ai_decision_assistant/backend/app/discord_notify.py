@@ -34,6 +34,7 @@ def discord_status(settings: Settings | None = None) -> dict[str, Any]:
         "configured": discord_configured(st),
         "cooldown_sec": st.discord_cooldown_sec,
         "webhook_set": bool((st.discord_webhook_url or "").strip()),
+        "trades_only": st.discord_trades_only,
     }
 
 
@@ -142,6 +143,90 @@ def notify_execution_ack(signal: dict[str, Any], status: str) -> None:
     _dedupe_send(f"exec|{signal.get('id')}|{status}", msg, cooldown_sec=30, color=color)
 
 
+def _discord_category_enabled(st: Settings, category: str) -> bool:
+    """Respect discord_trades_only — skip noisy categories; keep actionable trades + critical risk."""
+    if not st.discord_trades_only:
+        mapping = {
+            "risk": st.telegram_alert_risk,
+            "float_target": st.telegram_alert_float_target,
+            "entry": st.telegram_alert_entry,
+            "signals": st.telegram_alert_signals,
+            "swing": st.telegram_alert_swing,
+            "liquidity_grab": st.telegram_alert_liquidity_grab,
+            "gold_smc": st.telegram_alert_gold_smc,
+            "execution": st.telegram_alert_execution,
+        }
+        return bool(mapping.get(category, True))
+    return category in ("risk", "signals", "swing", "master")
+
+
+def _maybe_master_verdict_alert(payload: dict[str, Any], sym: str, st: Settings, *, verdicts: tuple[str, ...]) -> None:
+    try:
+        from app.analysis.master_verdict import build_master_verdict
+
+        mv = build_master_verdict({**payload, "connected": True})
+        verdict = str(mv.get("verdict") or "")
+        if verdict not in verdicts:
+            return
+        if not _state_changed(f"{sym}|master|{verdict}", verdict):
+            return
+        side = mv.get("side") or "—"
+        base = st.public_base_url.rstrip("/")
+        modules = mv.get("modules") or []
+        mod_line = " · ".join(f"{m.get('name')}: {m.get('status')}" for m in modules[:5])
+        msg = (
+            f"{_fmt_header(f'Master {verdict}', sym)}\n"
+            f"Side: `{side}` · Score: `{mv.get('score')}`\n"
+            f"{mv.get('summary') or ''}\n"
+        )
+        if mod_line:
+            msg += f"Modules: `{mod_line}`\n"
+        msg += f"[Monitor]({base}/monitor)"
+        color = 15158332 if verdict == "CRITICAL" else (3066993 if verdict == "STRONG" else 3447003)
+        _dedupe_send(
+            f"{sym}|master|{verdict}|{side}",
+            msg,
+            cooldown_sec=max(st.discord_cooldown_sec, 600),
+            color=color,
+        )
+    except Exception:
+        pass
+
+
+def _maybe_swing_trade_alert(payload: dict[str, Any], sym: str, st: Settings) -> None:
+    if not _discord_category_enabled(st, "swing"):
+        return
+    swing = payload.get("swing_strategy")
+    if not isinstance(swing, dict) or not swing.get("valid"):
+        return
+    signal = str(swing.get("signal") or "")
+    sig_u = signal.upper()
+    conf = float(swing.get("confidence") or 0)
+    quality = str(swing.get("entry_quality") or "").upper()
+    if quality == "AVOID":
+        return
+    min_conf = st.discord_trades_min_swing_conf if st.discord_trades_only else 85.0
+    strong = "STRONG" in sig_u and conf >= 85.0
+    swing_trade = ("SWING BUY" in sig_u or "SWING SELL" in sig_u) and conf >= min_conf
+    if st.discord_trades_only and not (strong or swing_trade):
+        return
+    if not st.discord_trades_only and not strong:
+        return
+    key = f"{sym}|swing|{signal}|{int(conf)}"
+    if not _state_changed(key, key):
+        return
+    sl = swing.get("stop_loss") or swing.get("sl")
+    entry = swing.get("entry") or swing.get("entry_price")
+    msg = (
+        f"{_fmt_header('Swing trade', sym)}\n"
+        f"Signal: `{signal}` · Conf: `{conf:.1f}`\n"
+        f"Quality: `{swing.get('entry_quality') or '—'}`"
+    )
+    if entry:
+        msg += f"\nEntry: `{entry}` · SL: `{sl}`"
+    _dedupe_send(key, msg, color=3066993)
+
+
 def process_heartbeat(payload: dict[str, Any], accepted: dict[str, Any] | None = None) -> None:
     """Evaluate heartbeat payload and send Discord alerts. Never raises."""
     st = get_settings()
@@ -149,11 +234,12 @@ def process_heartbeat(payload: dict[str, Any], accepted: dict[str, Any] | None =
         return
 
     sym = str(payload.get("symbol") or "XAUUSD").upper()
+    trades_only = st.discord_trades_only
 
-    if accepted:
+    if accepted and _discord_category_enabled(st, "signals"):
         notify_accepted_signal(accepted)
 
-    if st.telegram_alert_risk:
+    if _discord_category_enabled(st, "risk"):
         risk = str(payload.get("risk_status") or "")
         critical = risk == "CRITICAL" or bool(payload.get("exceeds_max_position_risk"))
         if critical and _state_changed(f"{sym}|risk", risk):
@@ -165,7 +251,7 @@ def process_heartbeat(payload: dict[str, Any], accepted: dict[str, Any] | None =
             )
             _dedupe_send(f"{sym}|critical", msg, color=15158332)
 
-        if st.telegram_alert_float_target and bool(payload.get("float_profit_target_hit")):
+        if not trades_only and st.telegram_alert_float_target and bool(payload.get("float_profit_target_hit")):
             if _state_changed(f"{sym}|float_hit", "1"):
                 fpct = payload.get("floating_pl_pct_of_equity")
                 msg = (
@@ -175,7 +261,7 @@ def process_heartbeat(payload: dict[str, Any], accepted: dict[str, Any] | None =
                 )
                 _dedupe_send(f"{sym}|float_target", msg, color=15844367)
 
-    if st.telegram_alert_entry:
+    if not trades_only and st.telegram_alert_entry:
         entry = str(payload.get("new_entry_decision") or "")
         if entry in ("BUY_ALLOWED", "SELL_ALLOWED") and _state_changed(f"{sym}|entry", entry):
             bid = payload.get("bid")
@@ -189,22 +275,9 @@ def process_heartbeat(payload: dict[str, Any], accepted: dict[str, Any] | None =
             )
             _dedupe_send(f"{sym}|entry|{entry}", msg, color=3447003)
 
-    if st.telegram_alert_swing:
-        swing = payload.get("swing_strategy")
-        if isinstance(swing, dict) and swing.get("valid"):
-            signal = str(swing.get("signal") or "")
-            conf = float(swing.get("confidence") or 0)
-            if "STRONG" in signal.upper() and conf >= 85.0:
-                key = f"{sym}|swing|{signal}|{int(conf)}"
-                if _state_changed(key, key):
-                    msg = (
-                        f"{_fmt_header('Swing STRONG', sym)}\n"
-                        f"Signal: `{signal}` · Conf: `{conf:.1f}`\n"
-                        f"Quality: `{swing.get('entry_quality') or ''}`"
-                    )
-                    _dedupe_send(key, msg, color=3066993)
+    _maybe_swing_trade_alert(payload, sym, st)
 
-    if st.telegram_alert_liquidity_grab:
+    if not trades_only and st.telegram_alert_liquidity_grab:
         lg = payload.get("liquidity_grab")
         if isinstance(lg, dict) and lg.get("valid"):
             status = str(lg.get("status") or lg.get("status_line") or "")
@@ -219,7 +292,7 @@ def process_heartbeat(payload: dict[str, Any], accepted: dict[str, Any] | None =
                     )
                     _dedupe_send(key, msg, color=10181046)
 
-    if st.telegram_alert_gold_smc:
+    if not trades_only and st.telegram_alert_gold_smc:
         gsm = payload.get("gold_smc")
         if isinstance(gsm, dict) and gsm.get("analysis_active"):
             setup = str(gsm.get("setup_type") or "")
@@ -237,29 +310,8 @@ def process_heartbeat(payload: dict[str, Any], accepted: dict[str, Any] | None =
                     _dedupe_send(key, msg, color=15844367)
 
     if st.discord_enabled:
-        try:
-            from app.analysis.master_verdict import build_master_verdict
-
-            mv = build_master_verdict({**payload, "connected": True})
-            verdict = str(mv.get("verdict") or "")
-            if verdict in ("STRONG", "CRITICAL") and _state_changed(f"{sym}|master|{verdict}", verdict):
-                side = mv.get("side") or "—"
-                base = st.public_base_url.rstrip("/")
-                msg = (
-                    f"{_fmt_header(f'Master {verdict}', sym)}\n"
-                    f"Side: `{side}` · Score: `{mv.get('score')}`\n"
-                    f"{mv.get('summary') or ''}\n"
-                    f"[Monitor]({base}/monitor)"
-                )
-                color = 15158332 if verdict == "CRITICAL" else 3066993
-                _dedupe_send(
-                    f"{sym}|master|{verdict}|{side}",
-                    msg,
-                    cooldown_sec=max(st.discord_cooldown_sec, 600),
-                    color=color,
-                )
-        except Exception:
-            pass
+        master_verdicts = ("STRONG", "SETUP", "CRITICAL") if trades_only else ("STRONG", "CRITICAL")
+        _maybe_master_verdict_alert(payload, sym, st, verdicts=master_verdicts)
 
 
 def reset_state_for_tests() -> None:

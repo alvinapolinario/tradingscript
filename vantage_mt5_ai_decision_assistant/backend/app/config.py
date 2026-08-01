@@ -40,6 +40,9 @@ class Settings(BaseSettings):
     discord_enabled: bool = False
     discord_webhook_url: str | None = None
     discord_cooldown_sec: int = 300
+    # When true: Discord only gets actionable trade setups (no WATCH / entry / module noise)
+    discord_trades_only: bool = False
+    discord_trades_min_swing_conf: float = 72.0
 
     # Alert category toggles (Telegram + Discord when each is enabled)
     telegram_alert_risk: bool = True

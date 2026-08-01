@@ -119,6 +119,44 @@ def test_discord_test_requires_auth():
 
 @patch("app.discord_notify.get_settings")
 @patch("app.discord_notify.httpx.Client")
+def test_trades_only_skips_entry_alert(mock_client_cls, mock_settings):
+    mock_settings.return_value = _settings(discord_trades_only=True)
+    mock_client_cls.return_value.__enter__.return_value.post.side_effect = _mock_post_ok
+    process_heartbeat(
+        {
+            "symbol": "XAUUSD",
+            "new_entry_decision": "BUY_ALLOWED",
+            "trend": "BULLISH",
+            "bid": 2650.0,
+        }
+    )
+    assert not mock_client_cls.return_value.__enter__.return_value.post.called
+
+
+@patch("app.discord_notify.get_settings")
+@patch("app.discord_notify.httpx.Client")
+def test_trades_only_master_setup(mock_client_cls, mock_settings):
+    mock_settings.return_value = _settings(discord_trades_only=True, discord_cooldown_sec=0)
+    mock_client_cls.return_value.__enter__.return_value.post.side_effect = _mock_post_ok
+    process_heartbeat(
+        {
+            "symbol": "XAUUSD",
+            "connected": True,
+            "new_entry_decision": "BUY_ALLOWED",
+            "risk_status": "LOW",
+            "swing_strategy": {
+                "valid": True,
+                "signal": "STRONG SWING BUY",
+                "confidence": 91.0,
+                "entry_quality": "Excellent",
+            },
+        }
+    )
+    assert mock_client_cls.return_value.__enter__.return_value.post.called
+
+
+@patch("app.discord_notify.get_settings")
+@patch("app.discord_notify.httpx.Client")
 def test_monitor_discord_test(mock_client_cls, mock_settings):
     mock_settings.return_value = _settings()
     mock_client_cls.return_value.__enter__.return_value.post.side_effect = _mock_post_ok

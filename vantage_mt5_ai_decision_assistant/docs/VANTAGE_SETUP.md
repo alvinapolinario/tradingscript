@@ -239,6 +239,40 @@ Same categories as Telegram (§10b). Toggle with `TELEGRAM_ALERT_*` in `.env` �
 
 On `/monitor`, the header pill shows **DC LIVE** when configured.
 
+### Background mode — Discord only, valid trades (no dashboard)
+
+All modules already run **headless** on the EA timer + heartbeat (~15s). You do **not** need any web desk open.
+
+**Requirements:**
+
+1. **MT5** — `VantageMT5AIDecisionAssistant` attached, Algo Trading ON, modules enabled (`InpSwingEnable`, `InpGoldSmcEnable`, `InpLiqGrabEnable`, etc.).
+2. **VPS** — Docker backend running with Discord in `.env` (parent folder, not `backend/.env`).
+3. **Optional** — `InpApiOnlyUi=true` for a clean chart (data still flows to API).
+
+**Recommended `.env` for trade-only Discord alerts:**
+
+```env
+DISCORD_ENABLED=true
+DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/...
+DISCORD_TRADES_ONLY=true
+DISCORD_TRADES_MIN_SWING_CONF=72.0
+DISCORD_COOLDOWN_SEC=300
+TELEGRAM_ENABLED=false
+```
+
+With `DISCORD_TRADES_ONLY=true`, Discord receives **only**:
+
+| Alert | When |
+|--------|------|
+| **Master SETUP / STRONG** | All modules agree — actionable setup |
+| **Swing trade** | STRONG SWING (≥85%) or SWING BUY/SELL (≥72%, not Avoid) |
+| **Accepted signal** | M5 desk SETUP_OK → signal ledger |
+| **CRITICAL risk** | Safety — over max position risk |
+
+Skipped: WATCH, entry watch, float target, individual Liq Grab / Gold SMC pings (those still feed Master verdict).
+
+Restart after editing: `docker compose up -d`
+
 ## 11. Testing on demo
 
 1. Run with `InpRunDiagnostics = true`.
