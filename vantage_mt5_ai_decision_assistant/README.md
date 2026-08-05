@@ -51,9 +51,9 @@ When the desk reaches **SETUP_OK**, the backend stores an advisory BUY/SELL on t
 
 Also live: **Pattern Strategy** (`/patterns`), **Strategy Scanner** (`/scanner`), and **Strategy Lab** (`/lab`) — advisory pattern catalog, multi-pair desk ranking, and session playbook what-ifs. Shared left sidebar links the full workspace.
 
-## Demo auto-execution (optional, separate package)
+## Auto-execution (optional, separate package)
 
-The advisory EA **never** auto-trades. For **demo account testing only**, a separate executor package polls the backend for Swing Strategy **STRONG** signals:
+The advisory EA **never** auto-trades. A separate **VantageSwingExecutor** EA polls the backend for Swing Strategy **STRONG** (or Scalping **SCALP**) signals:
 
 | Item | Location |
 |------|----------|
@@ -62,7 +62,11 @@ The advisory EA **never** auto-trades. For **demo account testing only**, a sepa
 | Web journal | **http://187.77.142.118:8000/execution** |
 | API | `GET /api/v1/execution/next`, `POST /api/v1/execution/ack` |
 
-Requires demo account, advisory EA heartbeat (Swing Strategy groups AK–AO), and both EAs attached on XAUUSD.
+**Demo (default):** attach executor on a Vantage demo account — no extra flags.
+
+**Live (opt-in):** set `InpAllowLiveExecution=true`, `InpLiveConfirmPhrase=I_ACCEPT_LIVE_RISK` on the EA, and `EXECUTION_ALLOW_LIVE=true` on the VPS Docker `.env`. Real money — see setup guide.
+
+Requires advisory EA heartbeat (Swing Strategy groups AK–AO) and both EAs on XAUUSD.
 
 
 ## Design guarantees

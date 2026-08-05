@@ -33,8 +33,9 @@ def test_execution_package_has_executor():
     assert ea.exists()
     text = ea.read_text(encoding="utf-8")
     assert "ACCOUNT_TRADE_MODE_DEMO" in text
-    assert "CTrade" in text or "CVantageExecutionTrade" in text
+    assert "EnforceAccountSafety" in text
     assert "InpAllowLiveExecution" in text
+    assert "InpLiveConfirmPhrase" in text
 
 
 def test_advisory_tree_still_no_ctrade():

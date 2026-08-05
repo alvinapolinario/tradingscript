@@ -35,6 +35,7 @@ def discord_status(settings: Settings | None = None) -> dict[str, Any]:
         "cooldown_sec": st.discord_cooldown_sec,
         "webhook_set": bool((st.discord_webhook_url or "").strip()),
         "trades_only": st.discord_trades_only,
+        "trades_min_amd_ifvg_conf": st.discord_trades_min_amd_ifvg_conf,
     }
 
 
@@ -154,10 +155,11 @@ def _discord_category_enabled(st: Settings, category: str) -> bool:
             "swing": st.telegram_alert_swing,
             "liquidity_grab": st.telegram_alert_liquidity_grab,
             "gold_smc": st.telegram_alert_gold_smc,
+            "amd_ifvg": st.telegram_alert_amd_ifvg,
             "execution": st.telegram_alert_execution,
         }
         return bool(mapping.get(category, True))
-    return category in ("risk", "signals", "swing", "master")
+    return category in ("risk", "signals", "swing", "master", "amd_ifvg")
 
 
 def _maybe_master_verdict_alert(payload: dict[str, Any], sym: str, st: Settings, *, verdicts: tuple[str, ...]) -> None:
@@ -227,6 +229,69 @@ def _maybe_swing_trade_alert(payload: dict[str, Any], sym: str, st: Settings) ->
     _dedupe_send(key, msg, color=3066993)
 
 
+def _maybe_amd_ifvg_alert(payload: dict[str, Any], sym: str, st: Settings) -> None:
+    if not _discord_category_enabled(st, "amd_ifvg"):
+        return
+    amd = payload.get("amd_ifvg")
+    if not isinstance(amd, dict) or not (amd.get("valid") or amd.get("analysis_active")):
+        return
+    if amd.get("gold_symbol_valid") is False:
+        return
+
+    decision = str(amd.get("decision") or "NO_TRADE").upper()
+    conf = float(amd.get("confidence") or 0)
+    setup_state = str(amd.get("setup_state") or "")
+    amd_phase = str(amd.get("amd_phase") or "—")
+    min_conf = st.discord_trades_min_amd_ifvg_conf if st.discord_trades_only else 75.0
+
+    trade_signal = decision in ("BUY", "SELL") and conf >= min_conf
+    entry_zone = (
+        decision == "WAIT"
+        and setup_state == "ENTRY_ZONE_ACTIVE"
+        and conf >= min_conf
+    )
+    if not (trade_signal or entry_zone):
+        return
+
+    eval_bar = str(amd.get("eval_bar_m5") or amd.get("timestamp") or "")
+    key = f"{sym}|amd|{decision}|{setup_state}|{int(conf)}|{eval_bar}"
+    if not _state_changed(key, key):
+        return
+
+    entry = amd.get("entry") if isinstance(amd.get("entry"), dict) else {}
+    risk = amd.get("risk") if isinstance(amd.get("risk"), dict) else {}
+    ifvg = amd.get("ifvg") if isinstance(amd.get("ifvg"), dict) else {}
+    preferred = entry.get("preferred_entry")
+    entry_lo = entry.get("entry_low")
+    entry_hi = entry.get("entry_high")
+    sl = risk.get("stop_loss")
+    htf = amd.get("higher_timeframe_bias") or "—"
+
+    title = "AMD + iFVG trade" if trade_signal else "AMD + iFVG entry zone"
+    base = st.public_base_url.rstrip("/")
+    msg = (
+        f"{_fmt_header(title, sym)}\n"
+        f"Decision: **{decision}** · Conf: `{conf:.1f}`\n"
+        f"Phase: `{amd_phase}` · State: `{setup_state.replace('_', ' ')}`\n"
+        f"HTF bias: `{htf}`"
+    )
+    if ifvg.get("detected"):
+        msg += f"\niFVG: `{ifvg.get('direction')}` ({ifvg.get('lower_boundary')} – {ifvg.get('upper_boundary')})"
+    if preferred:
+        msg += f"\nPreferred entry: `{preferred}`"
+    elif entry_lo and entry_hi:
+        msg += f"\nEntry zone: `{entry_lo}` – `{entry_hi}`"
+    if sl:
+        msg += f" · SL: `{sl}`"
+    narrative = amd.get("technical_narrative") or ""
+    if narrative:
+        msg += f"\n{narrative[:240]}"
+    msg += f"\n[AMD + iFVG desk]({base}/amd-ifvg)"
+
+    color = 3066993 if decision == "BUY" else (15158332 if decision == "SELL" else 3447003)
+    _dedupe_send(key, msg, color=color)
+
+
 def process_heartbeat(payload: dict[str, Any], accepted: dict[str, Any] | None = None) -> None:
     """Evaluate heartbeat payload and send Discord alerts. Never raises."""
     st = get_settings()
@@ -276,6 +341,7 @@ def process_heartbeat(payload: dict[str, Any], accepted: dict[str, Any] | None =
             _dedupe_send(f"{sym}|entry|{entry}", msg, color=3447003)
 
     _maybe_swing_trade_alert(payload, sym, st)
+    _maybe_amd_ifvg_alert(payload, sym, st)
 
     if not trades_only and st.telegram_alert_liquidity_grab:
         lg = payload.get("liquidity_grab")

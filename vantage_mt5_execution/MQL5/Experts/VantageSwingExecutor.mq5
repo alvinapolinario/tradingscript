@@ -1,14 +1,15 @@
 //+------------------------------------------------------------------+
 //| VantageSwingExecutor.mq5                                         |
-//| Demo-only executor — polls backend for STRONG Swing Strategy     |
-//| signals and places market orders via CTrade.                     |
+//| Demo or live executor — polls backend for STRONG Swing Strategy      |
+//| signals and places market orders via CTrade.                       |
 //|                                                                  |
-//| Requires: VantageMT5AIDecisionAssistant on demo (heartbeat).     |
-//| RISK: Demo testing only — not financial advice.                  |
+//| LIVE: requires InpAllowLiveExecution + confirm phrase + backend  |
+//|       EXECUTION_ALLOW_LIVE=true on VPS .env                        |
+//| RISK: Real money when live — not financial advice.               |
 //+------------------------------------------------------------------+
 #property copyright "Vantage Swing Executor"
-#property version   "1.00"
-#property description "Demo-only auto-execution for Swing Strategy STRONG signals"
+#property version   "1.10"
+#property description "Auto-execution for Swing Strategy STRONG signals (demo default; live opt-in)"
 #property strict
 
 #include <VantageExecution/VantageExecutionTypes.mqh>
@@ -25,7 +26,8 @@ input int    InpRequestTimeoutMs = 8000;
 
 //--- B. Safety
 input group "B. Safety"
-input bool   InpAllowLiveExecution = false;  // Must stay false; demo account still required
+input bool   InpAllowLiveExecution = false;  // Live account only — requires confirm phrase below
+input string InpLiveConfirmPhrase  = "";     // Live only: must be exactly I_ACCEPT_LIVE_RISK
 input long   InpMagicNumber    = 880001;
 input int    InpMaxOpenPositions = 1;
 
@@ -49,7 +51,10 @@ input bool   InpJournalCsv     = true;
 CVantageExecutionClient g_client;
 CVantageExecutionTrade  g_trade;
 string g_csv_name = "";
+string g_account_mode = "DEMO";
 int    g_poll_timer = 0;
+
+#define VANTAGE_LIVE_CONFIRM_PHRASE "I_ACCEPT_LIVE_RISK"
 
 bool IsDemoAccount(void)
   {
@@ -57,20 +62,38 @@ bool IsDemoAccount(void)
    return (mode == ACCOUNT_TRADE_MODE_DEMO);
   }
 
-bool EnforceDemoOnly(void)
+bool IsLiveAccount(void)
   {
-   if(!IsDemoAccount())
+   return !IsDemoAccount();
+  }
+
+bool EnforceAccountSafety(void)
+  {
+   if(IsDemoAccount())
      {
-      Alert("VantageSwingExecutor: DEMO account required. Refusing to run on live.");
-      Print("[VantageExec] FATAL: not a demo account.");
+      g_account_mode = "DEMO";
+      if(InpAllowLiveExecution)
+         Print("[VantageExec] Note: InpAllowLiveExecution is ignored on demo accounts.");
+      return true;
+     }
+
+   g_account_mode = "LIVE";
+   if(!InpAllowLiveExecution)
+     {
+      Alert("VantageSwingExecutor: LIVE account detected. Set InpAllowLiveExecution=true to enable.");
+      Print("[VantageExec] FATAL: live account without InpAllowLiveExecution.");
       return false;
      }
-   if(InpAllowLiveExecution)
+   if(InpLiveConfirmPhrase != VANTAGE_LIVE_CONFIRM_PHRASE)
      {
-      Alert("VantageSwingExecutor: InpAllowLiveExecution must stay false.");
-      Print("[VantageExec] FATAL: InpAllowLiveExecution is true.");
+      Alert("VantageSwingExecutor: Live requires InpLiveConfirmPhrase=I_ACCEPT_LIVE_RISK");
+      Print("[VantageExec] FATAL: live confirm phrase missing or incorrect.");
       return false;
      }
+
+   Alert("VantageSwingExecutor: LIVE EXECUTION ENABLED — real money at risk.");
+   Print("[VantageExec] *** LIVE ACCOUNT — REAL ORDERS WILL BE PLACED ***");
+   Print("[VantageExec] Also set EXECUTION_ALLOW_LIVE=true on backend .env");
    return true;
   }
 
@@ -99,6 +122,7 @@ bool SendAck(const string signal_id, const string status, const ulong ticket, co
    req.status = status;
    req.ticket = ticket;
    req.reason = reason;
+   req.account_mode = g_account_mode;
    if(!g_client.SendAck(req, rep))
      {
       LogDbg("Ack failed: " + g_client.LastError());
@@ -138,7 +162,7 @@ void ProcessPoll(void)
      }
 
    VantageExecOrderSpec spec;
-   if(!g_client.PollNext(_Symbol, InpMinConfidence, ExecModeToApi(InpTradingMode), spec))
+   if(!g_client.PollNext(_Symbol, InpMinConfidence, ExecModeToApi(InpTradingMode), g_account_mode, spec))
      {
       LogDbg("Poll failed: " + g_client.LastError());
       return;
@@ -185,7 +209,7 @@ void ProcessPoll(void)
 
 int OnInit(void)
   {
-   if(!EnforceDemoOnly())
+   if(!EnforceAccountSafety())
       return INIT_FAILED;
 
    g_client.Configure(InpBackendUrl, InpApiToken, InpRequestTimeoutMs);
@@ -212,7 +236,8 @@ int OnInit(void)
    EventSetTimer(g_poll_timer);
 
    Print("[VantageExec] Started v", VANTAGE_EXEC_VERSION,
-         " | DEMO ONLY | Mode=", ExecModeToApi(InpTradingMode),
+         " | Account=", g_account_mode,
+         " | Mode=", ExecModeToApi(InpTradingMode),
          " | Symbol=", _Symbol,
          " | Magic=", ExecMagicForMode(InpTradingMode, InpMagicNumber),
          " | Poll=", sec, "s");

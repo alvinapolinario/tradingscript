@@ -114,6 +114,7 @@ public:
 
    bool Evaluate(const bool force, VantageAmdIfvgResult &out)
      {
+      string base = "";
       ZeroMemory(out);
       out.valid = false;
       out.engine_enabled = m_cfg.enable;
@@ -130,15 +131,17 @@ public:
          return false;
         }
 
-      if(!m_validator.IsApprovedGold(m_symbol))
+      if(!m_validator.IsApprovedGoldSymbol(m_symbol, base))
         {
          out.gold_symbol_valid = false;
+         out.base_symbol = base;
          out.disable_reason = VANTAGE_AMDIFVG_DISABLE_MSG;
          out.reasoning = VANTAGE_AMDIFVG_DISABLE_MSG;
          out.valid = true;
          return true;
         }
       out.gold_symbol_valid = true;
+      out.base_symbol = base;
 
       MqlRates m15[], m5[];
       if(!CopyClosed(m_cfg.tf_setup, 80, m15) || !CopyClosed(m_cfg.tf_entry, 80, m5))
@@ -304,7 +307,7 @@ public:
       out.status_line = out.decision;
       out.technical_narrative = narr;
       out.reasoning = narr;
-      out.eval_bar_m5 = (long)bar_time;
+      out.eval_bar_m5 = bar_time;
       out.engine_phase = 1;
       out.analysis_active = true;
       out.valid = true;

@@ -77,7 +77,7 @@ def test_process_heartbeat_critical_risk(mock_client_cls, mock_settings):
 @patch("app.discord_notify.get_settings")
 @patch("app.discord_notify.httpx.Client")
 def test_process_heartbeat_entry_dedupe(mock_client_cls, mock_settings):
-    mock_settings.return_value = _settings()
+    mock_settings.return_value = _settings(discord_trades_only=False, telegram_alert_entry=True)
     mock_client_cls.return_value.__enter__.return_value.post.side_effect = _mock_post_ok
     payload = {
         "symbol": "XAUUSD",
@@ -149,6 +149,74 @@ def test_trades_only_master_setup(mock_client_cls, mock_settings):
                 "signal": "STRONG SWING BUY",
                 "confidence": 91.0,
                 "entry_quality": "Excellent",
+            },
+        }
+    )
+    assert mock_client_cls.return_value.__enter__.return_value.post.called
+
+
+@patch("app.discord_notify.get_settings")
+@patch("app.discord_notify.httpx.Client")
+def test_amd_ifvg_buy_alert(mock_client_cls, mock_settings):
+    mock_settings.return_value = _settings(discord_trades_only=True, discord_cooldown_sec=0)
+    mock_client_cls.return_value.__enter__.return_value.post.side_effect = _mock_post_ok
+    process_heartbeat(
+        {
+            "symbol": "XAUUSD",
+            "amd_ifvg": {
+                "valid": True,
+                "gold_symbol_valid": True,
+                "decision": "BUY",
+                "confidence": 87.0,
+                "setup_state": "ENTRY_ZONE_ACTIVE",
+                "amd_phase": "DISTRIBUTION",
+                "eval_bar_m5": 1710000000,
+                "entry": {"preferred_entry": 2650.5, "entry_low": 2649.0, "entry_high": 2652.0},
+                "risk": {"stop_loss": 2645.0},
+            },
+        }
+    )
+    assert mock_client_cls.return_value.__enter__.return_value.post.called
+    body = mock_client_cls.return_value.__enter__.return_value.post.call_args.kwargs.get("json") or {}
+    embed = (body.get("embeds") or [{}])[0]
+    assert "AMD + iFVG" in embed.get("description", "")
+
+
+@patch("app.discord_notify.get_settings")
+@patch("app.discord_notify.httpx.Client")
+def test_amd_ifvg_skips_low_confidence(mock_client_cls, mock_settings):
+    mock_settings.return_value = _settings(discord_trades_only=True)
+    mock_client_cls.return_value.__enter__.return_value.post.side_effect = _mock_post_ok
+    process_heartbeat(
+        {
+            "symbol": "XAUUSD",
+            "amd_ifvg": {
+                "valid": True,
+                "decision": "WAIT",
+                "confidence": 55.0,
+                "setup_state": "WAITING_FOR_RETRACE",
+            },
+        }
+    )
+    assert not mock_client_cls.return_value.__enter__.return_value.post.called
+
+
+@patch("app.discord_notify.get_settings")
+@patch("app.discord_notify.httpx.Client")
+def test_amd_ifvg_entry_zone_wait_trades_only(mock_client_cls, mock_settings):
+    mock_settings.return_value = _settings(discord_trades_only=True, discord_cooldown_sec=0)
+    mock_client_cls.return_value.__enter__.return_value.post.side_effect = _mock_post_ok
+    process_heartbeat(
+        {
+            "symbol": "XAUUSD",
+            "amd_ifvg": {
+                "valid": True,
+                "gold_symbol_valid": True,
+                "decision": "WAIT",
+                "confidence": 78.0,
+                "setup_state": "ENTRY_ZONE_ACTIVE",
+                "amd_phase": "DISTRIBUTION",
+                "eval_bar_m5": 1710000001,
             },
         }
     )

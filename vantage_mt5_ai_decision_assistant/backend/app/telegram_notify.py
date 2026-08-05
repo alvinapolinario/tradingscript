@@ -238,6 +238,38 @@ def process_heartbeat(payload: dict[str, Any], accepted: dict[str, Any] | None =
                     )
                     _dedupe_send(key, msg)
 
+    if st.telegram_alert_amd_ifvg:
+        amd = payload.get("amd_ifvg")
+        if isinstance(amd, dict) and (amd.get("valid") or amd.get("analysis_active")):
+            if amd.get("gold_symbol_valid") is not False:
+                decision = str(amd.get("decision") or "NO_TRADE").upper()
+                conf = float(amd.get("confidence") or 0)
+                setup_state = str(amd.get("setup_state") or "")
+                min_conf = 75.0
+                trade_signal = decision in ("BUY", "SELL") and conf >= min_conf
+                entry_zone = (
+                    decision == "WAIT"
+                    and setup_state == "ENTRY_ZONE_ACTIVE"
+                    and conf >= min_conf
+                )
+                if trade_signal or entry_zone:
+                    eval_bar = str(amd.get("eval_bar_m5") or amd.get("timestamp") or "")
+                    key = f"{sym}|amd|{decision}|{setup_state}|{int(conf)}|{eval_bar}"
+                    if _state_changed(key, key):
+                        entry = amd.get("entry") if isinstance(amd.get("entry"), dict) else {}
+                        preferred = entry.get("preferred_entry")
+                        base = st.public_base_url.rstrip("/")
+                        title = "AMD + iFVG trade" if trade_signal else "AMD + iFVG entry zone"
+                        msg = (
+                            f"{_fmt_header(title, sym)}\n"
+                            f"Decision: *{_escape_md(decision)}* · Conf: `{conf:.1f}`\n"
+                            f"State: `{_escape_md(setup_state.replace('_', ' '))}`"
+                        )
+                        if preferred:
+                            msg += f"\nEntry: `{_escape_md(str(preferred))}`"
+                        msg += f"\n[Desk]({_escape_md(base + '/amd-ifvg')})"
+                        _dedupe_send(key, msg)
+
     if st.telegram_alert_gold_smc:
         gsm = payload.get("gold_smc")
         if isinstance(gsm, dict) and gsm.get("analysis_active"):

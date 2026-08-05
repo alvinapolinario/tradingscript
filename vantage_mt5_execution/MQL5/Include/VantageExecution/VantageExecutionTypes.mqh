@@ -1,11 +1,11 @@
 //+------------------------------------------------------------------+
 //| VantageExecutionTypes.mqh                                        |
-//| Shared types for Vantage Swing Executor (demo only)              |
+//| Shared types for Vantage Swing Executor (demo default, live opt-in)|
 //+------------------------------------------------------------------+
 #ifndef VANTAGE_EXECUTION_TYPES_MQH
 #define VANTAGE_EXECUTION_TYPES_MQH
 
-#define VANTAGE_EXEC_VERSION "1.0.0"
+#define VANTAGE_EXEC_VERSION "1.1.0"
 
 enum ENUM_EXEC_TRADE_MODE
   {
@@ -41,6 +41,7 @@ struct VantageExecAckResult
    string status;
    ulong  ticket;
    string reason;
+   string account_mode;
    int    http_code;
    string error;
   };

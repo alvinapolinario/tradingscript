@@ -171,3 +171,24 @@ def test_execution_history_endpoint(tmp_exec_db):
 def test_execution_next_requires_auth(tmp_exec_db):
     r = client.get("/api/v1/execution/next?symbol=XAUUSD")
     assert r.status_code == 401
+
+
+def test_execution_live_blocked_without_server_flag(tmp_exec_db, monkeypatch: pytest.MonkeyPatch):
+    from app.config import Settings
+
+    base = get_settings().model_dump()
+    base["execution_allow_live"] = False
+    monkeypatch.setattr(
+        "app.routers.api.get_settings",
+        lambda: Settings(**base),
+    )
+    _monitor_with_swing(SAMPLE_SWING)
+    r = client.get(
+        "/api/v1/execution/next?symbol=XAUUSD&account_mode=LIVE",
+        headers=_auth_headers(),
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["has_signal"] is False
+    assert body.get("live_blocked") is True
+    assert body.get("reason") == "backend_live_disabled"

@@ -43,6 +43,10 @@ class Settings(BaseSettings):
     # When true: Discord only gets actionable trade setups (no WATCH / entry / module noise)
     discord_trades_only: bool = False
     discord_trades_min_swing_conf: float = 72.0
+    discord_trades_min_amd_ifvg_conf: float = 75.0
+
+    # Demo executor — set true only when intentionally enabling live account fills
+    execution_allow_live: bool = False
 
     # Alert category toggles (Telegram + Discord when each is enabled)
     telegram_alert_risk: bool = True
@@ -52,6 +56,7 @@ class Settings(BaseSettings):
     telegram_alert_swing: bool = True
     telegram_alert_liquidity_grab: bool = True
     telegram_alert_gold_smc: bool = True
+    telegram_alert_amd_ifvg: bool = True
     telegram_alert_execution: bool = True
     telegram_gold_smc_min_score: float = 75.0
 

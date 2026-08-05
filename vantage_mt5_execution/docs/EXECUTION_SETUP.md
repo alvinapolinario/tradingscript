@@ -1,112 +1,112 @@
-# Demo Auto-Execution Setup
+# Auto-Execution Setup (Demo default · Live opt-in)
 
-Optional **demo-only** trade execution for Swing Strategy **STRONG** signals.
+Optional trade execution for Swing Strategy **STRONG** signals (and Scalping **SCALP** signals).
 
 | Component | Role |
 |-----------|------|
 | `VantageMT5AIDecisionAssistant` | Advisory EA — unchanged, no orders |
-| `VantageSwingExecutor` | Separate EA — polls backend, places demo orders |
+| `VantageSwingExecutor` | Separate EA — polls backend, places orders |
 | FastAPI `/api/v1/execution/*` | Signal queue + dedup ledger |
-| `/execution` web desk | Demo fill journal |
+| `/execution` web desk | Fill journal |
 
-## Requirements
+## Demo (default)
 
-- **Vantage demo account** (live accounts are refused at EA init)
-- Advisory EA running on XAUUSD with Swing Strategy enabled (groups AK–AO)
-- Backend reachable from MT5 (`http://187.77.142.118:8000` or your VPS URL)
-- Same `LOCAL_API_TOKEN` / `InpApiToken` as the advisory EA
+Works out of the box on a **Vantage demo account** — no extra flags.
 
-## Install (MT5)
+1. Copy MQL5 files from `vantage_mt5_execution/MQL5/` into your terminal folder.
+2. Compile `VantageSwingExecutor.mq5`.
+3. Allow WebRequest for your backend URL.
+4. Attach **both** EAs on XAUUSD:
+   - `VantageMT5AIDecisionAssistant` (heartbeat)
+   - `VantageSwingExecutor` (execution)
 
-1. Copy from repo:
+Leave `InpAllowLiveExecution = false` on demo.
 
-```
-vantage_mt5_execution/MQL5/Experts/VantageSwingExecutor.mq5
-  → Terminal/MQL5/Experts/
+## Live account (explicit opt-in — real money)
 
-vantage_mt5_execution/MQL5/Include/VantageExecution/*
-  → Terminal/MQL5/Include/VantageExecution/
-```
+**Three gates must all be enabled:**
 
-2. MetaEditor → compile `VantageSwingExecutor.mq5` (zero errors).
+### 1. MT5 EA inputs
 
-3. **Tools → Options → Expert Advisors → Allow WebRequest** for your backend URL.
+| Input | Value |
+|-------|--------|
+| `InpAllowLiveExecution` | **true** |
+| `InpLiveConfirmPhrase` | **I_ACCEPT_LIVE_RISK** (exact match) |
 
-4. Attach **both** EAs on demo XAUUSD (same or separate charts):
-   - `VantageMT5AIDecisionAssistant` (heartbeat / swing blob)
-   - `VantageSwingExecutor` (demo execution)
+On init you will see an Alert: *LIVE EXECUTION ENABLED — real money at risk.*
 
-## Executor inputs (defaults)
+### 2. VPS backend `.env`
 
-| Input | Default | Notes |
-|-------|---------|-------|
-| `InpBackendUrl` | `http://187.77.142.118:8000` | Must match advisory EA |
-| `InpApiToken` | (your token) | Bearer token |
-| `InpPollSeconds` | 5 | Timer poll interval |
-| `InpAllowLiveExecution` | **false** | Must stay false |
-| `InpMagicNumber` | 880001 | Identifies executor positions |
-| `InpRiskPct` | 0.50 | Equity risk per trade |
-| `InpMinConfidence` | 85 | Matches backend gate |
-
-## Signal rules (phase 1)
-
-### Swing mode (`InpTradingMode` / `InpSwingTradeMode` = Swing)
-
-- `signal` = `STRONG SWING BUY` or `STRONG SWING SELL`
-- `confidence` ≥ 85
-- `entry_quality` = Good or Excellent
-- Fresh `eval_bar_m5` (≤ 2 M5 bars)
-
-### Scalping mode (`InpTradingMode` / `InpSwingTradeMode` = Scalping)
-
-- `signal` = `SCALP BUY` or `SCALP SELL`
-- `confidence` ≥ 72 (set `InpMinConfidence=72` on executor)
-- `entry_quality` = Average, Good, or Excellent
-- Fresh `eval_bar_m5` (≤ 1 M5 bar)
-- Tighter SL/TP from M5 ATR (0.6 / 1.2 ATR)
-
-**Both EAs must use the same mode** — advisory `InpSwingTradeMode` must match executor `InpTradingMode`.
-
-## API flow
-
-```
-Executor  GET  /api/v1/execution/next?symbol=XAUUSD
-Backend   → reserves PENDING row, returns order spec
-Executor  → market order via CTrade (SL/TP from blob)
-Executor  POST /api/v1/execution/ack  { status: FILLED|REJECTED|SKIPPED }
+```env
+EXECUTION_ALLOW_LIVE=true
 ```
 
-Journal: `GET /api/v1/execution/history` and web desk `/execution`.
+Use the **Docker parent** `.env` at  
+`/var/www/tradingscript/vantage_mt5_ai_decision_assistant/.env`  
+(not only `backend/.env`).
 
-## CSV journal
-
-When `InpJournalCsv=true`, fills log to:
-
-`Terminal/MQL5/Files/vantage_exec_<SYMBOL>.csv`
-
-## Safety
-
-- **Demo account hard gate** — EA refuses init on live
-- **Advisory EA unchanged** — no `OrderSend` in advisory tree
-- **One pending reservation per symbol** — prevents double-fire
-- **Fingerprint dedup** — same STRONG bar cannot fill twice
-
-## Deploy (VPS backend)
+Redeploy after changing:
 
 ```bash
 bash /var/www/tradingscript/vantage_mt5_ai_decision_assistant/deploy/update-from-github.sh
 ```
 
-Backend update does **not** copy MQL5 files — recompile executor on Windows MT5 separately.
+### 3. Operational checklist
 
-## Manual checklist
+- [ ] Advisory EA online on live XAUUSD (heartbeat)
+- [ ] Swing Strategy groups AK–AO enabled; mode matches executor
+- [ ] `InpRiskPct` and `InpMaxLot` reviewed for live account size
+- [ ] `InpMaxSpreadPoints` appropriate for live gold spread
+- [ ] WebRequest URL allowed in MT5
+- [ ] Test with **Test Discord** / monitor before leaving unattended
 
-1. Demo login confirmed in MT5
-2. Advisory EA online on `/swing-strategy` desk
-3. Executor attached; Journal shows `[VantageExec] Started`
-4. On STRONG signal → `/execution` shows PENDING then FILLED
-5. On SWING BUY (non-strong) → no execution row
+If backend live is disabled, executor polls return `live_blocked` and **no orders** are reserved.
+
+## Executor inputs (defaults)
+
+| Input | Default | Notes |
+|-------|---------|-------|
+| `InpBackendUrl` | VPS URL | Must match advisory EA |
+| `InpApiToken` | Bearer token | Same as `LOCAL_API_TOKEN` |
+| `InpAllowLiveExecution` | **false** | Set true only on live |
+| `InpLiveConfirmPhrase` | empty | Required on live |
+| `InpMagicNumber` | 880001 | Tags executor positions |
+| `InpRiskPct` | 0.50 | Equity risk per trade |
+| `InpMinConfidence` | 85 | Swing; use 72 for scalping |
+
+## Signal rules
+
+### Swing mode
+
+- `STRONG SWING BUY` / `STRONG SWING SELL`
+- Confidence ≥ 85 · entry quality Good/Excellent
+- Fresh `eval_bar_m5` (≤ 2 M5 bars)
+
+### Scalping mode
+
+- `SCALP BUY` / `SCALP SELL`
+- Confidence ≥ 72 · `InpMinConfidence=72` on executor
+- Fresh `eval_bar_m5` (≤ 1 M5 bar)
+
+**Advisory `InpSwingTradeMode` must match executor `InpTradingMode`.**
+
+## API flow
+
+```
+Executor  GET  /api/v1/execution/next?symbol=XAUUSD&account_mode=LIVE|DEMO
+Backend   → reserves PENDING row (or live_blocked if server gate off)
+Executor  → market order via CTrade
+Executor  POST /api/v1/execution/ack  { status, account_mode, ... }
+```
+
+## Safety
+
+- Demo runs without extra config
+- Live requires EA phrase + backend `EXECUTION_ALLOW_LIVE`
+- Advisory EA never calls `OrderSend`
+- One pending reservation per symbol (dedup)
+- Fingerprint dedup on STRONG bar
 
 ## Disclaimer
 
-Demo execution validates **infrastructure and fill mechanics**, not profitability. Demo vs live slippage and spreads differ. Not financial advice.
+Live execution uses **real money**. Demo vs live slippage and spreads differ. Past signal quality does not guarantee future results. Not financial advice.

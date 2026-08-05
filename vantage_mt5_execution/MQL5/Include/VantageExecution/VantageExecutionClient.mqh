@@ -200,7 +200,8 @@ public:
    string LastError(void) const { return m_last_error; }
    int    LastHttp(void) const { return m_last_http; }
 
-   bool PollNext(const string symbol, const double min_confidence, const string mode, VantageExecOrderSpec &spec)
+   bool PollNext(const string symbol, const double min_confidence, const string mode,
+                 const string account_mode, VantageExecOrderSpec &spec)
      {
       ZeroMemory(spec);
       spec.valid = false;
@@ -209,6 +210,8 @@ public:
          path += "&min_confidence=" + DoubleToString(min_confidence, 0);
       if(mode != "")
          path += "&mode=" + mode;
+      if(account_mode != "")
+         path += "&account_mode=" + account_mode;
       string body = "";
       if(!WebGet(path, body))
          return false;
@@ -266,7 +269,8 @@ public:
       payload += "\"signal_id\":\"" + ack.signal_id + "\",";
       payload += "\"status\":\"" + ack.status + "\",";
       payload += "\"ticket\":" + IntegerToString((long)ack.ticket) + ",";
-      payload += "\"reason\":\"" + ack.reason + "\"";
+      payload += "\"reason\":\"" + ack.reason + "\",";
+      payload += "\"account_mode\":\"" + ack.account_mode + "\"";
       payload += "}";
       string body = "";
       if(!WebPostJson("/api/v1/execution/ack", payload, body))

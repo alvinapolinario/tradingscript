@@ -37,9 +37,9 @@
 </head>
 <body data-nav="execution">
   <header>
-    <h1>Demo Execution Journal</h1>
-    <div class="sub">Swing or Scalping mode · VantageSwingExecutor EA · demo account only</div>
-    <div class="banner">Demo execution — not financial advice. Validates fill mechanics only; does not guarantee live performance.</div>
+    <h1>Execution Journal</h1>
+    <div class="sub">Swing or Scalping · VantageSwingExecutor · demo default · live opt-in</div>
+    <div class="banner" id="execBanner">Advisory execution journal — not financial advice. Live mode uses real money when explicitly enabled.</div>
   </header>
   <main>
     <div class="mode-bar">
@@ -63,6 +63,12 @@
       });
     });
     function render(data) {
+      const banner = document.getElementById("execBanner");
+      if (data.live_execution_allowed) {
+        banner.textContent = "Live execution allowed on server — real money when executor live gates are enabled.";
+        banner.style.borderColor = "rgba(240,113,120,.45)";
+        banner.style.color = "#ffb4b4";
+      }
       const s = data.summary || {};
       document.getElementById("stats").innerHTML = `
         <div class="stat"><div class="k">EA online</div><div class="v">${s.ea_online ? "YES" : "NO"}</div></div>

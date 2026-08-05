@@ -75,6 +75,26 @@ Decisions: `BUY`, `SELL`, `WAIT`, `NO_TRADE`.
 
 Setup IDs and full DB persistence are **phase 2** — v1 uses EA-side last snapshot + Python tests.
 
+## Discord alerts
+
+When `DISCORD_ENABLED=true` and a webhook URL is set, the backend sends alerts on EA heartbeats for:
+
+| Condition | Alert |
+|-----------|--------|
+| `decision` = **BUY** or **SELL** | AMD + iFVG trade (conf ≥ 75 default) |
+| `decision` = **WAIT** + `setup_state` = **ENTRY_ZONE_ACTIVE** | Entry zone active (conf ≥ 75) |
+
+Works with `DISCORD_TRADES_ONLY=true` (category `amd_ifvg` is included in trades-only mode).
+
+Optional env:
+
+```env
+DISCORD_TRADES_MIN_AMD_IFVG_CONF=75
+TELEGRAM_ALERT_AMD_IFVG=true
+```
+
+Disable: `TELEGRAM_ALERT_AMD_IFVG=false` (also disables Discord amd_ifvg category when not in trades-only mode).
+
 ## Testing
 
 ```bash

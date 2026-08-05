@@ -665,15 +665,30 @@ def lab_reset() -> dict:
 def execution_next(
     symbol: str = Query(default="XAUUSD"),
     mode: str = Query(default="SWING"),
+    account_mode: str = Query(default="DEMO"),
     min_confidence: float | None = Query(default=None, ge=0, le=100),
     max_m5_bars: int | None = Query(default=None, ge=1, le=10),
     tp_level: str = Query(default="TP1"),
     _: None = Depends(require_bearer),
 ) -> dict:
-    """Demo executor poll — reserve one Swing or Scalping order spec."""
+    """Executor poll — reserve one Swing or Scalping order spec (demo default; live opt-in)."""
+    from app.config import get_settings
     from app.execution_queue import reserve_next
 
-    return reserve_next(
+    st = get_settings()
+    acct = str(account_mode or "DEMO").upper()
+    if acct == "LIVE" and not st.execution_allow_live:
+        return {
+            "has_signal": False,
+            "demo_execution": False,
+            "live_execution": True,
+            "live_blocked": True,
+            "account_mode": acct,
+            "reason": "backend_live_disabled",
+            "caption": "Live execution blocked — set EXECUTION_ALLOW_LIVE=true on server .env",
+        }
+
+    result = reserve_next(
         monitor_store.status(),
         symbol=symbol,
         mode=mode,
@@ -681,6 +696,10 @@ def execution_next(
         max_m5_bars=max_m5_bars,
         tp_level=tp_level,
     )
+    result["account_mode"] = acct
+    result["live_execution"] = acct == "LIVE"
+    result["demo_execution"] = acct != "LIVE"
+    return result
 
 
 @router.post("/api/v1/execution/ack")
@@ -709,10 +728,12 @@ def execution_ack(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     if not updated:
         raise HTTPException(status_code=404, detail="Signal not found")
+    acct = str((body or {}).get("account_mode") or "DEMO").upper()
+    exec_label = "Live exec" if acct == "LIVE" else "Demo exec"
     monitor_store.add_log(
         "INFO",
         "execution",
-        f"Demo exec {status} {updated.get('side')} {updated.get('symbol')}",
+        f"{exec_label} {status} {updated.get('side')} {updated.get('symbol')}",
         signal_id=signal_id,
     )
     push_monitor_update("execution_ack")
@@ -735,9 +756,11 @@ def execution_history(
     symbol: str | None = Query(default=None),
     mode: str | None = Query(default=None),
 ) -> dict:
-    """Demo execution journal."""
+    """Execution journal (demo default; live when enabled)."""
+    from app.config import get_settings
     from app.execution_queue import execution_summary, list_history
 
+    st = get_settings()
     items = list_history(
         limit=limit,
         symbol=(symbol.strip().upper() if symbol else None),
@@ -745,7 +768,8 @@ def execution_history(
     )
     summary = execution_summary(monitor_store.status())
     return {
-        "demo_execution": True,
+        "demo_execution": not st.execution_allow_live,
+        "live_execution_allowed": st.execution_allow_live,
         "count": len(items),
         "items": items,
         "summary": summary,
