@@ -75,6 +75,15 @@ app.add_middleware(
 )
 
 app.include_router(router)
+
+
+@app.get("/static/shell.js")
+def shell_js_no_cache():
+    """Navigation menu — avoid stale sidebar after deploys."""
+    page = STATIC_DIR / "shell.js"
+    return FileResponse(page, headers={"Cache-Control": "no-cache, must-revalidate"})
+
+
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 
