@@ -350,6 +350,7 @@ class HeartbeatRequest(BaseModel):
     # Institutional Market State Engine v2 blob (advisory; Gold-only)
     market_state_engine: Optional[dict[str, Any]] = None
     swing_strategy: Optional[dict[str, Any]] = None
+    amd_ifvg: Optional[dict[str, Any]] = None
     # EA risk thresholds (optional; also may arrive via analyze extra)
     max_position_risk_pct: Optional[float] = None
 

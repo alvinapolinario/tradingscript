@@ -484,6 +484,72 @@ def swing_strategy_status() -> dict:
     }
 
 
+@router.get("/api/v1/amd-ifvg/status")
+def amd_ifvg_status() -> dict:
+    """AMD + iFVG Strategy — EA-computed advisory blob (passthrough; Gold-only)."""
+    st = monitor_store.status()
+    ea = st.get("vantage_ea") or {}
+    link = st.get("link_health") or {}
+    blob = ea.get("amd_ifvg")
+    selected = str(st.get("selected_symbol") or ea.get("symbol") or "").upper()
+    return {
+        "advisory_only": True,
+        "caption": "Advisory only — never places, modifies, or cancels MT5 orders. Gold / XAUUSD only.",
+        "ea_online": bool(link.get("ea_online") or ea.get("connected")),
+        "amd_ifvg_supported": bool(ea.get("amd_ifvg_supported")),
+        "selected_symbol": selected,
+        "symbol": str(ea.get("symbol") or selected).upper(),
+        "available_symbols": list(st.get("available_symbols") or []),
+        "symbols": list(st.get("symbols") or []),
+        "digits": int(ea.get("digits") or 5) or 5,
+        "bid": ea.get("bid"),
+        "ask": ea.get("ask"),
+        "amd_ifvg": blob,
+        "links": {
+            "amd_ifvg": "/amd-ifvg",
+            "liquidity_grab": "/liquidity-grab",
+            "gold_smc": "/gold-smc",
+            "swing_strategy": "/swing-strategy",
+            "pullback": "/pullback",
+            "analyzer": "/analyzer",
+            "monitor": "/monitor",
+        },
+    }
+
+
+@router.post("/api/v1/amd-ifvg/analyze")
+def amd_ifvg_analyze(body: dict) -> dict:
+    """Offline AMD + iFVG analysis from supplied closed candles (no look-ahead)."""
+    from app.analysis.amd_ifvg_logic import analyze_amd_ifvg, candles_from_payload
+
+    payload = body or {}
+    symbol = str(payload.get("symbol") or payload.get("broker_symbol") or "XAUUSD").upper()
+    candles_raw = payload.get("candles") if isinstance(payload.get("candles"), dict) else {}
+    market = payload.get("market") if isinstance(payload.get("market"), dict) else {}
+
+    setup_rows = candles_raw.get("M15") or candles_raw.get("setup") or []
+    entry_rows = candles_raw.get("M5") or candles_raw.get("entry") or setup_rows
+    bias_rows = candles_raw.get("H1") or candles_raw.get("bias") or setup_rows
+
+    candles_setup = candles_from_payload(setup_rows if isinstance(setup_rows, list) else [])
+    candles_entry = candles_from_payload(entry_rows if isinstance(entry_rows, list) else [])
+    candles_bias = candles_from_payload(bias_rows if isinstance(bias_rows, list) else [])
+
+    bid = float(market.get("bid") or 0)
+    ask = float(market.get("ask") or 0)
+    spread = float(market.get("spread_points") or market.get("spread") or 0)
+
+    return analyze_amd_ifvg(
+        symbol=symbol,
+        candles_setup=candles_setup,
+        candles_entry=candles_entry,
+        candles_bias=candles_bias,
+        bid=bid,
+        ask=ask,
+        spread_points=spread,
+    )
+
+
 @router.get("/api/v1/signals")
 def list_accepted_signals(
     limit: int = Query(default=50, ge=1, le=200),

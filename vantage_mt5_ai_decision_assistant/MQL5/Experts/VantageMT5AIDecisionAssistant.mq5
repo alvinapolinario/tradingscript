@@ -45,6 +45,7 @@
 #include <VantageAI/VantageBreakoutStructure.mqh>
 #include <VantageAI/VantageMarketStateManager.mqh>
 #include <VantageAI/VantageSwingStrategy.mqh>
+#include <VantageAI/VantageAmdIfvg.mqh>
 
 //--- Explicit compile-time advisory guard (do not import Trade.mqh / CTrade)
 #ifdef __MQL5__
@@ -450,6 +451,45 @@ input bool   InpSwingShowDash   = true;
 input bool   InpSwingChartObj   = true;
 input bool   InpSwingDebug      = false;
 
+input group "AP. AMD + iFVG — Core"
+input bool   InpAmdIfvgEnable     = true;
+input bool   InpAmdIfvgGoldOnly   = true;
+input string InpAmdIfvgAliases    = "XAUUSD,GOLD";
+
+input group "AQ. AMD + iFVG — Timeframes"
+input ENUM_TIMEFRAMES InpAmdIfvgTF_H4  = PERIOD_H4;
+input ENUM_TIMEFRAMES InpAmdIfvgTF_H1  = PERIOD_H1;
+input ENUM_TIMEFRAMES InpAmdIfvgTF_M15 = PERIOD_M15;
+input ENUM_TIMEFRAMES InpAmdIfvgTF_M5  = PERIOD_M5;
+
+input group "AR. AMD + iFVG — Detection"
+input int    InpAmdIfvgPivotLeft    = 2;
+input int    InpAmdIfvgPivotRight   = 2;
+input int    InpAmdIfvgAccMinBars   = 8;
+input int    InpAmdIfvgAccMaxBars   = 40;
+input double InpAmdIfvgAccMaxAtr    = 1.5;
+input int    InpAmdIfvgAccMinTouch  = 2;
+input double InpAmdIfvgSweepMinAtr   = 0.05;
+input double InpAmdIfvgSweepMaxAtr  = 0.75;
+input bool   InpAmdIfvgSweepReentry = true;
+input double InpAmdIfvgDispBodyAtr  = 0.8;
+input double InpAmdIfvgFvgMinGapAtr = 0.05;
+input double InpAmdIfvgIfvgBreakAtr = 0.1;
+input bool   InpAmdIfvgIfvgBodyClose = true;
+input int    InpAmdIfvgIfvgMaxRetest = 2;
+input bool   InpAmdIfvgIfvgMidEntry = true;
+input double InpAmdIfvgMinRR        = 2.0;
+input double InpAmdIfvgMinScore     = 75.0;
+input double InpAmdIfvgRiskPct        = 0.5;
+input double InpAmdIfvgMaxSpreadPts   = 80.0;
+input string InpAmdIfvgEntryMode      = "CONSERVATIVE";
+input double InpAmdIfvgChaseMaxAtr    = 0.35;
+
+input group "AS. AMD + iFVG — HUD / Chart"
+input bool   InpAmdIfvgShowDash   = true;
+input bool   InpAmdIfvgChartObj   = true;
+input bool   InpAmdIfvgDebug      = false;
+
 //+------------------------------------------------------------------+
 //| Globals                                                          |
 //+------------------------------------------------------------------+
@@ -473,6 +513,8 @@ CMarketStateManager g_marketstate;
 VantageMseResult g_msesnap;
 CVantageSwingStrategy g_swingstrat;
 VantageSwingStratResult g_swingsnap;
+CVantageAmdIfvg g_amdifvg;
+VantageAmdIfvgResult g_amdifvgsnap;
 
 datetime g_last_closed_candle = 0;
 datetime g_last_request_candle = 0;
@@ -985,6 +1027,8 @@ string BuildHeartbeatPayload(void)
       j += ",\"market_state_engine\":" + g_marketstate.ToJson(g_msesnap);
    if(g_swingsnap.valid)
       j += ",\"swing_strategy\":" + g_swingstrat.ToJson(g_swingsnap);
+   if(g_amdifvgsnap.valid)
+      j += ",\"amd_ifvg\":" + g_amdifvg.ToJson(g_amdifvgsnap);
    j += "}";
    return j;
   }
@@ -1343,6 +1387,52 @@ void MaybeEvalSwingStrategy(const bool force)
       g_swingsnap = r;
   }
 
+void FillAmdIfvgConfig(VantageAmdIfvgConfig &cfg)
+  {
+   ZeroMemory(cfg);
+   cfg.enable = InpAmdIfvgEnable;
+   cfg.gold_only = InpAmdIfvgGoldOnly;
+   cfg.gold_aliases = InpAmdIfvgAliases;
+   cfg.allow_suffix = true;
+   cfg.allow_prefix = true;
+   cfg.tf_macro = InpAmdIfvgTF_H4;
+   cfg.tf_bias = InpAmdIfvgTF_H1;
+   cfg.tf_setup = InpAmdIfvgTF_M15;
+   cfg.tf_entry = InpAmdIfvgTF_M5;
+   cfg.pivot_left = InpAmdIfvgPivotLeft;
+   cfg.pivot_right = InpAmdIfvgPivotRight;
+   cfg.acc_min_candles = InpAmdIfvgAccMinBars;
+   cfg.acc_max_candles = InpAmdIfvgAccMaxBars;
+   cfg.acc_max_width_atr = InpAmdIfvgAccMaxAtr;
+   cfg.acc_min_touches = InpAmdIfvgAccMinTouch;
+   cfg.sweep_min_atr = InpAmdIfvgSweepMinAtr;
+   cfg.sweep_max_atr = InpAmdIfvgSweepMaxAtr;
+   cfg.sweep_require_reentry = InpAmdIfvgSweepReentry;
+   cfg.disp_min_body_atr = InpAmdIfvgDispBodyAtr;
+   cfg.fvg_min_gap_atr = InpAmdIfvgFvgMinGapAtr;
+   cfg.ifvg_min_break_atr = InpAmdIfvgIfvgBreakAtr;
+   cfg.ifvg_require_body_close = InpAmdIfvgIfvgBodyClose;
+   cfg.ifvg_max_retests = InpAmdIfvgIfvgMaxRetest;
+   cfg.ifvg_use_midpoint = InpAmdIfvgIfvgMidEntry;
+   cfg.min_rr = InpAmdIfvgMinRR;
+   cfg.min_trade_score = InpAmdIfvgMinScore;
+   cfg.risk_percent = InpAmdIfvgRiskPct;
+   cfg.max_spread_pts = InpAmdIfvgMaxSpreadPts;
+   cfg.entry_mode = InpAmdIfvgEntryMode;
+   cfg.chase_max_atr = InpAmdIfvgChaseMaxAtr;
+   cfg.show_chart_objects = InpAmdIfvgChartObj && WantModuleChart();
+   cfg.show_dashboard = InpAmdIfvgShowDash && WantModuleDashboard();
+   cfg.show_hlines = WantChartHorizontalLines();
+   cfg.debug_log = InpAmdIfvgDebug;
+  }
+
+void MaybeEvalAmdIfvg(const bool force)
+  {
+   VantageAmdIfvgResult r;
+   if(g_amdifvg.Evaluate(force, r))
+      g_amdifvgsnap = r;
+  }
+
 void RefreshPlCalendar(const bool force)
   {
    // Rebuild when forced, when minute elapsed, or when requested month differs from loaded
@@ -1400,6 +1490,7 @@ void MaybeSendHeartbeat(void)
    MaybeEvalBreakoutStructure(false);
    MaybeEvalMarketState(false);
    MaybeEvalSwingStrategy(false);
+   MaybeEvalAmdIfvg(false);
 
    static int s_last_pending_logged = -1;
    if(g_pending.count != s_last_pending_logged)
@@ -1611,6 +1702,7 @@ void ProcessReplayBar(const datetime closed_time)
    MaybeEvalBreakoutStructure(false);
    MaybeEvalMarketState(false);
    MaybeEvalSwingStrategy(false);
+   MaybeEvalAmdIfvg(false);
 
    g_last_action = g_dec.primary_action;
    g_last_request_candle = closed_time;
@@ -1745,6 +1837,7 @@ void RefreshDashboard(void)
    MaybeEvalBreakoutStructure(false);
    MaybeEvalMarketState(false);
    MaybeEvalSwingStrategy(false);
+   MaybeEvalAmdIfvg(false);
    const bool show_gsm = WantModuleDashboard() && InpGoldSmcShowDash &&
                          (InpGoldSmcEnable || InpGoldSmcShowWarn) &&
                          g_gsmsnap.valid;
@@ -1876,6 +1969,16 @@ int OnInit()
          MaybeEvalSwingStrategy(true);
      }
 
+   if(InpAmdIfvgEnable)
+     {
+      VantageAmdIfvgConfig acfg;
+      FillAmdIfvgConfig(acfg);
+      if(!g_amdifvg.Init(_Symbol, acfg))
+         Print("[VantageAI] AMD + iFVG Strategy init failed.");
+      else
+         MaybeEvalAmdIfvg(true);
+     }
+
    // Build chart-relative levels for BTC/etc. (AUTO) or gold manual map
    if(g_analysis.HasEnoughHistory(50))
       g_analysis.BuildSnapshot(g_tech);
@@ -1951,6 +2054,7 @@ void OnDeinit(const int reason)
    g_breakout.Release();
    g_marketstate.Release();
    g_swingstrat.Release();
+   g_amdifvg.Release();
    ClearAllChartVisuals();
    Print("[VantageAI] Stopped. reason=", reason);
   }

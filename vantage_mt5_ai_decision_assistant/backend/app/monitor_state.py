@@ -142,6 +142,8 @@ class EaSnapshot:
     market_state_engine_supported: bool = False
     swing_strategy: dict | None = None
     swing_strategy_supported: bool = False
+    amd_ifvg: dict | None = None
+    amd_ifvg_supported: bool = False
     max_position_risk_pct: float | None = None
 
 
@@ -272,6 +274,9 @@ def _apply_heartbeat_fields(ea: EaSnapshot, payload: dict[str, Any]) -> None:
     if isinstance(payload.get("swing_strategy"), dict):
         ea.swing_strategy = payload["swing_strategy"]
         ea.swing_strategy_supported = True
+    if isinstance(payload.get("amd_ifvg"), dict):
+        ea.amd_ifvg = payload["amd_ifvg"]
+        ea.amd_ifvg_supported = True
 
 
 class MonitorStore:
@@ -605,6 +610,8 @@ class MonitorStore:
             "market_state_engine_supported": ea.market_state_engine_supported,
             "swing_strategy": ea.swing_strategy,
             "swing_strategy_supported": ea.swing_strategy_supported,
+            "amd_ifvg": ea.amd_ifvg,
+            "amd_ifvg_supported": ea.amd_ifvg_supported,
             "server_year": ea.server_year,
             "server_month": ea.server_month,
             "calendar_request": calendar_request,

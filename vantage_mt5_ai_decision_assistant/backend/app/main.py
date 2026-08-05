@@ -172,6 +172,15 @@ def swing_strategy_page():
     return FileResponse(page)
 
 
+@app.get("/amd-ifvg")
+def amd_ifvg_page():
+    """AMD + iFVG Strategy desk — advisory only, XAUUSD/Gold."""
+    page = STATIC_DIR / "amd-ifvg.html"
+    if not page.exists():
+        return {"error": "amd-ifvg.html missing", "path": str(page)}
+    return FileResponse(page)
+
+
 @app.get("/execution")
 def execution_page():
     """Demo execution journal — VantageSwingExecutor fills (demo only)."""

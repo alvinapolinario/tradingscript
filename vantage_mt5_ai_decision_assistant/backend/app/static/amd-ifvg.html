@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>AMD + iFVG · Vantage</title>
+  <link rel="stylesheet" href="/static/shell.css" />
+  <style>
+    :root {
+      --bg: #0a0e14; --panel: #121824; --line: #263044; --text: #e8eef8;
+      --muted: #8a96aa; --accent: #7eb8ff; --good: #3dd68c; --warn: #e8c547;
+      --bad: #f07178; --mono: "Cascadia Code", Consolas, ui-monospace, monospace;
+    }
+    body { margin: 0; font-family: "Segoe UI", system-ui, sans-serif; color: var(--text); background: var(--bg); min-height: 100vh; }
+    header { padding: .9rem 1.25rem; border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; align-items: flex-start; gap: .5rem; flex-wrap: wrap; }
+    header h1 { margin: 0; font-size: 1.05rem; }
+    .sub { color: var(--muted); font-size: .76rem; margin-top: .25rem; max-width: 640px; }
+    main { max-width: 1080px; margin: 0 auto; padding: 1rem 1rem 2.5rem; }
+    .grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: .7rem; }
+    .span2 { grid-column: span 2; }
+    .card { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: .85rem .95rem; }
+    .hero { background: linear-gradient(135deg, #152033, var(--panel)); border-color: #33415a; }
+    .k { font-size: .66rem; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }
+    .v { font-family: var(--mono); font-size: .9rem; font-weight: 650; margin-top: .2rem; }
+    .sig { font-size: 1.35rem; font-weight: 800; color: var(--accent); margin: .35rem 0; }
+    .score { font-size: 2rem; font-weight: 800; color: var(--accent); }
+    .row { display: flex; justify-content: space-between; gap: .5rem; margin-top: .35rem; align-items: baseline; }
+    .pill { font-size: .72rem; font-weight: 700; padding: .3rem .6rem; border-radius: 999px; border: 1px solid var(--line); }
+    .pill.buy { color: var(--good); border-color: rgba(61,214,140,.4); }
+    .pill.sell { color: var(--bad); border-color: rgba(240,113,120,.4); }
+    .pill.wait { color: var(--warn); }
+    .pill.muted { color: var(--muted); }
+    .explain { color: var(--muted); font-size: .84rem; line-height: 1.6; margin: 0; }
+    .empty { border: 1px dashed var(--line); border-radius: 14px; padding: 1.5rem; color: var(--muted); text-align: center; line-height: 1.5; }
+    .warn-box { border: 1px solid rgba(232,197,71,.45); background: rgba(232,197,71,.08); border-radius: 12px; padding: .75rem .9rem; color: var(--warn); margin-bottom: .7rem; font-size: .84rem; }
+    .checklist { list-style: none; padding: 0; margin: .5rem 0 0; }
+    .checklist li { display: flex; justify-content: space-between; gap: .5rem; padding: .35rem 0; border-bottom: 1px solid rgba(38,48,68,.6); font-size: .82rem; }
+    .checklist li:last-child { border-bottom: none; }
+    .tag { font-size: .68rem; font-weight: 700; padding: .15rem .45rem; border-radius: 6px; }
+    .tag.ok { background: rgba(61,214,140,.15); color: var(--good); }
+    .tag.pending { background: rgba(232,197,71,.12); color: var(--warn); }
+    .tag.fail { background: rgba(240,113,120,.12); color: var(--bad); }
+    ul.reasons { margin: .5rem 0 0; padding-left: 1.1rem; color: var(--muted); font-size: .84rem; line-height: 1.55; }
+    @media (max-width: 820px) { .grid { grid-template-columns: 1fr; } .span2 { grid-column: span 1; } }
+  </style>
+</head>
+<body data-nav="amd-ifvg">
+  <header>
+    <div>
+      <h1>AMD + iFVG Strategy</h1>
+      <div class="sub">XAUUSD / Gold · Accumulation → Manipulation → Distribution + inversion FVG · advisory only — never auto-trades</div>
+    </div>
+    <span id="pill" class="pill wait">—</span>
+  </header>
+  <main id="main"><div class="empty">Loading…</div></main>
+  <script src="/static/shell.js"></script>
+  <script>
+    function fmt(n, d = 2) { return n == null || isNaN(Number(n)) || Number(n) === 0 ? "—" : Number(n).toFixed(d); }
+    function decClass(d) {
+      const u = String(d || "").toUpperCase();
+      if (u === "BUY") return "buy";
+      if (u === "SELL") return "sell";
+      if (u === "WAIT") return "wait";
+      return "muted";
+    }
+    function checklistItem(label, ok, pending) {
+      const tag = ok ? '<span class="tag ok">Confirmed</span>'
+        : pending ? '<span class="tag pending">Pending</span>'
+        : '<span class="tag fail">Failed</span>';
+      return `<li><span>${label}</span>${tag}</li>`;
+    }
+    function render(p) {
+      const root = document.getElementById("main");
+      const a = p.amd_ifvg;
+      const dig = p.digits || 2;
+      const pill = document.getElementById("pill");
+
+      if (!p.ea_online) {
+        pill.textContent = "offline";
+        pill.className = "pill muted";
+        root.innerHTML = `<div class="empty">EA offline. Attach the Vantage EA on XAUUSD and wait for heartbeat.</div>`;
+        return;
+      }
+      if (!p.amd_ifvg_supported || !a) {
+        pill.textContent = "unsupported";
+        pill.className = "pill muted";
+        root.innerHTML = `<div class="empty">This EA build is not sending <b>amd_ifvg</b> yet.<br/>
+          Recompile <code>VantageMT5AIDecisionAssistant.mq5</code> with AMD + iFVG groups AP–AS enabled.</div>`;
+        return;
+      }
+      if (!a.gold_symbol_valid) {
+        pill.textContent = "wrong symbol";
+        pill.className = "pill muted";
+        root.innerHTML = `<div class="warn-box">${a.disable_reason || "Gold / XAUUSD only."}</div>`;
+        return;
+      }
+
+      const dec = a.decision || "NO_TRADE";
+      pill.textContent = dec.replace(/_/g, " ");
+      pill.className = "pill " + decClass(dec);
+
+      const acc = a.accumulation || {};
+      const manip = a.manipulation || {};
+      const mss = a.market_structure || {};
+      const ifvg = a.ifvg || {};
+      const entry = a.entry || {};
+      const risk = a.risk || {};
+      const targets = a.targets || [];
+      const warnings = Array.isArray(a.warnings) ? a.warnings : (a.warnings ? [a.warnings] : []);
+      const reasons = Array.isArray(a.reasoning) ? a.reasoning : (a.reasoning ? [a.reasoning] : []);
+
+      const warnHtml = warnings.length
+        ? `<div class="warn-box">${warnings.join(" · ")}</div>` : "";
+
+      const checklist = [
+        checklistItem("Higher-TF bias", a.higher_timeframe_bias && a.higher_timeframe_bias !== "NEUTRAL", !a.higher_timeframe_bias),
+        checklistItem("Accumulation", acc.detected, a.setup_state && a.setup_state.includes("ACCUMULATION")),
+        checklistItem("Liquidity sweep", manip.detected, a.setup_state && a.setup_state.includes("SWEEP")),
+        checklistItem("Displacement / MSS", mss.shift_detected, a.setup_state && a.setup_state.includes("MSS")),
+        checklistItem("FVG inversion (iFVG)", ifvg.detected, a.setup_state && a.setup_state.includes("IFVG")),
+        checklistItem("Retrace into iFVG", a.setup_state === "ENTRY_ZONE_ACTIVE" || entry.current_price_inside_zone, a.setup_state === "WAITING_FOR_RETRACE"),
+        checklistItem("Risk-to-reward", targets.length > 0, dec === "WAIT"),
+      ].join("");
+
+      const tpHtml = targets.map((t) =>
+        `<div class="row"><span class="k">${t.name || "TP"}</span><span class="v">${fmt(t.price, dig)} · ${t.reason || ""} (${t.rr != null ? t.rr + "R" : "—"})</span></div>`
+      ).join("");
+
+      root.innerHTML = `
+        ${warnHtml}
+        <div class="grid">
+          <div class="card hero span2">
+            <div class="k">Decision · ${a.amd_phase || "—"} · ${(a.setup_state || "—").replace(/_/g, " ")}</div>
+            <div class="sig">${dec}</div>
+            <p class="explain">${a.technical_narrative || a.action_guidance || ""}</p>
+            <div class="row" style="margin-top:.65rem">
+              <div><div class="k">Confidence</div><div class="score">${Math.round(a.confidence || 0)}</div></div>
+              <div><div class="k">HTF bias</div><div class="v">${a.higher_timeframe_bias || "—"}</div></div>
+              <div><div class="k">Premium / discount</div><div class="v">${a.premium_discount_zone || "—"}</div></div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="k">AMD — Accumulation</div>
+            <div class="v">${acc.detected ? `${fmt(acc.range_low, dig)} – ${fmt(acc.range_high, dig)}` : "Not detected"}</div>
+            <div class="row"><span class="k">Quality</span><span class="v">${acc.quality_score != null ? Math.round(acc.quality_score) : "—"}</span></div>
+          </div>
+
+          <div class="card">
+            <div class="k">Manipulation</div>
+            <div class="v">${manip.detected ? (manip.direction || "Sweep") : "—"}</div>
+            <div class="row"><span class="k">Sweep</span><span class="v">${fmt(manip.sweep_price, dig)}</span></div>
+          </div>
+
+          <div class="card">
+            <div class="k">Market structure</div>
+            <div class="v">${mss.shift_detected ? (mss.direction || "MSS") : "—"}</div>
+            <div class="row"><span class="k">Broken level</span><span class="v">${fmt(mss.broken_level, dig)}</span></div>
+          </div>
+
+          <div class="card">
+            <div class="k">Inversion FVG</div>
+            <div class="v">${ifvg.detected ? `${ifvg.direction} (was ${ifvg.original_fvg_direction || "—"})` : "—"}</div>
+            <div class="row"><span class="k">Zone</span><span class="v">${fmt(ifvg.lower_boundary, dig)} – ${fmt(ifvg.upper_boundary, dig)}</span></div>
+            <div class="row"><span class="k">Retests</span><span class="v">${ifvg.retest_count ?? "—"}</span></div>
+          </div>
+
+          <div class="card span2">
+            <div class="k">Trade plan (advisory)</div>
+            <div class="row"><span class="k">Entry zone</span><span class="v">${fmt(entry.entry_low, dig)} – ${fmt(entry.entry_high, dig)}</span></div>
+            <div class="row"><span class="k">Preferred entry</span><span class="v">${fmt(entry.preferred_entry, dig)}</span></div>
+            <div class="row"><span class="k">Stop loss</span><span class="v">${fmt(risk.stop_loss, dig)}</span></div>
+            ${tpHtml}
+            <div class="row"><span class="k">Invalidation</span><span class="v">${fmt((a.invalidation || {}).price, dig)}</span></div>
+          </div>
+
+          <div class="card span2">
+            <div class="k">Confirmation checklist</div>
+            <ul class="checklist">${checklist}</ul>
+          </div>
+
+          <div class="card span2">
+            <div class="k">Reasoning</div>
+            <ul class="reasons">${reasons.map((r) => `<li>${r}</li>`).join("") || "<li>Scanning closed bars…</li>"}</ul>
+          </div>
+        </div>`;
+    }
+
+    async function refresh() {
+      try {
+        const r = await fetch("/api/v1/amd-ifvg/status");
+        render(await r.json());
+      } catch (e) {
+        document.getElementById("main").innerHTML = `<div class="empty">Failed to load status.</div>`;
+      }
+    }
+    refresh();
+    setInterval(refresh, 8000);
+  </script>
+</body>
+</html>

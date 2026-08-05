@@ -32,6 +32,7 @@
     { id: "breakout-structure", href: "/breakout-structure", label: "Breakout Structure", icon: "chart" },
     { id: "market-state", href: "/market-state", label: "Market State Engine", icon: "layers" },
     { id: "swing-strategy", href: "/swing-strategy", label: "Swing Strategy", icon: "calc" },
+    { id: "amd-ifvg", href: "/amd-ifvg", label: "AMD + iFVG", icon: "layers" },
     { id: "execution", href: "/execution", label: "Demo Execution", icon: "target" },
     { id: "radar", href: "/dashboard", label: "Opportunity Radar", icon: "radar" },
     { id: "patterns", href: "/patterns", label: "Pattern Strategy", icon: "shapes" },
