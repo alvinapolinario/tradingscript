@@ -199,6 +199,15 @@ def box_theory_page():
     return FileResponse(page)
 
 
+@app.get("/ict")
+def ict_page():
+    """ICT Strategy Engine desk — advisory only, XAUUSD/Gold."""
+    page = STATIC_DIR / "ict.html"
+    if not page.exists():
+        return {"error": "ict.html missing", "path": str(page)}
+    return FileResponse(page)
+
+
 @app.get("/execution")
 def execution_page():
     """Demo execution journal — VantageSwingExecutor fills (demo only)."""

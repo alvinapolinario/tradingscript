@@ -213,6 +213,7 @@ def test_api_pending_orders():
             },
         }
     )
+    monitor_store.select_symbol("XAUUSD")
     client = TestClient(app)
     r = client.get("/api/v1/orders/pending")
     assert r.status_code == 200
@@ -251,6 +252,7 @@ def test_analyze_without_pending_does_not_wipe():
             },
         }
     )
+    monitor_store.select_symbol("XAUUSD")
     token = get_settings().local_api_token
     client = TestClient(app)
     # Minimal analyze body — no pending_orders field

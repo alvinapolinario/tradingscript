@@ -34,6 +34,7 @@
     { id: "swing-strategy", href: "/swing-strategy", label: "Swing Strategy", icon: "calc" },
     { id: "amd-ifvg", href: "/amd-ifvg", label: "AMD + iFVG", icon: "layers" },
     { id: "box-theory", href: "/box-theory", label: "Box Theory", icon: "chart" },
+    { id: "ict", href: "/ict", label: "ICT Strategy", icon: "layers" },
     { id: "execution", href: "/execution", label: "Demo Execution", icon: "target" },
     { id: "radar", href: "/dashboard", label: "Opportunity Radar", icon: "radar" },
     { id: "patterns", href: "/patterns", label: "Pattern Strategy", icon: "shapes" },

@@ -10,6 +10,22 @@ from enum import Enum
 from typing import Any
 
 from app.analysis.gold_symbol_validator import is_approved_gold_symbol
+from app.market_structure import (
+    Candle,
+    FvgStatus,
+    FvgZone,
+    atr as _atr,
+    candles_from_payload,
+    detect_fvgs,
+    detect_mss,
+    find_swings,
+    htf_bias as _htf_bias,
+    premium_discount,
+    score_displacement,
+    try_invert_fvg,
+    update_fvg_mitigation,
+    validate_candles as _validate_candles,
+)
 
 
 class AmdPhase(str, Enum):
@@ -42,25 +58,6 @@ class Decision(str, Enum):
     SELL = "SELL"
     WAIT = "WAIT"
     NO_TRADE = "NO_TRADE"
-
-
-class FvgStatus(str, Enum):
-    ACTIVE = "ACTIVE"
-    PARTIALLY_MITIGATED = "PARTIALLY_MITIGATED"
-    FULLY_MITIGATED = "FULLY_MITIGATED"
-    INVALIDATED = "INVALIDATED"
-    INVERTED = "INVERTED"
-    EXPIRED = "EXPIRED"
-
-
-@dataclass
-class Candle:
-    time: int
-    open: float
-    high: float
-    low: float
-    close: float
-    volume: float = 0.0
 
 
 @dataclass
@@ -98,29 +95,6 @@ DEFAULT_AMD_IFVG_CONFIG = AmdIfvgConfig()
 
 
 @dataclass
-class FvgZone:
-    fvg_id: str
-    direction: str  # BULLISH | BEARISH
-    timeframe: str
-    created_time: int
-    lower: float
-    upper: float
-    gap_size: float
-    gap_atr: float
-    displacement_score: float
-    mitigation_pct: float = 0.0
-    status: FvgStatus = FvgStatus.ACTIVE
-    inverted: bool = False
-    inversion_time: int = 0
-    retest_count: int = 0
-    original_direction: str = ""
-
-    @property
-    def midpoint(self) -> float:
-        return (self.lower + self.upper) / 2.0
-
-
-@dataclass
 class AccumulationRange:
     start_time: int
     end_time: int
@@ -150,143 +124,6 @@ class NewsRiskService:
         if not self.enabled:
             return False, ""
         return False, ""
-
-
-def _atr(candles: list[Candle], period: int = 14) -> float:
-    if len(candles) < period + 1:
-        return max(candles[-1].high - candles[-1].low, 1e-9) if candles else 1e-9
-    trs: list[float] = []
-    for i in range(-period, 0):
-        c = candles[i]
-        p = candles[i - 1]
-        tr = max(c.high - c.low, abs(c.high - p.close), abs(c.low - p.close))
-        trs.append(tr)
-    return sum(trs) / len(trs) if trs else 1e-9
-
-
-def _validate_candles(candles: list[Candle]) -> str | None:
-    if len(candles) < 3:
-        return "Insufficient candles"
-    seen: set[int] = set()
-    prev_t = -1
-    for c in candles:
-        if c.high < c.low or c.open <= 0 or c.close <= 0:
-            return "Invalid OHLC"
-        if c.time in seen:
-            return "Duplicate timestamps"
-        seen.add(c.time)
-        if prev_t >= 0 and c.time <= prev_t:
-            return "Unsorted candles"
-        prev_t = c.time
-    return None
-
-
-def detect_fvgs(
-    candles: list[Candle],
-    *,
-    timeframe: str,
-    atr: float,
-    cfg: AmdIfvgConfig,
-    start_idx: int = 2,
-) -> list[FvgZone]:
-    """Three-candle FVG model on closed bars (indices 0=oldest)."""
-    out: list[FvgZone] = []
-    min_gap = cfg.fvg_min_gap_atr * atr
-    for i in range(max(start_idx, 2), len(candles)):
-        c1, c2, c3 = candles[i - 2], candles[i - 1], candles[i]
-        body = abs(c2.close - c2.open)
-        body_atr = body / atr if atr else 0.0
-        disp = min(100.0, body_atr * 50.0)
-        if c3.low > c1.high:
-            gap = c3.low - c1.high
-            if gap >= min_gap:
-                out.append(
-                    FvgZone(
-                        fvg_id=f"FVG-B-{timeframe}-{c3.time}",
-                        direction="BULLISH",
-                        timeframe=timeframe,
-                        created_time=c3.time,
-                        lower=c1.high,
-                        upper=c3.low,
-                        gap_size=gap,
-                        gap_atr=gap / atr if atr else 0.0,
-                        displacement_score=disp,
-                    )
-                )
-        if c3.high < c1.low:
-            gap = c1.low - c3.high
-            if gap >= min_gap:
-                out.append(
-                    FvgZone(
-                        fvg_id=f"FVG-S-{timeframe}-{c3.time}",
-                        direction="BEARISH",
-                        timeframe=timeframe,
-                        created_time=c3.time,
-                        lower=c3.high,
-                        upper=c1.low,
-                        gap_size=gap,
-                        gap_atr=gap / atr if atr else 0.0,
-                        displacement_score=disp,
-                    )
-                )
-    return out
-
-
-def update_fvg_mitigation(fvg: FvgZone, price: float) -> None:
-    if fvg.status in (FvgStatus.INVERTED, FvgStatus.INVALIDATED, FvgStatus.EXPIRED):
-        return
-    width = fvg.upper - fvg.lower
-    if width <= 0:
-        return
-    if fvg.direction == "BULLISH":
-        if price <= fvg.lower:
-            fvg.mitigation_pct = 100.0
-            fvg.status = FvgStatus.FULLY_MITIGATED
-        elif price < fvg.upper:
-            fvg.mitigation_pct = max(fvg.mitigation_pct, (fvg.upper - price) / width * 100.0)
-            if fvg.mitigation_pct >= 50:
-                fvg.status = FvgStatus.PARTIALLY_MITIGATED
-    else:
-        if price >= fvg.upper:
-            fvg.mitigation_pct = 100.0
-            fvg.status = FvgStatus.FULLY_MITIGATED
-        elif price > fvg.lower:
-            fvg.mitigation_pct = max(fvg.mitigation_pct, (price - fvg.lower) / width * 100.0)
-            if fvg.mitigation_pct >= 50:
-                fvg.status = FvgStatus.PARTIALLY_MITIGATED
-
-
-def try_invert_fvg(
-    fvg: FvgZone,
-    candle: Candle,
-    atr: float,
-    cfg: AmdIfvgConfig,
-) -> bool:
-    """Decisive body close beyond FVG → iFVG."""
-    if fvg.inverted or fvg.status == FvgStatus.EXPIRED:
-        return False
-    min_break = cfg.ifvg_min_break_atr * atr
-    if fvg.direction == "BULLISH":
-        if cfg.ifvg_require_body_close and candle.close >= fvg.lower:
-            return False
-        if candle.close < fvg.lower - min_break:
-            fvg.original_direction = fvg.direction
-            fvg.direction = "BEARISH"
-            fvg.inverted = True
-            fvg.inversion_time = candle.time
-            fvg.status = FvgStatus.INVERTED
-            return True
-    elif fvg.direction == "BEARISH":
-        if cfg.ifvg_require_body_close and candle.close <= fvg.upper:
-            return False
-        if candle.close > fvg.upper + min_break:
-            fvg.original_direction = fvg.direction
-            fvg.direction = "BULLISH"
-            fvg.inverted = True
-            fvg.inversion_time = candle.time
-            fvg.status = FvgStatus.INVERTED
-            return True
-    return False
 
 
 def detect_accumulation(
@@ -378,100 +215,6 @@ def detect_manipulation(
     return None
 
 
-def find_swings(candles: list[Candle], left: int, right: int, atr: float, min_atr: float = 0.3) -> list[dict[str, Any]]:
-    swings: list[dict[str, Any]] = []
-    for i in range(left, len(candles) - right):
-        hi = candles[i].high
-        lo = candles[i].low
-        is_hi = all(hi >= candles[i - j].high for j in range(1, left + 1)) and all(
-            hi >= candles[i + j].high for j in range(1, right + 1)
-        )
-        is_lo = all(lo <= candles[i - j].low for j in range(1, left + 1)) and all(
-            lo <= candles[i + j].low for j in range(1, right + 1)
-        )
-        if is_hi and hi - lo >= min_atr * atr:
-            swings.append({"type": "HIGH", "price": hi, "time": candles[i].time, "index": i})
-        if is_lo and hi - lo >= min_atr * atr:
-            swings.append({"type": "LOW", "price": lo, "time": candles[i].time, "index": i})
-    return swings
-
-
-def detect_mss(
-    candles: list[Candle],
-    swings: list[dict[str, Any]],
-    bias: str,
-    atr: float,
-    cfg: AmdIfvgConfig,
-) -> dict[str, Any] | None:
-    if len(candles) < 3:
-        return None
-    last = candles[-1]
-    body = abs(last.close - last.open)
-    if body / atr < cfg.displacement_min_body_atr * 0.5:
-        return None
-    body_lo = min(last.open, last.close)
-    body_hi = max(last.open, last.close)
-    if bias == "BEARISH":
-        lows = [s for s in swings if s["type"] == "LOW"]
-        if not lows:
-            return None
-        level = lows[-1]["price"]
-        if body_lo < level:
-            return {
-                "shift_detected": True,
-                "direction": "BEARISH",
-                "broken_level": level,
-                "confirmation_type": "BODY_CLOSE",
-                "quality_score": min(100.0, 60.0 + body / atr * 25.0),
-            }
-    if bias == "BULLISH":
-        highs = [s for s in swings if s["type"] == "HIGH"]
-        if not highs:
-            return None
-        level = highs[-1]["price"]
-        if body_hi > level:
-            return {
-                "shift_detected": True,
-                "direction": "BULLISH",
-                "broken_level": level,
-                "confirmation_type": "BODY_CLOSE",
-                "quality_score": min(100.0, 60.0 + body / atr * 25.0),
-            }
-    return None
-
-
-def premium_discount(dealing_high: float, dealing_low: float, price: float) -> str:
-    if dealing_high <= dealing_low:
-        return "NEUTRAL"
-    eq = (dealing_high + dealing_low) / 2.0
-    if price >= eq + (dealing_high - eq) * 0.5:
-        return "DEEP_PREMIUM"
-    if price >= eq:
-        return "PREMIUM"
-    if price <= eq - (eq - dealing_low) * 0.5:
-        return "DEEP_DISCOUNT"
-    if price <= eq:
-        return "DISCOUNT"
-    return "NEUTRAL"
-
-
-def score_displacement(candle: Candle, atr: float, structure_break: bool, fvg_created: bool) -> float:
-    body = abs(candle.close - candle.open)
-    rng = candle.high - candle.low or 1e-9
-    score = 0.0
-    score += min(25.0, (body / atr) * 25.0) if atr else 0.0
-    score += min(15.0, (body / rng) * 15.0)
-    if structure_break:
-        score += 25.0
-    if fvg_created:
-        score += 15.0
-    if candle.close > candle.open and candle.close >= candle.high - rng * 0.25:
-        score += 10.0
-    if candle.close < candle.open and candle.close <= candle.low + rng * 0.25:
-        score += 10.0
-    return min(100.0, score)
-
-
 def compute_confidence(
     *,
     htf_alignment: float,
@@ -496,17 +239,6 @@ def compute_confidence(
         + 5.0  # session placeholder
     )
     return max(0.0, min(100.0, raw - penalties))
-
-
-def _htf_bias(candles: list[Candle]) -> str:
-    if len(candles) < 20:
-        return "NEUTRAL"
-    closes = [c.close for c in candles[-20:]]
-    if closes[-1] > closes[0] * 1.002:
-        return "BULLISH"
-    if closes[-1] < closes[0] * 0.998:
-        return "BEARISH"
-    return "NEUTRAL"
 
 
 def analyze_amd_ifvg(
@@ -784,20 +516,3 @@ def _empty_blob(symbol: str, reason: str) -> dict[str, Any]:
         "confidence": 0.0,
         "reasoning": [reason],
     }
-
-
-def candles_from_payload(rows: list[dict[str, Any]] | None) -> list[Candle]:
-    """Parse OHLC rows from API / offline analyze payloads."""
-    out: list[Candle] = []
-    for row in rows or []:
-        out.append(
-            Candle(
-                time=int(row.get("time") or row.get("t") or 0),
-                open=float(row.get("open") or row.get("o") or 0),
-                high=float(row.get("high") or row.get("h") or 0),
-                low=float(row.get("low") or row.get("l") or 0),
-                close=float(row.get("close") or row.get("c") or 0),
-                volume=float(row.get("volume") or row.get("tick_volume") or row.get("v") or 0),
-            )
-        )
-    return out

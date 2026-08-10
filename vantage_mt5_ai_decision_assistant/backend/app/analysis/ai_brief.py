@@ -4,13 +4,20 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any
 
+from app.analysis.ai_validation import (
+    build_strategy_validation_context,
+    format_structured_context_section,
+    validation_response_instructions,
+)
 
-DEFAULT_ASK = """Using ONLY the snapshot above:
+
+DEFAULT_ASK = """Using ONLY the snapshot above (especially section 9 backend JSON):
 1) Summarize the situation in 5 bullets.
 2) Rank risks (capital, structure, timing).
 3) Give 3 manual next actions (no auto-trade language).
 4) What would invalidate the current bias?
-5) What data is missing for a better call?"""
+5) What data is missing for a better call?
+6) State whether you ALIGNED, CAUTION, or DISAGREE with backend signals — use the required JSON footer."""
 
 
 def _f(v: Any, digits: int = 2) -> str:
@@ -196,9 +203,24 @@ def build_ai_brief_markdown(status: dict[str, Any], *, extra_question: str | Non
     ask = (extra_question or "").strip() or DEFAULT_ASK
     lines.append(ask)
     lines.append("")
+
+    structured_ctx = build_strategy_validation_context(status)
+    lines.append(format_structured_context_section(structured_ctx))
+    lines.append(validation_response_instructions())
+    lines.append("")
     lines.append("---")
     lines.append("Reminder: advisory decision-support only. Not financial advice. No automatic orders.")
-    return "\n".join(lines)
+    md = "\n".join(lines)
+    return md
+
+
+def build_ai_brief_payload(status: dict[str, Any], *, extra_question: str | None = None) -> dict[str, Any]:
+    """Markdown brief plus structured validation context for API consumers."""
+    structured_context = build_strategy_validation_context(status)
+    return {
+        "markdown": build_ai_brief_markdown(status, extra_question=extra_question),
+        "structured_context": structured_context,
+    }
 
 
 SYSTEM_PROMPT = (
@@ -209,5 +231,10 @@ SYSTEM_PROMPT = (
     "(3) If risk is CRITICAL or add/new is blocked, emphasize capital protection and no averaging down. "
     "(4) Prefer clear bullets and numbered actions. "
     "(5) Call out missing data explicitly. "
-    "(6) End with: Advisory only — not an order to trade."
+    "(6) Section 9 backend strategy JSON is AUTHORITATIVE — never override confidence scores, "
+    "setup states, or deterministic signals. Explain them; do not replace them. "
+    "(7) If your contextual view differs from backend signals, set ai_assessment to CAUTION or DISAGREE "
+    "with a clear assessment_reason in the required JSON footer. "
+    "(8) End with the required JSON validation footer. "
+    "(9) End narrative with: Advisory only — not an order to trade."
 )

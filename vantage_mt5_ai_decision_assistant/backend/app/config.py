@@ -67,6 +67,23 @@ class Settings(BaseSettings):
     # Comma-separated BoxEvent names; empty = BUY_CONFIRMED,SELL_CONFIRMED,BULL_TRAP,BEAR_TRAP
     discord_box_alert_events: str = ""
 
+    # ICT Strategy — dedicated Discord webhook (state-change alerts only)
+    discord_ict_webhook_url: str | None = None
+    discord_ict_alerts_enabled: bool = False
+    discord_ict_min_confidence: float = 75.0
+    discord_ict_cooldown_sec: int = 300
+    # Comma-separated setup states; empty = LIQUIDITY_SWEPT,MSS_CONFIRMED,ENTRY_ZONE_ACTIVE,TRIGGERED,INVALIDATED,TARGET_REACHED
+    discord_ict_alert_events: str = ""
+
+    # Multi-strategy confluence engine (master verdict enhancement)
+    confluence_enabled: bool = False
+    confluence_freshness_threshold_sec: float = 900.0
+    confluence_stale_weight_factor: float = 0.5
+    confluence_min_agreeing_strong: int = 2
+    confluence_min_confidence_strong: float = 78.0
+    confluence_min_confidence_setup: float = 62.0
+    confluence_conflict_penalty: float = 18.0
+
 
 @lru_cache
 def get_settings() -> Settings:

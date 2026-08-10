@@ -125,14 +125,15 @@ def select_monitor_symbol(req: SelectSymbolRequest) -> dict:
 @router.get("/api/v1/monitor/ai-brief")
 def get_ai_brief(extra_question: str = Query(default="")) -> dict:
     """Markdown snapshot for Copy / paste into ChatGPT."""
-    from app.analysis.ai_brief import build_ai_brief_markdown
+    from app.analysis.ai_brief import build_ai_brief_payload
 
     status = monitor_store.status()
-    md = build_ai_brief_markdown(status, extra_question=extra_question or None)
+    brief = build_ai_brief_payload(status, extra_question=extra_question or None)
     return {
         "status": "ok",
         "symbol": status.get("selected_symbol") or "",
-        "markdown": md,
+        "markdown": brief["markdown"],
+        "structured_context": brief["structured_context"],
         "llm": _llm_public(),
     }
 
@@ -140,7 +141,7 @@ def get_ai_brief(extra_question: str = Query(default="")) -> dict:
 @router.post("/api/v1/monitor/ai-analyze")
 def ai_analyze(req: AiAnalyzeRequest) -> dict:
     """Server-side OpenAI analysis of the current monitor snapshot."""
-    from app.analysis.ai_brief import build_ai_brief_markdown
+    from app.analysis.ai_brief import build_ai_brief_payload
     from app.analysis.openai_client import analyze_with_openai, llm_status
 
     settings = get_settings()
@@ -153,7 +154,9 @@ def ai_analyze(req: AiAnalyzeRequest) -> dict:
 
     status = monitor_store.status()
     symbol = status.get("selected_symbol") or ""
-    snapshot = build_ai_brief_markdown(status, extra_question=req.extra_question or None)
+    brief = build_ai_brief_payload(status, extra_question=req.extra_question or None)
+    snapshot = brief["markdown"]
+    structured_context = brief["structured_context"]
     try:
         result = analyze_with_openai(
             snapshot,
@@ -161,6 +164,7 @@ def ai_analyze(req: AiAnalyzeRequest) -> dict:
             extra_question=req.extra_question or "",
             settings=settings,
             bypass_cache=req.bypass_cache,
+            structured_context=structured_context,
         )
     except RuntimeError as exc:
         monitor_store.add_log("ERROR", "llm", str(exc))
@@ -655,6 +659,202 @@ def box_strategy_history(symbol: str, limit: int = Query(default=20, ge=1, le=10
     sym = symbol.strip().upper()
     items = list_box_history(sym, limit=limit)
     return {"success": True, "symbol": sym, "count": len(items), "items": items}
+
+
+@router.get("/api/v1/ict/status")
+def ict_status() -> dict:
+    """ICT Strategy — EA-computed or backend-analyzed advisory blob (Gold-only)."""
+    from app.analysis.ict.history import list_ict_history
+    from app.analysis.ict.state_store import get_active_setup, record_to_dict
+
+    st = monitor_store.status()
+    ea = st.get("vantage_ea") or {}
+    link = st.get("link_health") or {}
+    selected = str(st.get("selected_symbol") or ea.get("symbol") or "").upper()
+    blob = ea.get("ict") if isinstance(ea.get("ict"), dict) else None
+    backend_active = False
+
+    if not blob and selected:
+        active = get_active_setup(selected, "M15")
+        if active:
+            backend_active = True
+            hist = list_ict_history(selected, limit=1)
+            blob = hist[0] if hist else None
+            if not blob:
+                blob = {
+                    "strategy": "ICT",
+                    "setup_record": record_to_dict(active),
+                    "status": active.state.value,
+                }
+
+    return {
+        "advisory_only": True,
+        "caption": "Advisory only — never places, modifies, or cancels MT5 orders. Gold / XAUUSD only.",
+        "ea_online": bool(link.get("ea_online") or ea.get("connected")),
+        "ict_supported": bool(ea.get("ict_supported")) or backend_active,
+        "backend_engine_available": True,
+        "selected_symbol": selected,
+        "symbol": str(ea.get("symbol") or selected).upper(),
+        "available_symbols": list(st.get("available_symbols") or []),
+        "symbols": list(st.get("symbols") or []),
+        "digits": int(ea.get("digits") or 5) or 5,
+        "bid": ea.get("bid"),
+        "ask": ea.get("ask"),
+        "modules_detected": {
+            "amd_ifvg": bool(ea.get("amd_ifvg_supported")),
+            "box_theory": bool(ea.get("box_theory_supported")),
+            "liquidity_grab": bool(ea.get("liquidity_grab_supported")),
+            "swing_strategy": bool(ea.get("swing_strategy_supported")),
+            "ict": bool(ea.get("ict_supported")),
+        },
+        "ict": blob,
+        "links": {
+            "ict": "/ict",
+            "box_theory": "/box-theory",
+            "amd_ifvg": "/amd-ifvg",
+            "gold_smc": "/gold-smc",
+            "liquidity_grab": "/liquidity-grab",
+            "swing_strategy": "/swing-strategy",
+            "pullback": "/pullback",
+            "analyzer": "/analyzer",
+            "monitor": "/monitor",
+        },
+    }
+
+
+def _ict_candles_from_request(candles_raw: dict) -> tuple[dict, list, list]:
+    """Parse multi-TF candle payload → (by_timeframe, setup, execution)."""
+    from app.analysis.ict import candles_from_payload
+
+    by_tf: dict = {}
+    for key, rows in candles_raw.items():
+        if isinstance(rows, list):
+            by_tf[str(key).upper()] = candles_from_payload(rows)
+
+    setup = (
+        by_tf.get("M15")
+        or by_tf.get("SETUP")
+        or by_tf.get("H1")
+        or next(iter(by_tf.values()), [])
+    )
+    execution = by_tf.get("M5") or by_tf.get("ENTRY") or setup
+    return by_tf, setup, execution
+
+
+@router.post("/api/v1/ict/analyze")
+@router.post("/api/v1/strategy/ict/analyze")
+def ict_analyze(body: dict) -> dict:
+    """Offline ICT analysis from supplied closed candles (no look-ahead)."""
+    from app.analysis.ict import analyze_ict_strategy
+    from app.analysis.ict.types import IctConfig
+
+    payload = body or {}
+    symbol = str(payload.get("symbol") or payload.get("broker_symbol") or "XAUUSD").upper()
+    timeframe = str(payload.get("timeframe") or "M15").upper()
+    candles_raw = payload.get("candles") if isinstance(payload.get("candles"), dict) else {}
+    market = payload.get("market") if isinstance(payload.get("market"), dict) else {}
+    cfg_raw = payload.get("config") if isinstance(payload.get("config"), dict) else {}
+
+    by_tf, setup, execution = _ict_candles_from_request(candles_raw)
+    cfg_kwargs = {k: v for k, v in cfg_raw.items() if hasattr(IctConfig, k)}
+    cfg = IctConfig(**cfg_kwargs)
+    if timeframe and timeframe != cfg.primary_setup_timeframe:
+        from dataclasses import replace
+
+        cfg = replace(cfg, primary_setup_timeframe=timeframe)
+
+    bid = float(market.get("bid") or 0)
+    spread = float(market.get("spread_points") or market.get("spread") or 0)
+
+    result = analyze_ict_strategy(
+        symbol=symbol,
+        candles_by_timeframe=by_tf or None,
+        candles_setup=setup,
+        candles_execution=execution,
+        bid=bid,
+        spread_points=spread,
+        cfg=cfg,
+    )
+    try:
+        from app.ict_discord_notify import maybe_ict_alert
+
+        maybe_ict_alert({"ict": result})
+    except Exception:
+        pass
+    return result
+
+
+@router.get("/api/v1/strategies/ict/{symbol}")
+def ict_strategy_summary(symbol: str) -> dict:
+    """Compact ICT status for a symbol."""
+    from app.analysis.ict.history import list_ict_history
+
+    sym = symbol.strip().upper()
+    st = monitor_store.status()
+    ea = st.get("vantage_ea") or {}
+    blob = ea.get("ict") if isinstance(ea.get("ict"), dict) else {}
+    if str(blob.get("symbol") or "").upper() not in ("", sym):
+        blob = {}
+    if not blob:
+        hist = list_ict_history(sym, limit=1)
+        blob = hist[0] if hist else {}
+    return {
+        "success": True,
+        "strategy": "ICT",
+        "symbol": sym,
+        "status": blob.get("status") or blob.get("setup_state") or "WAITING_FOR_LIQUIDITY",
+        "decision": blob.get("decision") or "WAIT",
+        "confidence": blob.get("confidence_score") or blob.get("confidence") or 0,
+        "setup_id": blob.get("setup_id") or "",
+        "advisory_only": True,
+    }
+
+
+@router.get("/api/v1/strategies/ict/{symbol}/history")
+def ict_strategy_history(symbol: str, limit: int = Query(default=20, ge=1, le=100)) -> dict:
+    """Historical ICT snapshots recorded on this backend instance."""
+    from app.analysis.ict.history import list_ict_history
+
+    sym = symbol.strip().upper()
+    items = list_ict_history(sym, limit=limit)
+    return {"success": True, "symbol": sym, "count": len(items), "items": items}
+
+
+@router.post("/api/v1/confluence/analyze")
+def confluence_analyze(body: dict) -> dict:
+    """Multi-strategy confluence from a heartbeat-like EA payload."""
+    from app.analysis.confluence import compute_confluence_from_ea, confluence_config_from_settings
+
+    payload = body or {}
+    ea = payload.get("ea") if isinstance(payload.get("ea"), dict) else payload
+    ea = dict(ea)
+    ea.setdefault("connected", True)
+    cfg = confluence_config_from_settings()
+    cfg.enabled = True
+    out = compute_confluence_from_ea(ea, cfg)
+    out["advisory_only"] = True
+    return out
+
+
+@router.get("/api/v1/confluence/status")
+def confluence_status() -> dict:
+    """Live confluence from current monitor store + master verdict."""
+    from app.analysis.confluence import compute_confluence_from_ea, confluence_config_from_settings
+    from app.analysis.master_verdict import build_master_verdict
+
+    st = monitor_store.status()
+    ea = dict(st.get("vantage_ea") or {})
+    link = st.get("link_health") or {}
+    ea["connected"] = bool(link.get("ea_online") or ea.get("connected"))
+    cfg = confluence_config_from_settings()
+    conf = compute_confluence_from_ea(ea, cfg)
+    mv = build_master_verdict(ea)
+    return {
+        "advisory_only": True,
+        "confluence_enabled": cfg.enabled,
+        "confluence": conf,
+        "master_verdict": mv,
+    }
 
 
 @router.get("/api/v1/signals")

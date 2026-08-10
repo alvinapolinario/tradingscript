@@ -146,6 +146,8 @@ class EaSnapshot:
     amd_ifvg_supported: bool = False
     box_theory: dict | None = None
     box_theory_supported: bool = False
+    ict: dict | None = None
+    ict_supported: bool = False
     max_position_risk_pct: float | None = None
 
 
@@ -282,6 +284,9 @@ def _apply_heartbeat_fields(ea: EaSnapshot, payload: dict[str, Any]) -> None:
     if isinstance(payload.get("box_theory"), dict):
         ea.box_theory = payload["box_theory"]
         ea.box_theory_supported = True
+    if isinstance(payload.get("ict"), dict):
+        ea.ict = payload["ict"]
+        ea.ict_supported = True
 
 
 class MonitorStore:
@@ -619,6 +624,8 @@ class MonitorStore:
             "amd_ifvg_supported": ea.amd_ifvg_supported,
             "box_theory": ea.box_theory,
             "box_theory_supported": ea.box_theory_supported,
+            "ict": ea.ict,
+            "ict_supported": ea.ict_supported,
             "server_year": ea.server_year,
             "server_month": ea.server_month,
             "calendar_request": calendar_request,

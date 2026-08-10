@@ -47,6 +47,7 @@
 #include <VantageAI/VantageSwingStrategy.mqh>
 #include <VantageAI/VantageAmdIfvg.mqh>
 #include <VantageAI/VantageBoxTheory.mqh>
+#include <VantageAI/VantageIct.mqh>
 
 //--- Explicit compile-time advisory guard (do not import Trade.mqh / CTrade)
 #ifdef __MQL5__
@@ -534,6 +535,31 @@ input bool   InpBoxTheoryShowDash   = true;
 input bool   InpBoxTheoryChartObj   = true;
 input bool   InpBoxTheoryDebug      = false;
 
+input group "AX. ICT Strategy — Core"
+input bool   InpIctEnable           = true;
+input bool   InpIctGoldOnly         = true;
+input string InpIctAliases          = "XAUUSD,GOLD";
+
+input group "AY. ICT Strategy — Timeframes"
+input ENUM_TIMEFRAMES InpIctTF_H1   = PERIOD_H1;
+input ENUM_TIMEFRAMES InpIctTF_M15 = PERIOD_M15;
+input ENUM_TIMEFRAMES InpIctTF_M5  = PERIOD_M5;
+
+input group "AZ. ICT Strategy — Detection / HUD"
+input int    InpIctLookbackBars     = 60;
+input int    InpIctPivotLeft        = 2;
+input int    InpIctPivotRight       = 2;
+input double InpIctSweepMinAtr      = 0.05;
+input double InpIctSweepMaxAtr      = 1.0;
+input double InpIctDispBodyAtr      = 0.6;
+input double InpIctFvgMinGapAtr      = 0.05;
+input double InpIctMinConfidence    = 70.0;
+input double InpIctMinRR            = 2.0;
+input double InpIctMaxSpreadPts     = 80.0;
+input bool   InpIctShowDash         = true;
+input bool   InpIctChartObj         = false;
+input bool   InpIctDebug            = false;
+
 //+------------------------------------------------------------------+
 //| Globals                                                          |
 //+------------------------------------------------------------------+
@@ -561,6 +587,8 @@ CVantageAmdIfvg g_amdifvg;
 VantageAmdIfvgResult g_amdifvgsnap;
 CVantageBoxTheory g_boxtheory;
 VantageBoxTheoryResult g_boxtheorysnap;
+CVantageIct g_ict;
+VantageIctResult g_ictsnap;
 
 datetime g_last_closed_candle = 0;
 datetime g_last_request_candle = 0;
@@ -1077,6 +1105,8 @@ string BuildHeartbeatPayload(void)
       j += ",\"amd_ifvg\":" + g_amdifvg.ToJson(g_amdifvgsnap);
    if(InpBoxTheoryEnable)
       j += ",\"box_theory\":" + g_boxtheory.ToJson(g_boxtheorysnap);
+   if(InpIctEnable)
+      j += ",\"ict\":" + g_ict.ToJson(g_ictsnap);
    j += "}";
    return j;
   }
@@ -1547,6 +1577,55 @@ void MaybeEvalBoxTheory(const bool force)
      }
   }
 
+void FillIctConfig(VantageIctConfig &cfg)
+  {
+   ZeroMemory(cfg);
+   cfg.enable = InpIctEnable;
+   cfg.gold_only = InpIctGoldOnly;
+   cfg.gold_aliases = InpIctAliases;
+   cfg.allow_suffix = true;
+   cfg.allow_prefix = true;
+   cfg.tf_bias = InpIctTF_H1;
+   cfg.tf_setup = InpIctTF_M15;
+   cfg.tf_entry = InpIctTF_M5;
+   cfg.lookback_bars = InpIctLookbackBars;
+   cfg.pivot_left = InpIctPivotLeft;
+   cfg.pivot_right = InpIctPivotRight;
+   cfg.sweep_min_atr = InpIctSweepMinAtr;
+   cfg.sweep_max_atr = InpIctSweepMaxAtr;
+   cfg.disp_min_body_atr = InpIctDispBodyAtr;
+   cfg.fvg_min_gap_atr = InpIctFvgMinGapAtr;
+   cfg.min_confidence = InpIctMinConfidence;
+   cfg.minimum_rr = InpIctMinRR;
+   cfg.max_spread_pts = InpIctMaxSpreadPts;
+   cfg.show_chart_objects = InpIctChartObj && WantModuleChart();
+   cfg.show_dashboard = InpIctShowDash && WantModuleDashboard();
+   cfg.debug_log = InpIctDebug;
+  }
+
+void MaybeEvalIct(const bool force)
+  {
+   if(!InpIctEnable)
+      return;
+   VantageIctResult r;
+   if(g_ict.Evaluate(force, r))
+      g_ictsnap = r;
+   else if(!g_ictsnap.valid)
+     {
+      ZeroMemory(g_ictsnap);
+      g_ictsnap.valid = true;
+      g_ictsnap.engine_enabled = true;
+      g_ictsnap.analysis_active = false;
+      g_ictsnap.gold_symbol_valid = true;
+      g_ictsnap.symbol = _Symbol;
+      g_ictsnap.strategy = "ICT";
+      g_ictsnap.decision = "NO_TRADE";
+      g_ictsnap.setup_state = "WAITING_FOR_LIQUIDITY";
+      g_ictsnap.reasons = "ICT initializing — waiting for closed bars";
+      g_ictsnap.action_guidance = "Advisory only — confirm on closed candles.";
+     }
+  }
+
 void RefreshPlCalendar(const bool force)
   {
    // Rebuild when forced, when minute elapsed, or when requested month differs from loaded
@@ -1606,6 +1685,7 @@ void MaybeSendHeartbeat(void)
    MaybeEvalSwingStrategy(false);
    MaybeEvalAmdIfvg(false);
    MaybeEvalBoxTheory(false);
+   MaybeEvalIct(false);
 
    static int s_last_pending_logged = -1;
    if(g_pending.count != s_last_pending_logged)
@@ -1819,6 +1899,7 @@ void ProcessReplayBar(const datetime closed_time)
    MaybeEvalSwingStrategy(false);
    MaybeEvalAmdIfvg(false);
    MaybeEvalBoxTheory(false);
+   MaybeEvalIct(false);
 
    g_last_action = g_dec.primary_action;
    g_last_request_candle = closed_time;
@@ -1955,6 +2036,7 @@ void RefreshDashboard(void)
    MaybeEvalSwingStrategy(false);
    MaybeEvalAmdIfvg(false);
    MaybeEvalBoxTheory(false);
+   MaybeEvalIct(false);
    const bool show_gsm = WantModuleDashboard() && InpGoldSmcShowDash &&
                          (InpGoldSmcEnable || InpGoldSmcShowWarn) &&
                          g_gsmsnap.valid;
@@ -2111,6 +2193,19 @@ int OnInit()
         }
      }
 
+   if(InpIctEnable)
+     {
+      VantageIctConfig icfg;
+      FillIctConfig(icfg);
+      if(!g_ict.Init(_Symbol, icfg))
+         Print("[VantageAI] ICT Strategy init failed.");
+      else
+        {
+         MaybeEvalIct(true);
+         Print("[VantageAI] ICT Strategy enabled — heartbeat key ict active.");
+        }
+     }
+
    // Build chart-relative levels for BTC/etc. (AUTO) or gold manual map
    if(g_analysis.HasEnoughHistory(50))
       g_analysis.BuildSnapshot(g_tech);
@@ -2188,6 +2283,7 @@ void OnDeinit(const int reason)
    g_swingstrat.Release();
    g_amdifvg.Release();
    g_boxtheory.Release();
+   g_ict.Release();
    ClearAllChartVisuals();
    Print("[VantageAI] Stopped. reason=", reason);
   }

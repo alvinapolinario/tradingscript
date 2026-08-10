@@ -4,6 +4,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from enum import Enum
 
+from app.market_structure.types import Candle
+
 
 class BoxStatus(str, Enum):
     FORMING = "FORMING"
@@ -49,16 +51,6 @@ class BoxEvent(str, Enum):
     BULL_TRAP = "BULL_TRAP"
     BEAR_TRAP = "BEAR_TRAP"
     BOX_INVALIDATED = "BOX_INVALIDATED"
-
-
-@dataclass
-class Candle:
-    time: int
-    open: float
-    high: float
-    low: float
-    close: float
-    volume: float = 0.0
 
 
 @dataclass

@@ -56,6 +56,7 @@ def analyze_with_openai(
     extra_question: str = "",
     settings: Settings | None = None,
     bypass_cache: bool = False,
+    structured_context: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     s = settings or get_settings()
     status = llm_status(s)
@@ -103,6 +104,12 @@ def analyze_with_openai(
         raise RuntimeError("OpenAI response missing message content") from exc
 
     usage = data.get("usage") or {}
+    validation: dict[str, Any] | None = None
+    if structured_context:
+        from app.analysis.ai_validation import validate_ai_response
+
+        validation = validate_ai_response(structured_context, text.strip())
+
     payload = {
         "status": "ok",
         "model": data.get("model") or s.openai_model,
@@ -115,5 +122,9 @@ def analyze_with_openai(
             "total_tokens": usage.get("total_tokens"),
         },
     }
+    if structured_context is not None:
+        payload["structured_context"] = structured_context
+    if validation is not None:
+        payload["ai_validation"] = validation
     _cache[ck] = (now + _CACHE_TTL_SEC, payload)
     return payload
