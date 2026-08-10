@@ -190,6 +190,15 @@ def amd_ifvg_page():
     return FileResponse(page)
 
 
+@app.get("/box-theory")
+def box_theory_page():
+    """Box Theory Strategy desk — advisory only, XAUUSD/Gold."""
+    page = STATIC_DIR / "box-theory.html"
+    if not page.exists():
+        return {"error": "box-theory.html missing", "path": str(page)}
+    return FileResponse(page)
+
+
 @app.get("/execution")
 def execution_page():
     """Demo execution journal — VantageSwingExecutor fills (demo only)."""

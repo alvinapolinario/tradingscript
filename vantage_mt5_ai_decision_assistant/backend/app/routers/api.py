@@ -550,6 +550,104 @@ def amd_ifvg_analyze(body: dict) -> dict:
     )
 
 
+@router.get("/api/v1/box-theory/status")
+def box_theory_status() -> dict:
+    """Box Theory Strategy — EA-computed or backend-analyzed advisory blob (Gold-only)."""
+    st = monitor_store.status()
+    ea = st.get("vantage_ea") or {}
+    link = st.get("link_health") or {}
+    blob = ea.get("box_theory")
+    selected = str(st.get("selected_symbol") or ea.get("symbol") or "").upper()
+    return {
+        "advisory_only": True,
+        "caption": "Advisory only — never places, modifies, or cancels MT5 orders. Gold / XAUUSD only.",
+        "ea_online": bool(link.get("ea_online") or ea.get("connected")),
+        "box_theory_supported": bool(ea.get("box_theory_supported")),
+        "selected_symbol": selected,
+        "symbol": str(ea.get("symbol") or selected).upper(),
+        "available_symbols": list(st.get("available_symbols") or []),
+        "box_theory": blob,
+        "links": {
+            "box_theory": "/box-theory",
+            "amd_ifvg": "/amd-ifvg",
+            "liquidity_grab": "/liquidity-grab",
+            "gold_smc": "/gold-smc",
+            "swing_strategy": "/swing-strategy",
+            "pullback": "/pullback",
+            "analyzer": "/analyzer",
+            "monitor": "/monitor",
+        },
+    }
+
+
+@router.post("/api/v1/box-theory/analyze")
+def box_theory_analyze(body: dict) -> dict:
+    """Offline Box Theory analysis from supplied closed candles (no look-ahead)."""
+    from app.analysis.box_theory import analyze_box_strategy, candles_from_payload
+    from app.analysis.box_theory.history import record_box_result
+    from app.analysis.box_theory.types import BoxStrategyConfig
+    from app.box_discord_notify import maybe_box_theory_alert
+
+    payload = body or {}
+    symbol = str(payload.get("symbol") or payload.get("broker_symbol") or "XAUUSD").upper()
+    candles_raw = payload.get("candles") if isinstance(payload.get("candles"), dict) else {}
+    market = payload.get("market") if isinstance(payload.get("market"), dict) else {}
+    cfg_raw = payload.get("config") if isinstance(payload.get("config"), dict) else {}
+
+    box_rows = candles_raw.get("M15") or candles_raw.get("box") or []
+    entry_rows = candles_raw.get("M5") or candles_raw.get("entry") or box_rows
+    struct_rows = candles_raw.get("H1") or candles_raw.get("structure") or box_rows
+
+    candles_box = candles_from_payload(box_rows if isinstance(box_rows, list) else [])
+    candles_entry = candles_from_payload(entry_rows if isinstance(entry_rows, list) else [])
+    candles_structure = candles_from_payload(struct_rows if isinstance(struct_rows, list) else [])
+
+    cfg = BoxStrategyConfig(**{k: v for k, v in cfg_raw.items() if hasattr(BoxStrategyConfig, k)})
+    bid = float(market.get("bid") or 0)
+
+    result = analyze_box_strategy(
+        symbol=symbol,
+        candles_box=candles_box,
+        candles_entry=candles_entry,
+        candles_structure=candles_structure,
+        bid=bid,
+        cfg=cfg,
+    )
+    record_box_result(symbol, result)
+    maybe_box_theory_alert({"box_theory": result})
+    return result
+
+
+@router.get("/api/v1/strategies/box/{symbol}")
+def box_strategy_summary(symbol: str) -> dict:
+    """Compact Box Theory status for a symbol."""
+    sym = symbol.strip().upper()
+    st = monitor_store.status()
+    ea = st.get("vantage_ea") or {}
+    blob = ea.get("box_theory") if isinstance(ea.get("box_theory"), dict) else {}
+    if str(blob.get("symbol") or "").upper() not in ("", sym):
+        blob = {}
+    return {
+        "success": True,
+        "strategy": "BOX_THEORY",
+        "symbol": sym,
+        "box_status": blob.get("box_status") or blob.get("status") or "FORMING",
+        "signal": blob.get("signal") or "WAIT",
+        "confidence": blob.get("confidence_score") or blob.get("confidence") or 0,
+        "advisory_only": True,
+    }
+
+
+@router.get("/api/v1/strategies/box/{symbol}/history")
+def box_strategy_history(symbol: str, limit: int = Query(default=20, ge=1, le=100)) -> dict:
+    """Historical Box Theory snapshots recorded on this backend instance."""
+    from app.analysis.box_theory.history import list_box_history
+
+    sym = symbol.strip().upper()
+    items = list_box_history(sym, limit=limit)
+    return {"success": True, "symbol": sym, "count": len(items), "items": items}
+
+
 @router.get("/api/v1/signals")
 def list_accepted_signals(
     limit: int = Query(default=50, ge=1, le=200),

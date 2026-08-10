@@ -57,8 +57,15 @@ class Settings(BaseSettings):
     telegram_alert_liquidity_grab: bool = True
     telegram_alert_gold_smc: bool = True
     telegram_alert_amd_ifvg: bool = True
+    telegram_alert_box_theory: bool = True
     telegram_alert_execution: bool = True
     telegram_gold_smc_min_score: float = 75.0
+
+    # Box Theory — dedicated Discord webhook (analysis only)
+    discord_box_webhook_url: str | None = None
+    discord_box_alerts_enabled: bool = False
+    # Comma-separated BoxEvent names; empty = BUY_CONFIRMED,SELL_CONFIRMED,BULL_TRAP,BEAR_TRAP
+    discord_box_alert_events: str = ""
 
 
 @lru_cache

@@ -342,6 +342,12 @@ def process_heartbeat(payload: dict[str, Any], accepted: dict[str, Any] | None =
 
     _maybe_swing_trade_alert(payload, sym, st)
     _maybe_amd_ifvg_alert(payload, sym, st)
+    try:
+        from app.box_discord_notify import maybe_box_theory_alert
+
+        maybe_box_theory_alert(payload)
+    except Exception:
+        pass
 
     if not trades_only and st.telegram_alert_liquidity_grab:
         lg = payload.get("liquidity_grab")

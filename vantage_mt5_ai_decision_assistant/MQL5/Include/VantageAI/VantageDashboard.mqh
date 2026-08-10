@@ -15,6 +15,7 @@
 #include "VantageBreakoutStructure.mqh"
 #include "VantageMarketStateManager.mqh"
 #include "VantageSwingStrategy.mqh"
+#include "VantageBoxTheory.mqh"
 
 class CVantageDashboard
   {
@@ -85,7 +86,9 @@ public:
                const VantageMseResult &mse,
                const bool show_mse,
                const VantageSwingStratResult &swing,
-               const bool show_swing)
+               const bool show_swing,
+               const VantageBoxTheoryResult &box,
+               const bool show_box)
      {
       int r = 0;
       color riskCol = clrSilver;
@@ -319,6 +322,23 @@ public:
             SetLabel("tsw4", r++, "RR " + swing.risk_reward_label + " SL " + DoubleToString(swing.stop_loss, _Digits), clrSilver);
             SetLabel("tsw5", r++, "SMC " + DoubleToString(swing.smc_score, 0) + " Mom " + DoubleToString(swing.momentum_score, 0), clrGold);
             SetLabel("tsw6", r++, StringSubstr(swing.reason, 0, 96), clrAqua);
+           }
+        }
+
+      if(show_box)
+        {
+         SetLabel("tbx0", r++, "--- BOX THEORY (advisory) ---", clrAqua);
+         if(!box.gold_symbol_valid && box.disable_reason != "")
+            SetLabel("tbx1", r++, StringSubstr(box.disable_reason, 0, 96), clrOrange);
+         else
+           {
+            SetLabel("tbx1", r++, box.signal + " | " + box.box_status + " | Conf " +
+                     DoubleToString(box.confidence_score, 0), clrYellow);
+            SetLabel("tbx2", r++, "Box " + DoubleToString(box.box_high, _Digits) + " / " +
+                     DoubleToString(box.box_mid, _Digits) + " / " + DoubleToString(box.box_low, _Digits), clrWhite);
+            SetLabel("tbx3", r++, "HTF " + box.htf_bias + " | Sweep " + (box.sweep_detected ? "YES" : "NO") +
+                     " | FVG " + (box.fvg_confirmation ? "YES" : "NO"), clrSilver);
+            SetLabel("tbx4", r++, StringSubstr(box.action_guidance, 0, 96), clrGold);
            }
         }
 

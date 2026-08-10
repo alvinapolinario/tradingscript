@@ -46,6 +46,7 @@
 #include <VantageAI/VantageMarketStateManager.mqh>
 #include <VantageAI/VantageSwingStrategy.mqh>
 #include <VantageAI/VantageAmdIfvg.mqh>
+#include <VantageAI/VantageBoxTheory.mqh>
 
 //--- Explicit compile-time advisory guard (do not import Trade.mqh / CTrade)
 #ifdef __MQL5__
@@ -490,6 +491,49 @@ input bool   InpAmdIfvgShowDash   = true;
 input bool   InpAmdIfvgChartObj   = true;
 input bool   InpAmdIfvgDebug      = false;
 
+input group "AT. Box Theory — Core"
+input bool   InpBoxTheoryEnable     = true;
+input bool   InpBoxTheoryGoldOnly   = true;
+input string InpBoxTheoryAliases    = "XAUUSD,GOLD";
+
+input group "AU. Box Theory — Timeframes"
+input ENUM_TIMEFRAMES InpBoxTheoryTF_H1  = PERIOD_H1;
+input ENUM_TIMEFRAMES InpBoxTheoryTF_M15 = PERIOD_M15;
+input ENUM_TIMEFRAMES InpBoxTheoryTF_M5  = PERIOD_M5;
+
+input group "AV. Box Theory — Detection"
+input int    InpBoxLookbackBars      = 50;
+input int    InpBoxMinBars           = 8;
+input int    InpBoxMinTouches        = 2;
+input double InpBoxTouchTolAtr       = 0.15;
+input double InpBoxMaxHeightAtr      = 2.5;
+input double InpBoxMinHeightAtr      = 0.35;
+input double InpBoxMinInsideRatio    = 0.65;
+input double InpBoxBreakoutBufAtr    = 0.15;
+input double InpBoxMinBreakBody      = 0.45;
+input double InpBoxRetestTolAtr      = 0.25;
+input int    InpBoxMaxRetestBars     = 10;
+input int    InpBoxConfirmBars       = 1;
+input bool   InpBoxRequireRetest     = true;
+input string InpBoxEntryMode         = "BREAKOUT_RETEST_MODE";
+input int    InpBoxMaxAgeBars        = 80;
+input bool   InpBoxLiqSweep          = true;
+input bool   InpBoxFvgConfirm        = true;
+input bool   InpBoxHtfConfirm        = true;
+input double InpBoxMinScore          = 70.0;
+input bool   InpBoxBlockCounter      = false;
+input string InpBoxSlMode            = "RETEST_SWING";
+input double InpBoxSlBufferAtr       = 0.15;
+input double InpBoxTpMult1           = 1.0;
+input double InpBoxTpMult2           = 1.5;
+input double InpBoxTpMult3           = 2.0;
+input double InpBoxMaxSpreadPts      = 80.0;
+
+input group "AW. Box Theory — HUD / Chart"
+input bool   InpBoxTheoryShowDash   = true;
+input bool   InpBoxTheoryChartObj   = true;
+input bool   InpBoxTheoryDebug      = false;
+
 //+------------------------------------------------------------------+
 //| Globals                                                          |
 //+------------------------------------------------------------------+
@@ -515,6 +559,8 @@ CVantageSwingStrategy g_swingstrat;
 VantageSwingStratResult g_swingsnap;
 CVantageAmdIfvg g_amdifvg;
 VantageAmdIfvgResult g_amdifvgsnap;
+CVantageBoxTheory g_boxtheory;
+VantageBoxTheoryResult g_boxtheorysnap;
 
 datetime g_last_closed_candle = 0;
 datetime g_last_request_candle = 0;
@@ -1029,6 +1075,8 @@ string BuildHeartbeatPayload(void)
       j += ",\"swing_strategy\":" + g_swingstrat.ToJson(g_swingsnap);
    if(g_amdifvgsnap.valid)
       j += ",\"amd_ifvg\":" + g_amdifvg.ToJson(g_amdifvgsnap);
+   if(g_boxtheorysnap.valid)
+      j += ",\"box_theory\":" + g_boxtheory.ToJson(g_boxtheorysnap);
    j += "}";
    return j;
   }
@@ -1433,6 +1481,58 @@ void MaybeEvalAmdIfvg(const bool force)
       g_amdifvgsnap = r;
   }
 
+void FillBoxTheoryConfig(VantageBoxTheoryConfig &cfg)
+  {
+   ZeroMemory(cfg);
+   cfg.enable = InpBoxTheoryEnable;
+   cfg.gold_only = InpBoxTheoryGoldOnly;
+   cfg.gold_aliases = InpBoxTheoryAliases;
+   cfg.allow_suffix = true;
+   cfg.allow_prefix = true;
+   cfg.tf_structure = InpBoxTheoryTF_H1;
+   cfg.tf_box = InpBoxTheoryTF_M15;
+   cfg.tf_entry = InpBoxTheoryTF_M5;
+   cfg.lookback_candles = InpBoxLookbackBars;
+   cfg.min_box_candles = InpBoxMinBars;
+   cfg.min_touches = InpBoxMinTouches;
+   cfg.touch_tolerance_atr = InpBoxTouchTolAtr;
+   cfg.max_box_height_atr = InpBoxMaxHeightAtr;
+   cfg.min_box_height_atr = InpBoxMinHeightAtr;
+   cfg.min_inside_ratio = InpBoxMinInsideRatio;
+   cfg.breakout_buffer_atr = InpBoxBreakoutBufAtr;
+   cfg.min_breakout_body_ratio = InpBoxMinBreakBody;
+   cfg.retest_tolerance_atr = InpBoxRetestTolAtr;
+   cfg.max_retest_candles = InpBoxMaxRetestBars;
+   cfg.confirmation_candles = InpBoxConfirmBars;
+   cfg.require_retest = InpBoxRequireRetest;
+   cfg.entry_mode = InpBoxEntryMode;
+   cfg.max_box_age_candles = InpBoxMaxAgeBars;
+   cfg.liquidity_sweep_detection = InpBoxLiqSweep;
+   cfg.fvg_confirmation = InpBoxFvgConfirm;
+   cfg.htf_confirmation = InpBoxHtfConfirm;
+   cfg.minimum_signal_score = InpBoxMinScore;
+   cfg.block_countertrend = InpBoxBlockCounter;
+   cfg.countertrend_penalty = 15.0;
+   cfg.sl_mode = InpBoxSlMode;
+   cfg.sl_buffer_atr = InpBoxSlBufferAtr;
+   cfg.tp_mult1 = InpBoxTpMult1;
+   cfg.tp_mult2 = InpBoxTpMult2;
+   cfg.tp_mult3 = InpBoxTpMult3;
+   cfg.max_spread_pts = InpBoxMaxSpreadPts;
+   cfg.show_chart_objects = InpBoxTheoryChartObj && WantModuleChart();
+   cfg.show_dashboard = InpBoxTheoryShowDash && WantModuleDashboard();
+   cfg.debug_log = InpBoxTheoryDebug;
+  }
+
+void MaybeEvalBoxTheory(const bool force)
+  {
+   if(!InpBoxTheoryEnable)
+      return;
+   VantageBoxTheoryResult r;
+   if(g_boxtheory.Evaluate(force, r))
+      g_boxtheorysnap = r;
+  }
+
 void RefreshPlCalendar(const bool force)
   {
    // Rebuild when forced, when minute elapsed, or when requested month differs from loaded
@@ -1491,6 +1591,7 @@ void MaybeSendHeartbeat(void)
    MaybeEvalMarketState(false);
    MaybeEvalSwingStrategy(false);
    MaybeEvalAmdIfvg(false);
+   MaybeEvalBoxTheory(false);
 
    static int s_last_pending_logged = -1;
    if(g_pending.count != s_last_pending_logged)
@@ -1703,6 +1804,7 @@ void ProcessReplayBar(const datetime closed_time)
    MaybeEvalMarketState(false);
    MaybeEvalSwingStrategy(false);
    MaybeEvalAmdIfvg(false);
+   MaybeEvalBoxTheory(false);
 
    g_last_action = g_dec.primary_action;
    g_last_request_candle = closed_time;
@@ -1838,6 +1940,7 @@ void RefreshDashboard(void)
    MaybeEvalMarketState(false);
    MaybeEvalSwingStrategy(false);
    MaybeEvalAmdIfvg(false);
+   MaybeEvalBoxTheory(false);
    const bool show_gsm = WantModuleDashboard() && InpGoldSmcShowDash &&
                          (InpGoldSmcEnable || InpGoldSmcShowWarn) &&
                          g_gsmsnap.valid;
@@ -1845,6 +1948,7 @@ void RefreshDashboard(void)
    const bool show_bos = WantModuleDashboard() && InpBosShowDash && InpBosEnable && g_bossnap.valid;
    const bool show_mse = WantModuleDashboard() && InpMseShowDash && InpMseEnable && g_msesnap.valid;
    const bool show_swing = WantModuleDashboard() && InpSwingShowDash && InpSwingEnable && g_swingsnap.valid;
+   const bool show_box = WantModuleDashboard() && InpBoxTheoryShowDash && InpBoxTheoryEnable && g_boxtheorysnap.valid;
    g_dash.Render(g_acct, g_spec, g_px, g_backend_status, g_candle_status, g_dec,
                  g_pos, g_risk, ts, age,
                  g_equity, g_floating_pl_pct, InpFloatProfitTargetPct, g_float_profit_target_hit,
@@ -1854,7 +1958,8 @@ void RefreshDashboard(void)
                  g_liqgrabsnap, show_lg,
                  g_bossnap, show_bos,
                  g_msesnap, show_mse,
-                 g_swingsnap, show_swing);
+                 g_swingsnap, show_swing,
+                 g_boxtheorysnap, show_box);
   }
 
 //+------------------------------------------------------------------+
@@ -1979,6 +2084,16 @@ int OnInit()
          MaybeEvalAmdIfvg(true);
      }
 
+   if(InpBoxTheoryEnable)
+     {
+      VantageBoxTheoryConfig bcfg;
+      FillBoxTheoryConfig(bcfg);
+      if(!g_boxtheory.Init(_Symbol, bcfg))
+         Print("[VantageAI] Box Theory Strategy init failed.");
+      else
+         MaybeEvalBoxTheory(true);
+     }
+
    // Build chart-relative levels for BTC/etc. (AUTO) or gold manual map
    if(g_analysis.HasEnoughHistory(50))
       g_analysis.BuildSnapshot(g_tech);
@@ -2055,6 +2170,7 @@ void OnDeinit(const int reason)
    g_marketstate.Release();
    g_swingstrat.Release();
    g_amdifvg.Release();
+   g_boxtheory.Release();
    ClearAllChartVisuals();
    Print("[VantageAI] Stopped. reason=", reason);
   }

@@ -34,12 +34,13 @@ vantage_mt5_ai_decision_assistant/
 11. Market State Engine v2: **http://187.77.142.118:8000/market-state** (lifecycle intelligence + timeline — see [docs/MARKET_STATE.md](docs/MARKET_STATE.md))
 12. Swing Strategy Engine: **http://187.77.142.118:8000/swing-strategy** (multi-TF SMC swing validation — see [docs/SWING_STRATEGY.md](docs/SWING_STRATEGY.md))
 13. AMD + iFVG Strategy: **http://187.77.142.118:8000/amd-ifvg** (Accumulation/Manipulation/Distribution + inversion FVG — see [docs/AMD_IFVG.md](docs/AMD_IFVG.md))
-14. Demo Execution journal (optional): **http://187.77.142.118:8000/execution** — requires separate `VantageSwingExecutor` EA; see [../vantage_mt5_execution/docs/EXECUTION_SETUP.md](../vantage_mt5_execution/docs/EXECUTION_SETUP.md)
-15. **Telegram alerts:** configure `TELEGRAM_*` in backend `.env` — see [docs/VANTAGE_SETUP.md](docs/VANTAGE_SETUP.md) §10b
-16. **Discord alerts:** configure `DISCORD_*` webhook in backend `.env` — see [docs/VANTAGE_SETUP.md](docs/VANTAGE_SETUP.md) §10c
-17. Allow `http://187.77.142.118:8000` in MT5 WebRequest settings.
-18. EA `InpBackendUrl` = `http://187.77.142.118:8000` · `InpBearerToken` = backend `LOCAL_API_TOKEN`
-19. Compile and attach the EA to your chart.
+14. Box Theory Strategy: **http://187.77.142.118:8000/box-theory** (consolidation box → breakout → retest — see [docs/BOX_THEORY.md](docs/BOX_THEORY.md))
+15. Demo Execution journal (optional): **http://187.77.142.118:8000/execution** — requires separate `VantageSwingExecutor` EA; see [../vantage_mt5_execution/docs/EXECUTION_SETUP.md](../vantage_mt5_execution/docs/EXECUTION_SETUP.md)
+16. **Telegram alerts:** configure `TELEGRAM_*` in backend `.env` — see [docs/VANTAGE_SETUP.md](docs/VANTAGE_SETUP.md) §10b
+17. **Discord alerts:** configure `DISCORD_*` webhook in backend `.env` — see [docs/VANTAGE_SETUP.md](docs/VANTAGE_SETUP.md) §10c
+18. Allow `http://187.77.142.118:8000` in MT5 WebRequest settings.
+19. EA `InpBackendUrl` = `http://187.77.142.118:8000` · `InpBearerToken` = backend `LOCAL_API_TOKEN`
+20. Compile and attach the EA to your chart.
 
 The monitor shows API status, EA connection, dual decisions, risk, and a **Decision Brief** (analysis + recommendations).
 

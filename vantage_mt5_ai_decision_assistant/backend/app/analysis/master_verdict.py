@@ -57,6 +57,7 @@ def build_master_verdict(ea: dict[str, Any]) -> dict[str, Any]:
     bos = ea.get("breakout_structure") if isinstance(ea.get("breakout_structure"), dict) else {}
     mse = ea.get("market_state_engine") if isinstance(ea.get("market_state_engine"), dict) else {}
     amd = ea.get("amd_ifvg") if isinstance(ea.get("amd_ifvg"), dict) else {}
+    box = ea.get("box_theory") if isinstance(ea.get("box_theory"), dict) else {}
 
     # --- Module chips ---
     if swing.get("valid"):
@@ -93,6 +94,13 @@ def build_master_verdict(ea: dict[str, Any]) -> dict[str, Any]:
         st = str(amd.get("setup_state") or "—").replace("_", " ")[:24]
         tone = "ok" if dec in ("BUY", "SELL") and aconf >= 75 else ("warn" if dec == "WAIT" else "muted")
         modules.append(_module_chip("AMD+iFVG", dec, f"{aconf:.0f}% · {st}", tone))
+
+    if box.get("valid") or box.get("analysis_active"):
+        sig = str(box.get("signal") or "—")
+        bconf = _f(box.get("confidence_score") or box.get("confidence"))
+        bst = str(box.get("box_status") or "—").replace("_", " ")[:20]
+        tone = "ok" if sig in ("BUY", "SELL") and bconf >= 70 else ("warn" if sig == "WATCH" else "muted")
+        modules.append(_module_chip("Box", sig, f"{bconf:.0f}% · {bst}", tone))
 
     modules.append(
         _module_chip(
