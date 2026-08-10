@@ -118,3 +118,39 @@ def test_list_filter_symbol(tmp_ledger):
     xs = ledger.list_signals(symbol="XAUUSD")
     assert len(xs) == 1
     assert xs[0]["symbol"] == "XAUUSD"
+
+
+def test_clear_signals_all(tmp_ledger):
+    accepted = ledger.maybe_accept_from_monitor(_ok_status())
+    assert accepted is not None
+    assert ledger.clear_signals("all") == 1
+    assert ledger.list_signals() == []
+
+
+def test_clear_signals_decided_only(tmp_ledger):
+    accepted = ledger.maybe_accept_from_monitor(_ok_status())
+    assert accepted is not None
+    ledger.record_decision(accepted["id"], "TAKE")
+    st = _ok_status(symbol="EURUSD", side_bias="BULLISH")
+    pending2 = ledger.maybe_accept_from_monitor(st)
+    assert pending2 is not None
+    deleted = ledger.clear_signals("decided")
+    assert deleted == 1
+    items = ledger.list_signals()
+    assert len(items) == 1
+    assert items[0]["symbol"] == "EURUSD"
+    assert items[0]["user_decision"] == "PENDING"
+
+
+def test_clear_signals_pending_only(tmp_ledger):
+    accepted = ledger.maybe_accept_from_monitor(_ok_status())
+    assert accepted is not None
+    ledger.record_decision(accepted["id"], "IGNORE")
+    assert ledger.clear_signals("pending") == 0
+    assert len(ledger.list_signals()) == 1
+    assert ledger.clear_signals("all") == 1
+
+
+def test_clear_signals_invalid_scope(tmp_ledger):
+    with pytest.raises(ValueError, match="scope must be"):
+        ledger.clear_signals("bogus")

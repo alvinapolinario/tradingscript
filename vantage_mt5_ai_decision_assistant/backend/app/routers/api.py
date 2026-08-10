@@ -885,6 +885,35 @@ def analyzer_status(
     return build_analyzer_status(monitor_store.status(), mode=mode, timeframe=timeframe)
 
 
+@router.post("/api/v1/signals/clear")
+def clear_accepted_signals(body: dict | None = None) -> dict:
+    """Clear Signal Center history — advisory ledger only."""
+    from app.signal_ledger import clear_signals
+    from app.ws_hub import push_monitor_update
+
+    payload = body or {}
+    scope = str(payload.get("scope") or "all").lower()
+    symbol = payload.get("symbol")
+    try:
+        deleted = clear_signals(scope=scope, symbol=(str(symbol).strip() if symbol else None))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    monitor_store.add_log(
+        "INFO",
+        "signals",
+        f"Cleared {deleted} signal(s) · scope={scope}"
+        + (f" · symbol={str(symbol).upper()}" if symbol else ""),
+    )
+    push_monitor_update("signals_cleared")
+    return {
+        "advisory_only": True,
+        "ok": True,
+        "deleted": deleted,
+        "scope": scope,
+        "symbol": str(symbol).upper() if symbol else None,
+    }
+
+
 @router.post("/api/v1/signals/{signal_id}/decision")
 def signal_decision(signal_id: str, body: dict) -> dict:
     """Record TAKE or IGNORE — does not send any MT5 order."""

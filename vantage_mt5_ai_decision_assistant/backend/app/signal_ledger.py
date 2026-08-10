@@ -505,6 +505,32 @@ def get_signal(signal_id: str) -> Optional[dict[str, Any]]:
             conn.close()
 
 
+def clear_signals(scope: str = "all", symbol: str | None = None) -> int:
+    """Remove ledger rows. scope: all | decided | pending."""
+    scope = str(scope or "all").lower().strip()
+    if scope not in {"all", "decided", "pending"}:
+        raise ValueError("scope must be all, decided, or pending")
+    sym = symbol.strip().upper() if symbol else None
+    with _lock:
+        conn = _connect()
+        try:
+            where: list[str] = []
+            params: list[Any] = []
+            if scope == "decided":
+                where.append("COALESCE(user_decision, 'PENDING') IN ('TAKE', 'IGNORE')")
+            elif scope == "pending":
+                where.append("COALESCE(user_decision, 'PENDING') = 'PENDING'")
+            if sym:
+                where.append("symbol = ?")
+                params.append(sym)
+            clause = f" WHERE {' AND '.join(where)}" if where else ""
+            cur = conn.execute(f"DELETE FROM signals{clause}", params)
+            conn.commit()
+            return int(cur.rowcount or 0)
+        finally:
+            conn.close()
+
+
 def latest_pending_for_symbol(symbol: str) -> Optional[dict[str, Any]]:
     """Return latest PENDING signal only (no fallback to decided rows)."""
     with _lock:

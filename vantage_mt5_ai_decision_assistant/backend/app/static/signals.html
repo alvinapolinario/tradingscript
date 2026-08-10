@@ -46,6 +46,14 @@
       padding: .35rem .7rem; font-size: .78rem; background: var(--panel);
     }
     .pill a { color: inherit; }
+    button.btn {
+      border: 1px solid var(--line); border-radius: 999px;
+      padding: .35rem .75rem; font-size: .78rem; background: var(--panel);
+      color: var(--text); cursor: pointer; font-family: inherit;
+    }
+    button.btn:hover { border-color: var(--accent); color: var(--accent); }
+    button.btn.danger:hover { border-color: var(--sell); color: var(--sell); }
+    button.btn:disabled { opacity: .45; cursor: not-allowed; }
     main {
       max-width: 720px; margin: 0 auto;
       padding: 1rem 1.1rem 2.5rem;
@@ -107,6 +115,8 @@
     </div>
     <div class="actions">
       <span class="pill" id="countPill">0 signals</span>
+      <button type="button" class="btn" id="clearDecidedBtn" title="Remove TAKE and IGNORE cards">Clear decided</button>
+      <button type="button" class="btn danger" id="clearAllBtn" title="Remove all signal history">Clear all</button>
     </div>
   </header>
   <main>
@@ -171,6 +181,31 @@
         document.getElementById("list").innerHTML = `<div class="empty">Failed to load signals</div>`;
       }
     }
+    async function clearSignals(scope) {
+      const label = scope === "all" ? "all signal history" : "decided signals (TAKE / IGNORE)";
+      if (!confirm(`Clear ${label}? This cannot be undone.`)) return;
+      const decidedBtn = document.getElementById("clearDecidedBtn");
+      const allBtn = document.getElementById("clearAllBtn");
+      decidedBtn.disabled = true;
+      allBtn.disabled = true;
+      try {
+        const r = await fetch("/api/v1/signals/clear", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ scope }),
+        });
+        const j = await r.json();
+        if (!r.ok) throw new Error(j.detail || r.statusText);
+        await refresh();
+      } catch (e) {
+        alert(`Clear failed: ${e.message || e}`);
+      } finally {
+        decidedBtn.disabled = false;
+        allBtn.disabled = false;
+      }
+    }
+    document.getElementById("clearDecidedBtn").addEventListener("click", () => clearSignals("decided"));
+    document.getElementById("clearAllBtn").addEventListener("click", () => clearSignals("all"));
     refresh();
     setInterval(refresh, 15000);
   </script>
