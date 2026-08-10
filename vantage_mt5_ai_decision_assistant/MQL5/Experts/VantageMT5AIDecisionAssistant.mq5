@@ -1949,6 +1949,7 @@ void RefreshDashboard(void)
    const bool show_mse = WantModuleDashboard() && InpMseShowDash && InpMseEnable && g_msesnap.valid;
    const bool show_swing = WantModuleDashboard() && InpSwingShowDash && InpSwingEnable && g_swingsnap.valid;
    const bool show_box = WantModuleDashboard() && InpBoxTheoryShowDash && InpBoxTheoryEnable && g_boxtheorysnap.valid;
+   g_dash.SetBoxTheory(g_boxtheorysnap, show_box);
    g_dash.Render(g_acct, g_spec, g_px, g_backend_status, g_candle_status, g_dec,
                  g_pos, g_risk, ts, age,
                  g_equity, g_floating_pl_pct, InpFloatProfitTargetPct, g_float_profit_target_hit,
@@ -1958,8 +1959,7 @@ void RefreshDashboard(void)
                  g_liqgrabsnap, show_lg,
                  g_bossnap, show_bos,
                  g_msesnap, show_mse,
-                 g_swingsnap, show_swing,
-                 g_boxtheorysnap, show_box);
+                 g_swingsnap, show_swing);
   }
 
 //+------------------------------------------------------------------+

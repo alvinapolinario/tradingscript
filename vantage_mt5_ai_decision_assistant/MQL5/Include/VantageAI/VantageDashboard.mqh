@@ -23,6 +23,8 @@ private:
    string m_prefix;
    int    m_x;
    int    m_y;
+   VantageBoxTheoryResult m_box;
+   bool   m_show_box;
 
    void SetLabel(const string name, const int row, const string text, const color clr)
      {
@@ -42,7 +44,13 @@ private:
      }
 
 public:
-   CVantageDashboard(void) : m_prefix("VAI_"), m_x(8), m_y(18) {}
+   CVantageDashboard(void) : m_prefix("VAI_"), m_x(8), m_y(18), m_show_box(false) { ZeroMemory(m_box); }
+
+   void SetBoxTheory(const VantageBoxTheoryResult &box, const bool show)
+     {
+      m_box = box;
+      m_show_box = show;
+     }
 
    void Clear(void)
      {
@@ -86,9 +94,7 @@ public:
                const VantageMseResult &mse,
                const bool show_mse,
                const VantageSwingStratResult &swing,
-               const bool show_swing,
-               const VantageBoxTheoryResult &box,
-               const bool show_box)
+               const bool show_swing)
      {
       int r = 0;
       color riskCol = clrSilver;
@@ -325,20 +331,20 @@ public:
            }
         }
 
-      if(show_box)
+      if(m_show_box)
         {
          SetLabel("tbx0", r++, "--- BOX THEORY (advisory) ---", clrAqua);
-         if(!box.gold_symbol_valid && box.disable_reason != "")
-            SetLabel("tbx1", r++, StringSubstr(box.disable_reason, 0, 96), clrOrange);
+         if(!m_box.gold_symbol_valid && m_box.disable_reason != "")
+            SetLabel("tbx1", r++, StringSubstr(m_box.disable_reason, 0, 96), clrOrange);
          else
            {
-            SetLabel("tbx1", r++, box.signal + " | " + box.box_status + " | Conf " +
-                     DoubleToString(box.confidence_score, 0), clrYellow);
-            SetLabel("tbx2", r++, "Box " + DoubleToString(box.box_high, _Digits) + " / " +
-                     DoubleToString(box.box_mid, _Digits) + " / " + DoubleToString(box.box_low, _Digits), clrWhite);
-            SetLabel("tbx3", r++, "HTF " + box.htf_bias + " | Sweep " + (box.sweep_detected ? "YES" : "NO") +
-                     " | FVG " + (box.fvg_confirmation ? "YES" : "NO"), clrSilver);
-            SetLabel("tbx4", r++, StringSubstr(box.action_guidance, 0, 96), clrGold);
+            SetLabel("tbx1", r++, m_box.signal + " | " + m_box.box_status + " | Conf " +
+                     DoubleToString(m_box.confidence_score, 0), clrYellow);
+            SetLabel("tbx2", r++, "Box " + DoubleToString(m_box.box_high, _Digits) + " / " +
+                     DoubleToString(m_box.box_mid, _Digits) + " / " + DoubleToString(m_box.box_low, _Digits), clrWhite);
+            SetLabel("tbx3", r++, "HTF " + m_box.htf_bias + " | Sweep " + (m_box.sweep_detected ? "YES" : "NO") +
+                     " | FVG " + (m_box.fvg_confirmation ? "YES" : "NO"), clrSilver);
+            SetLabel("tbx4", r++, StringSubstr(m_box.action_guidance, 0, 96), clrGold);
            }
         }
 
