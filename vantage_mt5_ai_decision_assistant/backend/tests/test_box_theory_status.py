@@ -1,6 +1,7 @@
 """Box Theory status API tests."""
 from fastapi.testclient import TestClient
 
+from app.config import get_settings
 from app.main import app
 from app.monitor_state import monitor_store
 
@@ -23,6 +24,27 @@ def test_box_theory_status_passthrough():
     body = TestClient(app).get("/api/v1/box-theory/status").json()
     assert body["box_theory_supported"] is True
     assert body["box_theory"]["signal"] == "WATCH"
+
+
+def test_heartbeat_accepts_box_theory_field():
+    token = get_settings().local_api_token
+    client = TestClient(app)
+    r = client.post(
+        "/api/v1/heartbeat",
+        headers={"Authorization": f"Bearer {token}"},
+        json={
+            "symbol": "XAUUSD",
+            "bid": 3400.0,
+            "ask": 3400.2,
+            "digits": 2,
+            "box_theory": SAMPLE_BOX,
+        },
+    )
+    assert r.status_code == 200
+    monitor_store.select_symbol("XAUUSD")
+    st = client.get("/api/v1/box-theory/status").json()
+    assert st["box_theory_supported"] is True
+    assert st["box_theory"]["signal"] == "WATCH"
 
 
 def test_box_strategy_summary_endpoint():
