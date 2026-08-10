@@ -85,10 +85,24 @@
       if (!p.box_theory_supported || !b) {
         pill.textContent = "unsupported";
         pill.className = "pill muted";
-        root.innerHTML = `<div class="empty">No <b>box_theory</b> payload yet.<br/>Recompile the EA with Box Theory groups AT–AW enabled and attach on XAUUSD.</div>`;
+        const mods = p.modules_detected || {};
+        const modLines = [
+          mods.amd_ifvg ? "AMD + iFVG: detected" : "AMD + iFVG: not in heartbeat",
+          mods.liquidity_grab ? "Liquidity Grab: detected" : "Liquidity Grab: not in heartbeat",
+          mods.swing_strategy ? "Swing Strategy: detected" : "Swing Strategy: not in heartbeat",
+          mods.box_theory ? "Box Theory: detected" : "Box Theory: not in heartbeat",
+        ].join("<br/>");
+        root.innerHTML = `<div class="empty">
+          <b>EA connected</b> on <b>${p.symbol || "—"}</b>, but this EA build is not sending <code>box_theory</code> yet.<br/><br/>
+          <span style="color:var(--muted);font-size:.84rem">${modLines}</span><br/><br/>
+          <b>Fix:</b> copy the latest <code>MQL5/Include/VantageAI/</code> files, recompile
+          <code>VantageMT5AIDecisionAssistant.mq5</code>, remove the old EA from the chart, attach the new one on <b>XAUUSD</b>,
+          and confirm inputs <b>AT–AW</b> (Box Theory) are enabled.<br/><br/>
+          Journal should show: <i>Box Theory Strategy enabled — heartbeat key box_theory active.</i>
+        </div>`;
         return;
       }
-      if (b.gold_symbol_valid === false) {
+      if (b.gold_symbol_valid === false && b.valid !== false) {
         pill.textContent = "wrong symbol";
         pill.className = "pill muted";
         root.innerHTML = `<div class="warn-box">${b.disable_reason || "Gold / XAUUSD only."}</div>`;

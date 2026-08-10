@@ -566,6 +566,15 @@ def box_theory_status() -> dict:
         "selected_symbol": selected,
         "symbol": str(ea.get("symbol") or selected).upper(),
         "available_symbols": list(st.get("available_symbols") or []),
+        "digits": int(ea.get("digits") or 5) or 5,
+        "bid": ea.get("bid"),
+        "ask": ea.get("ask"),
+        "modules_detected": {
+            "amd_ifvg": bool(ea.get("amd_ifvg_supported")),
+            "liquidity_grab": bool(ea.get("liquidity_grab_supported")),
+            "swing_strategy": bool(ea.get("swing_strategy_supported")),
+            "box_theory": bool(ea.get("box_theory_supported")),
+        },
         "box_theory": blob,
         "links": {
             "box_theory": "/box-theory",

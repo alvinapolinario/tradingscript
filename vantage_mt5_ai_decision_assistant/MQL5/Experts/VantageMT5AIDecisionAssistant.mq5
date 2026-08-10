@@ -1075,7 +1075,7 @@ string BuildHeartbeatPayload(void)
       j += ",\"swing_strategy\":" + g_swingstrat.ToJson(g_swingsnap);
    if(g_amdifvgsnap.valid)
       j += ",\"amd_ifvg\":" + g_amdifvg.ToJson(g_amdifvgsnap);
-   if(g_boxtheorysnap.valid)
+   if(InpBoxTheoryEnable)
       j += ",\"box_theory\":" + g_boxtheory.ToJson(g_boxtheorysnap);
    j += "}";
    return j;
@@ -1531,6 +1531,20 @@ void MaybeEvalBoxTheory(const bool force)
    VantageBoxTheoryResult r;
    if(g_boxtheory.Evaluate(force, r))
       g_boxtheorysnap = r;
+   else if(!g_boxtheorysnap.valid)
+     {
+      ZeroMemory(g_boxtheorysnap);
+      g_boxtheorysnap.valid = true;
+      g_boxtheorysnap.engine_enabled = true;
+      g_boxtheorysnap.analysis_active = false;
+      g_boxtheorysnap.gold_symbol_valid = true;
+      g_boxtheorysnap.symbol = _Symbol;
+      g_boxtheorysnap.strategy = "BOX_THEORY";
+      g_boxtheorysnap.signal = "WAIT";
+      g_boxtheorysnap.box_status = "FORMING";
+      g_boxtheorysnap.reasons = "Box Theory initializing — waiting for closed bars";
+      g_boxtheorysnap.action_guidance = "Advisory only — confirm on closed candles.";
+     }
   }
 
 void RefreshPlCalendar(const bool force)
@@ -2091,7 +2105,10 @@ int OnInit()
       if(!g_boxtheory.Init(_Symbol, bcfg))
          Print("[VantageAI] Box Theory Strategy init failed.");
       else
+        {
          MaybeEvalBoxTheory(true);
+         Print("[VantageAI] Box Theory Strategy enabled — heartbeat key box_theory active.");
+        }
      }
 
    // Build chart-relative levels for BTC/etc. (AUTO) or gold manual map
