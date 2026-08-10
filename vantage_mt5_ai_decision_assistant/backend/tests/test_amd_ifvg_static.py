@@ -46,6 +46,16 @@ def test_amd_ifvg_uses_closed_bars():
     assert "m_last_m5_bar" in text
 
 
+def test_amd_ifvg_pipeline_mss_before_ifvg():
+    text = (INC / "VantageAmdIfvg.mqh").read_text(encoding="utf-8")
+    mss_pos = text.find("out.mss_detected = true")
+    ifvg_pos = text.find("// iFVG scan on M5")
+    assert mss_pos > 0 and ifvg_pos > mss_pos
+    assert "ifvg_max_retests" in text
+    assert "chase_max_atr" in text
+    assert "min_rr" in text
+
+
 def test_ea_wires_amd_ifvg():
     ea = (MQL5 / "Experts" / "VantageMT5AIDecisionAssistant.mq5").read_text(encoding="utf-8")
     assert "InpAmdIfvgEnable" in ea

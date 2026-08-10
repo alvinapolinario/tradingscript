@@ -90,6 +90,8 @@ def init_db() -> None:
                 """
             )
             _ensure_column(conn, "trade_mode", "trade_mode TEXT NOT NULL DEFAULT 'SWING'")
+            _ensure_column(conn, "fill_price", "fill_price REAL")
+            _ensure_column(conn, "volume", "volume REAL")
             conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_exec_fp ON executions(fingerprint, status)"
             )
@@ -182,7 +184,7 @@ def _expire_stale_pending(conn: sqlite3.Connection) -> None:
 
 def _row_to_dict(row: sqlite3.Row) -> dict[str, Any]:
     keys = row.keys()
-    return {
+    out: dict[str, Any] = {
         "signal_id": row["id"],
         "symbol": row["symbol"],
         "side": row["side"],
@@ -199,6 +201,22 @@ def _row_to_dict(row: sqlite3.Row) -> dict[str, Any]:
         "signal_label": row["signal_label"],
         "trade_mode": row["trade_mode"] if "trade_mode" in keys else "SWING",
     }
+    if "fill_price" in keys and row["fill_price"] is not None:
+        out["fill_price"] = row["fill_price"]
+    if "volume" in keys and row["volume"] is not None:
+        out["volume"] = row["volume"]
+    if "swing_json" in keys and row["swing_json"]:
+        try:
+            swing = __import__("json").loads(row["swing_json"])
+            if isinstance(swing, dict):
+                zone = swing.get("entry_zone")
+                if isinstance(zone, list) and len(zone) >= 2:
+                    out["entry_zone"] = zone
+                    if not out.get("fill_price"):
+                        out["planned_entry"] = (float(zone[0]) + float(zone[1])) / 2.0
+        except Exception:
+            pass
+    return out
 
 
 def _order_payload(row: sqlite3.Row, expires_in_sec: int = DEFAULT_EXPIRES_SEC) -> dict[str, Any]:
@@ -398,6 +416,8 @@ def ack_execution(
     *,
     ticket: int | None = None,
     reason: str | None = None,
+    fill_price: float | None = None,
+    volume: float | None = None,
 ) -> Optional[dict[str, Any]]:
     status = str(status or "").upper()
     if status not in {"FILLED", "REJECTED", "SKIPPED", "EXPIRED"}:
@@ -418,10 +438,12 @@ def ack_execution(
             conn.execute(
                 """
                 UPDATE executions
-                SET status = ?, updated_utc = ?, ticket = ?, reason = ?
+                SET status = ?, updated_utc = ?, ticket = ?, reason = ?,
+                    fill_price = COALESCE(?, fill_price),
+                    volume = COALESCE(?, volume)
                 WHERE id = ?
                 """,
-                (status, now, ticket, reason, signal_id),
+                (status, now, ticket, reason, fill_price, volume, signal_id),
             )
             conn.commit()
             updated = conn.execute(

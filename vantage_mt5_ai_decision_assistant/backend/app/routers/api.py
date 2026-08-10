@@ -1022,6 +1022,8 @@ def execution_ack(
     status = str((body or {}).get("status") or "").upper()
     ticket = (body or {}).get("ticket")
     reason = str((body or {}).get("reason") or "")
+    fill_price = (body or {}).get("fill_price")
+    volume = (body or {}).get("volume")
     if not signal_id:
         raise HTTPException(status_code=400, detail="signal_id required")
     try:
@@ -1030,6 +1032,8 @@ def execution_ack(
             status,
             ticket=int(ticket) if ticket is not None else None,
             reason=reason or None,
+            fill_price=float(fill_price) if fill_price is not None else None,
+            volume=float(volume) if volume is not None else None,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -1047,7 +1051,7 @@ def execution_ack(
     try:
         from app.alert_notify import notify_execution_ack
 
-        notify_execution_ack(updated, status)
+        notify_execution_ack(updated, status, account_mode=acct)
     except Exception as exc:
         monitor_store.add_log("WARN", "alerts", f"Execution notify failed: {exc}")
     return {

@@ -311,47 +311,59 @@ def analyze_amd_ifvg(
             )
             setup_state = SetupState.WAITING_FOR_DISPLACEMENT
 
-    fvgs = detect_fvgs(entry, timeframe="M5", atr=atr_entry, cfg=st)
-    for f in fvgs:
-        update_fvg_mitigation(f, price)
-    for i, c in enumerate(entry):
-        for f in fvgs:
-            try_invert_fvg(f, c, atr_entry, st)
-
-    inverted = [f for f in fvgs if f.inverted]
-    swings = find_swings(entry, st.pivot_left, st.pivot_right, atr_entry)
-
     if manip and manip.get("detected") and trade_bias != "NEUTRAL":
         last = entry[-1]
-        disp_q = score_displacement(last, atr_entry, False, bool(inverted))
+        disp_q = score_displacement(last, atr_entry, False, False)
         if disp_q >= 50:
             setup_state = SetupState.WAITING_FOR_MSS
             amd_phase = AmdPhase.DISTRIBUTION
             reasoning.append(f"Displacement score {disp_q:.0f} after manipulation.")
+        swings = find_swings(entry, st.pivot_left, st.pivot_right, atr_entry)
         mss = detect_mss(entry, swings, trade_bias, atr_entry, st)
         if mss and mss.get("shift_detected"):
             reasoning.append(
                 f"{mss['direction']} MSS — broke {mss['broken_level']:.2f} by body close."
             )
             setup_state = SetupState.WAITING_FOR_IFVG_INVERSION
-
-    if inverted:
-        active_ifvg = inverted[-1]
-        setup_state = SetupState.WAITING_FOR_RETRACE
-        reasoning.append(
-            f"iFVG {active_ifvg.direction} from inverted {active_ifvg.original_direction} FVG "
-            f"({active_ifvg.lower:.2f}–{active_ifvg.upper:.2f})."
-        )
-        if active_ifvg.lower <= price <= active_ifvg.upper:
-            active_ifvg.retest_count += 1
-            setup_state = SetupState.ENTRY_ZONE_ACTIVE
-            reasoning.append("Price inside iFVG entry zone.")
-        elif price > active_ifvg.upper + st.chase_max_atr * atr_entry and active_ifvg.direction == "BEARISH":
-            warnings.append("Missed entry: price chased below iFVG.")
-            setup_state = SetupState.EXPIRED
-        elif price < active_ifvg.lower - st.chase_max_atr * atr_entry and active_ifvg.direction == "BULLISH":
-            warnings.append("Missed entry: price chased above iFVG.")
-            setup_state = SetupState.EXPIRED
+            fvgs = detect_fvgs(entry, timeframe="M5", atr=atr_entry, cfg=st)
+            for f in fvgs:
+                update_fvg_mitigation(f, price)
+            for c in entry:
+                for f in fvgs:
+                    try_invert_fvg(f, c, atr_entry, st)
+            aligned = [
+                f for f in fvgs
+                if f.inverted and f.direction == trade_bias
+            ]
+            if aligned:
+                active_ifvg = aligned[-1]
+                setup_state = SetupState.WAITING_FOR_RETRACE
+                reasoning.append(
+                    f"iFVG {active_ifvg.direction} from inverted {active_ifvg.original_direction} FVG "
+                    f"({active_ifvg.lower:.2f}–{active_ifvg.upper:.2f})."
+                )
+                if active_ifvg.lower <= price <= active_ifvg.upper:
+                    active_ifvg.retest_count += 1
+                    if active_ifvg.retest_count > st.ifvg_max_retests:
+                        warnings.append(
+                            f"iFVG retest limit ({st.ifvg_max_retests}) exceeded."
+                        )
+                        setup_state = SetupState.EXPIRED
+                    else:
+                        setup_state = SetupState.ENTRY_ZONE_ACTIVE
+                        reasoning.append("Price inside iFVG entry zone.")
+                elif (
+                    price > active_ifvg.upper + st.chase_max_atr * atr_entry
+                    and active_ifvg.direction == "BEARISH"
+                ):
+                    warnings.append("Missed entry: price chased below iFVG.")
+                    setup_state = SetupState.EXPIRED
+                elif (
+                    price < active_ifvg.lower - st.chase_max_atr * atr_entry
+                    and active_ifvg.direction == "BULLISH"
+                ):
+                    warnings.append("Missed entry: price chased above iFVG.")
+                    setup_state = SetupState.EXPIRED
 
     pd_zone = premium_discount(
         acc.range_high if acc else candles_setup[-1].high,
@@ -362,27 +374,74 @@ def analyze_amd_ifvg(
         trade_bias == "BULLISH" and "DISCOUNT" in pd_zone
     ) else 40.0
 
+    entry_low = entry_high = preferred = 0.0
+    sl = inv = 0.0
+    tps: list[dict[str, Any]] = []
+    risk_reward = 0.0
+    if active_ifvg and manip and setup_state != SetupState.EXPIRED:
+        entry_low, entry_high = active_ifvg.lower, active_ifvg.upper
+        preferred = active_ifvg.midpoint if st.ifvg_use_midpoint_entry else (
+            active_ifvg.upper if active_ifvg.direction == "BEARISH" else active_ifvg.lower
+        )
+        if trade_bias == "BEARISH" and active_ifvg.direction == "BEARISH":
+            sl = float(manip.get("sweep_price", active_ifvg.upper)) + 0.2 * atr_entry
+            inv = sl
+            risk = sl - preferred
+            if risk > 0:
+                tp2 = acc.range_low if acc else preferred - 2 * risk
+                reward = preferred - tp2
+                risk_reward = reward / risk
+                tps = [
+                    {"name": "TP1", "price": preferred - risk, "reason": "1R internal", "rr": 1.0},
+                    {"name": "TP2", "price": tp2, "reason": "Range low", "rr": round(risk_reward, 2)},
+                ]
+        elif trade_bias == "BULLISH" and active_ifvg.direction == "BULLISH":
+            sl = float(manip.get("sweep_price", active_ifvg.lower)) - 0.2 * atr_entry
+            inv = sl
+            risk = preferred - sl
+            if risk > 0:
+                tp2 = acc.range_high if acc else preferred + 2 * risk
+                reward = tp2 - preferred
+                risk_reward = reward / risk
+                tps = [
+                    {"name": "TP1", "price": preferred + risk, "reason": "1R internal", "rr": 1.0},
+                    {"name": "TP2", "price": tp2, "reason": "Range high", "rr": round(risk_reward, 2)},
+                ]
+
     penalties = len(warnings) * 8.0
     if htf == "BULLISH" and trade_bias == "BEARISH":
         penalties += 12.0
     if htf == "BEARISH" and trade_bias == "BULLISH":
         penalties += 12.0
 
+    rr_quality = (
+        80.0 if risk_reward >= st.minimum_rr
+        else (50.0 if risk_reward >= 1.0 else (20.0 if risk_reward > 0 else 0.0))
+    )
     confidence = compute_confidence(
         htf_alignment=70.0 if htf in ("BULLISH", "BEARISH") else 40.0,
         acc_quality=acc.quality_score if acc else 0.0,
         sweep_quality=float(manip.get("quality_score", 0)) if manip else 0.0,
-        disp_quality=score_displacement(entry[-1], atr_entry, bool(mss), bool(inverted)),
+        disp_quality=score_displacement(entry[-1], atr_entry, bool(mss and mss.get("shift_detected")), bool(active_ifvg)),
         mss_quality=float(mss.get("quality_score", 0)) if mss else 0.0,
         ifvg_quality=75.0 if active_ifvg else 0.0,
         pd_alignment=pd_score,
-        rr_quality=80.0 if st.minimum_rr >= 2 else 50.0,
+        rr_quality=rr_quality,
         penalties=penalties,
     )
 
     decision = Decision.NO_TRADE
-    if confidence >= st.minimum_trade_score and active_ifvg and setup_state == SetupState.ENTRY_ZONE_ACTIVE:
-        if active_ifvg.direction == "BULLISH" and trade_bias == "BULLISH":
+    if (
+        confidence >= st.minimum_trade_score
+        and active_ifvg
+        and setup_state == SetupState.ENTRY_ZONE_ACTIVE
+    ):
+        if risk_reward < st.minimum_rr:
+            warnings.append(
+                f"Risk:reward {risk_reward:.2f} below minimum {st.minimum_rr}."
+            )
+            decision = Decision.WAIT
+        elif active_ifvg.direction == "BULLISH" and trade_bias == "BULLISH":
             decision = Decision.BUY
         elif active_ifvg.direction == "BEARISH" and trade_bias == "BEARISH":
             decision = Decision.SELL
@@ -390,33 +449,6 @@ def analyze_amd_ifvg(
             decision = Decision.WAIT
     elif confidence >= 55 or (manip and manip.get("detected")):
         decision = Decision.WAIT
-
-    entry_low = entry_high = preferred = 0.0
-    sl = inv = 0.0
-    tps: list[dict[str, Any]] = []
-    if active_ifvg:
-        entry_low, entry_high = active_ifvg.lower, active_ifvg.upper
-        preferred = active_ifvg.midpoint if st.ifvg_use_midpoint_entry else (
-            active_ifvg.upper if active_ifvg.direction == "BEARISH" else active_ifvg.lower
-        )
-        if decision == Decision.SELL and manip:
-            sl = float(manip.get("sweep_price", active_ifvg.upper)) + 0.2 * atr_entry
-            inv = sl
-            risk = sl - preferred
-            if risk > 0:
-                tps = [
-                    {"name": "TP1", "price": preferred - risk, "reason": "1R internal", "rr": 1.0},
-                    {"name": "TP2", "price": acc.range_low if acc else preferred - 2 * risk, "reason": "Range low", "rr": 2.0},
-                ]
-        if decision == Decision.BUY and manip:
-            sl = float(manip.get("sweep_price", active_ifvg.lower)) - 0.2 * atr_entry
-            inv = sl
-            risk = preferred - sl
-            if risk > 0:
-                tps = [
-                    {"name": "TP1", "price": preferred + risk, "reason": "1R internal", "rr": 1.0},
-                    {"name": "TP2", "price": acc.range_high if acc else preferred + 2 * risk, "reason": "Range high", "rr": 2.0},
-                ]
 
     return {
         "module": "amd_ifvg",
@@ -471,6 +503,7 @@ def analyze_amd_ifvg(
             "recommended_lot_size": 0.0,
         },
         "targets": tps,
+        "risk_reward": round(risk_reward, 2),
         "invalidation": {"price": inv, "reason": "Beyond manipulation extreme / iFVG distal"},
         "warnings": warnings,
         "reasoning": reasoning or ["No AMD + iFVG sequence detected on closed bars."],

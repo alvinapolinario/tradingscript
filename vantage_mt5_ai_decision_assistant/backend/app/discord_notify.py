@@ -128,20 +128,24 @@ def notify_accepted_signal(signal: dict[str, Any]) -> None:
     _dedupe_send(f"signal|{signal.get('id') or sym}|{side}", msg, cooldown_sec=60, color=3447003)
 
 
-def notify_execution_ack(signal: dict[str, Any], status: str) -> None:
-    if not get_settings().telegram_alert_execution:
+def notify_execution_ack(
+    signal: dict[str, Any],
+    status: str,
+    *,
+    account_mode: str = "DEMO",
+) -> None:
+    st = get_settings()
+    if not discord_configured(st):
         return
-    sym = str(signal.get("symbol") or "XAUUSD").upper()
-    side = str(signal.get("side") or "?")
-    msg = (
-        f"{_fmt_header(f'Demo exec {status}', sym)}\n"
-        f"Side: `{side}` · Signal: `{signal.get('id', '')}`"
-    )
-    ticket = signal.get("ticket")
-    if ticket:
-        msg += f"\nTicket: `{ticket}`"
+    if not _discord_category_enabled(st, "execution"):
+        return
+    from app.alert_notify import execution_signal_ref, format_execution_ack_message
+
+    msg = format_execution_ack_message(signal, status, account_mode=account_mode)
+    sig_ref = execution_signal_ref(signal)
     color = 3066993 if status == "FILLED" else 15105570
-    _dedupe_send(f"exec|{signal.get('id')}|{status}", msg, cooldown_sec=30, color=color)
+    dedupe_key = f"exec|{signal.get('signal_id') or signal.get('id') or sig_ref}|{status}"
+    _dedupe_send(dedupe_key, msg, cooldown_sec=30, color=color)
 
 
 def _discord_category_enabled(st: Settings, category: str) -> bool:
@@ -159,7 +163,7 @@ def _discord_category_enabled(st: Settings, category: str) -> bool:
             "execution": st.telegram_alert_execution,
         }
         return bool(mapping.get(category, True))
-    return category in ("risk", "signals", "swing", "master", "amd_ifvg")
+    return category in ("risk", "signals", "swing", "master", "amd_ifvg", "execution")
 
 
 def _maybe_master_verdict_alert(payload: dict[str, Any], sym: str, st: Settings, *, verdicts: tuple[str, ...]) -> None:

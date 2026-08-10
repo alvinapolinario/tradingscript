@@ -36,3 +36,10 @@ def test_amd_ifvg_analyze_endpoint():
     )
     assert r.status_code == 200
     assert "decision" in r.json()
+
+
+def test_amd_ifvg_page_has_progress_bar():
+    r = TestClient(app).get("/amd-ifvg")
+    assert r.status_code == 200
+    assert "Setup progress" in r.text
+    assert "renderProgress" in r.text

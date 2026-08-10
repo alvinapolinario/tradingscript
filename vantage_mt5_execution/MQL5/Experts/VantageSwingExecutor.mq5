@@ -115,7 +115,8 @@ void JournalCsv(const string line)
    FileClose(h);
   }
 
-bool SendAck(const string signal_id, const string status, const ulong ticket, const string reason)
+bool SendAck(const string signal_id, const string status, const ulong ticket, const string reason,
+             const double fill_price = 0.0, const double volume = 0.0)
   {
    VantageExecAckResult req, rep;
    req.signal_id = signal_id;
@@ -123,6 +124,8 @@ bool SendAck(const string signal_id, const string status, const ulong ticket, co
    req.ticket = ticket;
    req.reason = reason;
    req.account_mode = g_account_mode;
+   req.fill_price = fill_price;
+   req.volume = volume;
    if(!g_client.SendAck(req, rep))
      {
       LogDbg("Ack failed: " + g_client.LastError());
@@ -202,8 +205,9 @@ void ProcessPoll(void)
       return;
      }
 
-   LogDbg(StringFormat("FILLED %s lot=%.2f ticket=%I64u sl=%.5f tp=%.5f", spec.side, lot, ticket, sl, tp));
-   SendAck(spec.signal_id, "FILLED", ticket, "ok");
+   LogDbg(StringFormat("FILLED %s lot=%.2f ticket=%I64u fill=%.5f sl=%.5f tp=%.5f",
+                       spec.side, lot, ticket, g_trade.ResultPrice(), sl, tp));
+   SendAck(spec.signal_id, "FILLED", ticket, "ok", g_trade.ResultPrice(), lot);
    JournalCsv(TimeToString(TimeCurrent(), TIME_DATE|TIME_SECONDS) + ",FILLED," + spec.signal_id + "," + spec.side + "," + DoubleToString(lot, 2) + "," + IntegerToString((long)ticket));
   }
 

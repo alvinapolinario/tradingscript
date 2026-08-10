@@ -183,99 +183,206 @@ public:
       string narr = "";
       string trade_bias = "";
 
-      // Manipulation sweep on latest M15 bar
+      // Manipulation sweep — scan recent closed M15 bars
       if(out.acc_detected)
         {
-         MqlRates c = m15[0];
-         double sup = c.high - rh;
-         double sdn = rl - c.low;
-         if(sup >= m_cfg.sweep_min_atr * atr15 && sup <= m_cfg.sweep_max_atr * atr15 && c.close < rh)
+         for(int i = 0; i < MathMin(5, ArraySize(m15)); i++)
            {
-            out.manip_detected = true;
-            out.manip_direction = "BUY_SIDE_SWEEP";
-            out.manip_sweep_price = c.high;
-            out.manip_quality = 75.0;
-            trade_bias = "BEARISH";
-            st = AMDIFVG_ST_MANIPULATION;
-            phase = AMDIFVG_PH_MANIPULATION;
-            narr += "Buy-side sweep above accumulation; ";
-           }
-         else if(sdn >= m_cfg.sweep_min_atr * atr15 && sdn <= m_cfg.sweep_max_atr * atr15 && c.close > rl)
-           {
-            out.manip_detected = true;
-            out.manip_direction = "SELL_SIDE_SWEEP";
-            out.manip_sweep_price = c.low;
-            out.manip_quality = 75.0;
-            trade_bias = "BULLISH";
-            st = AMDIFVG_ST_MANIPULATION;
-            phase = AMDIFVG_PH_MANIPULATION;
-            narr += "Sell-side sweep below accumulation; ";
-           }
-        }
-
-      // FVG + iFVG on M5 (3-candle)
-      if(ArraySize(m5) >= 3)
-        {
-         MqlRates c1 = m5[2], c2 = m5[1], c3 = m5[0];
-         if(c3.low > c1.high)
-           {
-            double gap = c3.low - c1.high;
-            if(gap >= m_cfg.fvg_min_gap_atr * atr5)
+            MqlRates c = m15[i];
+            double sup = c.high - rh;
+            double sdn = rl - c.low;
+            if(sup >= m_cfg.sweep_min_atr * atr15 && sup <= m_cfg.sweep_max_atr * atr15 && c.close < rh)
               {
-               out.ifvg_orig_direction = "BULLISH";
-               out.ifvg_lower = c1.high;
-               out.ifvg_upper = c3.low;
-               if(m_cfg.ifvg_require_body_close && c3.close < c1.high - m_cfg.ifvg_min_break_atr * atr5)
+               if(!m_cfg.sweep_require_reentry || c.close <= rh)
                  {
-                  out.ifvg_detected = true;
-                  out.ifvg_direction = "BEARISH";
-                  st = AMDIFVG_ST_WAIT_RETRACE;
-                  narr += "Bullish FVG inverted bearish; ";
+                  out.manip_detected = true;
+                  out.manip_direction = "BUY_SIDE_SWEEP";
+                  out.manip_sweep_price = c.high;
+                  out.manip_quality = 75.0;
+                  trade_bias = "BEARISH";
+                  st = AMDIFVG_ST_MANIPULATION;
+                  phase = AMDIFVG_PH_MANIPULATION;
+                  narr += "Buy-side sweep above accumulation; ";
+                  break;
+                 }
+              }
+            else if(sdn >= m_cfg.sweep_min_atr * atr15 && sdn <= m_cfg.sweep_max_atr * atr15 && c.close > rl)
+              {
+               if(!m_cfg.sweep_require_reentry || c.close >= rl)
+                 {
+                  out.manip_detected = true;
+                  out.manip_direction = "SELL_SIDE_SWEEP";
+                  out.manip_sweep_price = c.low;
+                  out.manip_quality = 75.0;
+                  trade_bias = "BULLISH";
+                  st = AMDIFVG_ST_MANIPULATION;
+                  phase = AMDIFVG_PH_MANIPULATION;
+                  narr += "Sell-side sweep below accumulation; ";
+                  break;
                  }
               }
            }
-         if(c3.high < c1.low)
-           {
-            double gap = c1.low - c3.high;
-            if(gap >= m_cfg.fvg_min_gap_atr * atr5)
-              {
-               out.ifvg_orig_direction = "BEARISH";
-               out.ifvg_lower = c3.high;
-               out.ifvg_upper = c1.low;
-               if(m_cfg.ifvg_require_body_close && c3.close > c1.low + m_cfg.ifvg_min_break_atr * atr5)
-                 {
-                  out.ifvg_detected = true;
-                  out.ifvg_direction = "BULLISH";
-                  st = AMDIFVG_ST_WAIT_RETRACE;
-                  narr += "Bearish FVG inverted bullish; ";
-                 }
-              }
-           }
+         if(out.manip_detected)
+            st = AMDIFVG_ST_WAIT_DISP;
         }
 
-      if(out.ifvg_detected)
-        {
-         out.ifvg_mid = (out.ifvg_lower + out.ifvg_upper) / 2.0;
-         double bid = SymbolInfoDouble(m_symbol, SYMBOL_BID);
-         if(bid >= out.ifvg_lower && bid <= out.ifvg_upper)
-           {
-            st = AMDIFVG_ST_ENTRY_ZONE;
-            out.ifvg_retests = 1;
-           }
-        }
-
-      // MSS heuristic on M5
+      // Displacement + MSS on M5 (after manipulation, before iFVG)
       if(out.manip_detected && ArraySize(m5) >= 5)
         {
          double body = MathAbs(m5[0].close - m5[0].open);
          if(body >= m_cfg.disp_min_body_atr * atr5)
            {
-            out.mss_detected = true;
-            out.mss_direction = trade_bias;
-            out.mss_level = trade_bias == "BEARISH" ? m5[1].low : m5[1].high;
-            phase = AMDIFVG_PH_DISTRIBUTION;
-            st = AMDIFVG_ST_WAIT_IFVG;
+            st = AMDIFVG_ST_WAIT_MSS;
             narr += "Displacement after manipulation; ";
+            if(trade_bias == "BEARISH")
+              {
+               double struct_low = m5[1].low;
+               for(int j = 2; j < MathMin(8, ArraySize(m5)); j++)
+                  if(m5[j].low < struct_low) struct_low = m5[j].low;
+               if(m5[0].close < struct_low)
+                 {
+                  out.mss_detected = true;
+                  out.mss_direction = "BEARISH";
+                  out.mss_level = struct_low;
+                  phase = AMDIFVG_PH_DISTRIBUTION;
+                  st = AMDIFVG_ST_WAIT_IFVG;
+                  narr += "Bearish MSS confirmed; ";
+                 }
+              }
+            if(trade_bias == "BULLISH")
+              {
+               double struct_high = m5[1].high;
+               for(int j = 2; j < MathMin(8, ArraySize(m5)); j++)
+                  if(m5[j].high > struct_high) struct_high = m5[j].high;
+               if(m5[0].close > struct_high)
+                 {
+                  out.mss_detected = true;
+                  out.mss_direction = "BULLISH";
+                  out.mss_level = struct_high;
+                  phase = AMDIFVG_PH_DISTRIBUTION;
+                  st = AMDIFVG_ST_WAIT_IFVG;
+                  narr += "Bullish MSS confirmed; ";
+                 }
+              }
+           }
+        }
+
+      // iFVG scan on M5 — only after MSS, bias-filtered
+      if(out.mss_detected && ArraySize(m5) >= 3)
+        {
+         for(int i = 0; i < MathMin(ArraySize(m5) - 2, 12); i++)
+           {
+            MqlRates c1 = m5[i + 2], c3 = m5[i];
+            if(trade_bias == "BEARISH" && c3.low > c1.high)
+              {
+               double gap = c3.low - c1.high;
+               if(gap >= m_cfg.fvg_min_gap_atr * atr5 &&
+                  m_cfg.ifvg_require_body_close &&
+                  c3.close < c1.high - m_cfg.ifvg_min_break_atr * atr5)
+                 {
+                  out.ifvg_detected = true;
+                  out.ifvg_orig_direction = "BULLISH";
+                  out.ifvg_direction = "BEARISH";
+                  out.ifvg_lower = c1.high;
+                  out.ifvg_upper = c3.low;
+                  st = AMDIFVG_ST_WAIT_RETRACE;
+                  narr += "Bullish FVG inverted bearish; ";
+                  break;
+                 }
+              }
+            if(trade_bias == "BULLISH" && c3.high < c1.low)
+              {
+               double gap = c1.low - c3.high;
+               if(gap >= m_cfg.fvg_min_gap_atr * atr5 &&
+                  m_cfg.ifvg_require_body_close &&
+                  c3.close > c1.low + m_cfg.ifvg_min_break_atr * atr5)
+                 {
+                  out.ifvg_detected = true;
+                  out.ifvg_orig_direction = "BEARISH";
+                  out.ifvg_direction = "BULLISH";
+                  out.ifvg_lower = c3.high;
+                  out.ifvg_upper = c1.low;
+                  st = AMDIFVG_ST_WAIT_RETRACE;
+                  narr += "Bearish FVG inverted bullish; ";
+                  break;
+                 }
+              }
+           }
+        }
+
+      double bid = SymbolInfoDouble(m_symbol, SYMBOL_BID);
+      if(out.ifvg_detected)
+        {
+         out.ifvg_mid = (out.ifvg_lower + out.ifvg_upper) / 2.0;
+         out.entry_low = out.ifvg_lower;
+         out.entry_high = out.ifvg_upper;
+         out.preferred_entry = m_cfg.ifvg_use_midpoint ? out.ifvg_mid :
+            (out.ifvg_direction == "BEARISH" ? out.ifvg_upper : out.ifvg_lower);
+
+         int retests = 0;
+         if(m_last.valid && m_last.ifvg_detected &&
+            MathAbs(m_last.ifvg_lower - out.ifvg_lower) < _Point * 10 &&
+            MathAbs(m_last.ifvg_upper - out.ifvg_upper) < _Point * 10)
+            retests = m_last.ifvg_retests;
+
+         if(bid >= out.ifvg_lower && bid <= out.ifvg_upper)
+           {
+            retests++;
+            out.ifvg_retests = retests;
+            if(retests > m_cfg.ifvg_max_retests)
+              {
+               st = AMDIFVG_ST_EXPIRED;
+               out.warnings = "Max iFVG retests exceeded;";
+               narr += "Retest limit exceeded; ";
+              }
+            else
+              {
+               st = AMDIFVG_ST_ENTRY_ZONE;
+               narr += "Price inside iFVG entry zone; ";
+              }
+           }
+         else if(trade_bias == "BEARISH" && bid > out.ifvg_upper + m_cfg.chase_max_atr * atr5)
+           {
+            st = AMDIFVG_ST_EXPIRED;
+            out.warnings = "Price chased below iFVG;";
+            narr += "Chase expiry; ";
+           }
+         else if(trade_bias == "BULLISH" && bid < out.ifvg_lower - m_cfg.chase_max_atr * atr5)
+           {
+            st = AMDIFVG_ST_EXPIRED;
+            out.warnings = "Price chased above iFVG;";
+            narr += "Chase expiry; ";
+           }
+        }
+
+      double risk_reward = 0.0;
+      if(out.ifvg_detected && out.manip_detected && st != AMDIFVG_ST_EXPIRED)
+        {
+         if(out.ifvg_direction == "BEARISH" && trade_bias == "BEARISH")
+           {
+            out.stop_loss = out.manip_sweep_price + 0.2 * atr5;
+            out.invalidation = out.stop_loss;
+            double risk = out.stop_loss - out.preferred_entry;
+            if(risk > _Point)
+              {
+               out.tp1 = out.preferred_entry - risk;
+               out.tp2 = out.acc_low;
+               double reward = out.preferred_entry - out.tp2;
+               if(reward > 0) risk_reward = reward / risk;
+              }
+           }
+         if(out.ifvg_direction == "BULLISH" && trade_bias == "BULLISH")
+           {
+            out.stop_loss = out.manip_sweep_price - 0.2 * atr5;
+            out.invalidation = out.stop_loss;
+            double risk = out.preferred_entry - out.stop_loss;
+            if(risk > _Point)
+              {
+               out.tp1 = out.preferred_entry + risk;
+               out.tp2 = out.acc_high;
+               double reward = out.tp2 - out.preferred_entry;
+               if(reward > 0) risk_reward = reward / risk;
+              }
            }
         }
 
@@ -285,14 +392,23 @@ public:
       if(out.mss_detected) conf += 20.0;
       if(out.ifvg_detected) conf += 25.0;
       if(st == AMDIFVG_ST_ENTRY_ZONE) conf += 15.0;
+      if(risk_reward >= m_cfg.min_rr) conf += 5.0;
       out.confidence = MathMin(100.0, conf);
 
       ENUM_AMDIFVG_DECISION dec = AMDIFVG_DEC_NO_TRADE;
       if(out.confidence >= m_cfg.min_trade_score && st == AMDIFVG_ST_ENTRY_ZONE)
         {
-         if(out.ifvg_direction == "BULLISH" && trade_bias == "BULLISH") dec = AMDIFVG_DEC_BUY;
-         else if(out.ifvg_direction == "BEARISH" && trade_bias == "BEARISH") dec = AMDIFVG_DEC_SELL;
-         else dec = AMDIFVG_DEC_WAIT;
+         if(risk_reward < m_cfg.min_rr)
+           {
+            dec = AMDIFVG_DEC_WAIT;
+            narr += "RR below minimum; ";
+           }
+         else if(out.ifvg_direction == "BULLISH" && trade_bias == "BULLISH")
+            dec = AMDIFVG_DEC_BUY;
+         else if(out.ifvg_direction == "BEARISH" && trade_bias == "BEARISH")
+            dec = AMDIFVG_DEC_SELL;
+         else
+            dec = AMDIFVG_DEC_WAIT;
         }
       else if(out.confidence >= 55.0 || out.manip_detected)
          dec = AMDIFVG_DEC_WAIT;
@@ -312,28 +428,6 @@ public:
       out.analysis_active = true;
       out.valid = true;
       out.chart_objects_active = m_cfg.show_chart_objects;
-
-      if(out.ifvg_detected)
-        {
-         out.entry_low = out.ifvg_lower;
-         out.entry_high = out.ifvg_upper;
-         out.preferred_entry = m_cfg.ifvg_use_midpoint ? out.ifvg_mid :
-            (out.ifvg_direction == "BEARISH" ? out.ifvg_upper : out.ifvg_lower);
-         if(dec == AMDIFVG_DEC_SELL)
-           {
-            out.stop_loss = out.manip_detected ? out.manip_sweep_price + 0.2 * atr5 : out.ifvg_upper + 0.3 * atr5;
-            out.invalidation = out.stop_loss;
-            out.tp1 = out.preferred_entry - (out.stop_loss - out.preferred_entry);
-            out.tp2 = out.acc_low;
-           }
-         if(dec == AMDIFVG_DEC_BUY)
-           {
-            out.stop_loss = out.manip_detected ? out.manip_sweep_price - 0.2 * atr5 : out.ifvg_lower - 0.3 * atr5;
-            out.invalidation = out.stop_loss;
-            out.tp1 = out.preferred_entry + (out.preferred_entry - out.stop_loss);
-            out.tp2 = out.acc_high;
-           }
-        }
 
       DrawSetup(out);
       m_last_m5_bar = bar_time;

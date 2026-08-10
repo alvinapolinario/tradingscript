@@ -231,3 +231,68 @@ def test_monitor_discord_test(mock_client_cls, mock_settings):
     r = client.post("/api/v1/monitor/discord/test")
     assert r.status_code == 200
     assert r.json()["ok"] is True
+
+
+def test_execution_signal_ref_uses_signal_id():
+    from app.alert_notify import execution_signal_ref, format_execution_ack_message
+
+    signal = {
+        "signal_id": "sig-abc-123",
+        "signal_label": "STRONG SWING BUY",
+        "symbol": "XAUUSD",
+        "side": "BUY",
+        "trade_mode": "SWING",
+        "confidence": 91.0,
+        "stop_loss": 4016.8,
+        "take_profit": 4050.0,
+        "ticket": 12345,
+    }
+    ref = execution_signal_ref(signal)
+    assert "STRONG SWING BUY" in ref
+    assert "sig-abc" in ref
+    msg = format_execution_ack_message(signal, "FILLED")
+    assert "STRONG SWING BUY" in msg
+    assert "4016.8" in msg
+    assert "4050.0" in msg
+    assert "Ticket: **12345**" in msg
+    assert "Signal: ``" not in msg
+
+    msg2 = format_execution_ack_message({**signal, "fill_price": 4040.15, "volume": 0.05}, "FILLED")
+    assert "Entry: `4040.15`" in msg2
+    assert "Lot: `0.05`" in msg2
+
+
+@patch("app.discord_notify.get_settings")
+@patch("app.discord_notify.httpx.Client")
+def test_execution_ack_discord_embed(mock_client_cls, mock_settings):
+    from app.discord_notify import notify_execution_ack
+
+    mock_settings.return_value = _settings(discord_cooldown_sec=0)
+    mock_client_cls.return_value.__enter__.return_value.post.side_effect = _mock_post_ok
+    notify_execution_ack(
+        {
+            "signal_id": "sig-test-001",
+            "signal_label": "STRONG SWING BUY",
+            "symbol": "XAUUSD",
+            "side": "BUY",
+            "trade_mode": "SWING",
+            "confidence": 91.0,
+            "stop_loss": 4016.8,
+            "take_profit": 4050.0,
+            "fill_price": 4040.15,
+            "volume": 0.05,
+            "ticket": 12345,
+        },
+        "FILLED",
+        account_mode="DEMO",
+    )
+    assert mock_client_cls.return_value.__enter__.return_value.post.called
+    body = mock_client_cls.return_value.__enter__.return_value.post.call_args.kwargs.get("json") or {}
+    embed = (body.get("embeds") or [{}])[0]
+    desc = embed.get("description", "")
+    assert "Demo exec FILLED" in desc
+    assert "STRONG SWING BUY" in desc
+    assert "4040.15" in desc
+    assert "0.05" in desc
+    assert "12345" in desc
+    assert "``" not in desc

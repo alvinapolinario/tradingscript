@@ -146,19 +146,60 @@ def notify_accepted_signal(signal: dict[str, Any]) -> None:
     _dedupe_send(f"signal|{signal.get('id') or sym}|{side}", msg, cooldown_sec=60)
 
 
-def notify_execution_ack(signal: dict[str, Any], status: str) -> None:
+def notify_execution_ack(
+    signal: dict[str, Any],
+    status: str,
+    *,
+    account_mode: str = "DEMO",
+) -> None:
     if not get_settings().telegram_alert_execution:
         return
+    from app.alert_notify import execution_signal_ref
     sym = str(signal.get("symbol") or "XAUUSD").upper()
-    side = str(signal.get("side") or "?")
-    msg = (
-        f"{_fmt_header(f'Demo exec {status}', sym)}\n"
-        f"Side: `{_escape_md(side)}` · Signal: `{_escape_md(str(signal.get('id', '')))}`"
-    )
+    side = _escape_md(str(signal.get("side") or "?").upper())
+    ref = _escape_md(execution_signal_ref(signal))
+    acct = str(account_mode or "DEMO").upper()
+    exec_label = "Live exec" if acct == "LIVE" else "Demo exec"
+    lines = [
+        f"{_fmt_header(f'{exec_label} {status}', sym)}",
+        f"Side: *{side}* · Signal: `{ref}`",
+    ]
+    mode = signal.get("trade_mode")
+    conf = signal.get("confidence")
+    if mode or conf is not None:
+        extra = []
+        if mode:
+            extra.append(f"Mode: `{_escape_md(str(mode))}`")
+        if conf is not None:
+            extra.append(f"Conf: `{_escape_md(str(conf))}`")
+        lines.append(" · ".join(extra))
+    fill_price = signal.get("fill_price") or signal.get("planned_entry")
+    volume = signal.get("volume")
+    entry_parts = []
+    if fill_price is not None:
+        entry_parts.append(f"Entry: `{_escape_md(str(fill_price))}`")
+    if volume is not None:
+        entry_parts.append(f"Lot: `{_escape_md(str(volume))}`")
+    if entry_parts:
+        lines.append(" · ".join(entry_parts))
+    sl = signal.get("stop_loss")
+    tp = signal.get("take_profit")
+    if sl is not None or tp is not None:
+        parts = []
+        if sl is not None:
+            parts.append(f"SL: `{_escape_md(str(sl))}`")
+        if tp is not None:
+            parts.append(f"TP: `{_escape_md(str(tp))}`")
+        lines.append(" · ".join(parts))
     ticket = signal.get("ticket")
-    if ticket:
-        msg += f"\nTicket: `{_escape_md(str(ticket))}`"
-    _dedupe_send(f"exec|{signal.get('id')}|{status}", msg, cooldown_sec=30)
+    if ticket is not None:
+        lines.append(f"Ticket: `{_escape_md(str(ticket))}`")
+    reason = str(signal.get("reason") or "").strip()
+    if reason and status != "FILLED":
+        lines.append(f"Reason: `{_escape_md(reason)}`")
+    msg = "\n".join(lines)
+    dedupe_key = f"exec|{signal.get('signal_id') or signal.get('id') or ref}|{status}"
+    _dedupe_send(dedupe_key, msg, cooldown_sec=30)
 
 
 def process_heartbeat(payload: dict[str, Any], accepted: dict[str, Any] | None = None) -> None:

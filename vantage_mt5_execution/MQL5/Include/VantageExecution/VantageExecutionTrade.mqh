@@ -65,6 +65,11 @@ public:
          ticket = m_trade.ResultDeal();
       return true;
      }
+
+   double ResultPrice(void) const
+     {
+      return m_trade.ResultPrice();
+     }
   };
 
 #endif

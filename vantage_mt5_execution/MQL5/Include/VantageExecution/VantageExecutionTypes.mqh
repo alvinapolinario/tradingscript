@@ -42,6 +42,8 @@ struct VantageExecAckResult
    ulong  ticket;
    string reason;
    string account_mode;
+   double fill_price;
+   double volume;
    int    http_code;
    string error;
   };

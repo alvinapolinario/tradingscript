@@ -270,7 +270,9 @@ public:
       payload += "\"status\":\"" + ack.status + "\",";
       payload += "\"ticket\":" + IntegerToString((long)ack.ticket) + ",";
       payload += "\"reason\":\"" + ack.reason + "\",";
-      payload += "\"account_mode\":\"" + ack.account_mode + "\"";
+      payload += "\"account_mode\":\"" + ack.account_mode + "\",";
+      payload += "\"fill_price\":" + DoubleToString(ack.fill_price, _Digits) + ",";
+      payload += "\"volume\":" + DoubleToString(ack.volume, 2);
       payload += "}";
       string body = "";
       if(!WebPostJson("/api/v1/execution/ack", payload, body))

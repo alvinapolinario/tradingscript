@@ -145,12 +145,21 @@ def test_execution_ack_filled(tmp_exec_db):
     sig_id = nxt["order"]["signal_id"]
     ack = client.post(
         "/api/v1/execution/ack",
-        json={"signal_id": sig_id, "status": "FILLED", "ticket": 12345, "reason": "ok"},
+        json={
+            "signal_id": sig_id,
+            "status": "FILLED",
+            "ticket": 12345,
+            "fill_price": 4040.15,
+            "volume": 0.05,
+            "reason": "ok",
+        },
         headers=h,
     )
     assert ack.status_code == 200
     assert ack.json()["signal"]["status"] == "FILLED"
     assert ack.json()["signal"]["ticket"] == 12345
+    assert ack.json()["signal"]["fill_price"] == 4040.15
+    assert ack.json()["signal"]["volume"] == 0.05
     # Same swing should not re-fire
     again = client.get("/api/v1/execution/next?symbol=XAUUSD&mode=SWING", headers=h).json()
     assert again["has_signal"] is False
