@@ -1075,7 +1075,7 @@ public:
         }
 
       string base = "";
-      bool gold_ok = m_validator.IsApprovedGoldSymbol(m_symbol, base);
+      bool gold_ok = IsApprovedDeskSymbol(m_symbol, base);
       out.gold_symbol_valid = gold_ok;
       out.base_symbol = base;
       if(m_cfg.gold_only && !gold_ok)

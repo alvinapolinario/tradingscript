@@ -72,7 +72,7 @@ class BoxRange:
 @dataclass
 class BoxStrategyConfig:
     enabled: bool = True
-    allowed_symbols: tuple[str, ...] = ("XAUUSD", "GOLD")
+    allowed_symbols: tuple[str, ...] = ("XAUUSD", "GOLD", "EURUSD", "USDJPY")
     structure_timeframe: str = "H1"
     box_timeframe: str = "M15"
     entry_timeframe: str = "M5"

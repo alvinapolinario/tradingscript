@@ -8,7 +8,7 @@
 
 #define VANTAGE_BOS_VERSION "1.1"
 #define VANTAGE_BOS_DISABLE_MSG \
-  "Breakout Structure Engine is disabled. This module supports XAUUSD/Gold only."
+  "Breakout Structure Engine is disabled. Supported pairs: XAUUSD, EURUSD, USDJPY."
 #define BOS_MAX_SWINGS 32
 #define BOS_MAX_TL 4
 

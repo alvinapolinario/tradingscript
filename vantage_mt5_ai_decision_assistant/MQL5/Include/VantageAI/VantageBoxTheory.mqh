@@ -418,7 +418,7 @@ public:
          return false;
         }
 
-      if(!m_validator.IsApprovedGoldSymbol(m_symbol, base))
+      if(!IsApprovedDeskSymbol(m_symbol, base))
         {
          out.gold_symbol_valid = false;
          out.base_symbol = base;

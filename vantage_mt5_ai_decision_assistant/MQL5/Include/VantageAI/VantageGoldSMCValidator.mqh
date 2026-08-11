@@ -221,6 +221,41 @@ public:
         }
      }
 
+   void ConfigureDesk(const bool allow_suffix = true, const bool allow_prefix = true)
+     {
+      m_allow_suffix = allow_suffix;
+      m_allow_prefix = allow_prefix;
+      ClearAliases();
+      string desk[] = {"XAUUSD", "GOLD", "EURUSD", "USDJPY"};
+      for(int i = 0; i < 4; i++)
+        {
+         ArrayResize(m_aliases, m_alias_count + 1);
+         m_aliases[m_alias_count++] = desk[i];
+        }
+     }
+
+   bool MatchDeskCore(const string symbol, string &out_base)
+     {
+      out_base = "";
+      string u = ToUpperCopy(TrimCopy(symbol));
+      if(StringLen(u) < 3)
+         return false;
+
+      if(u == "XAGUSD" || u == "XAUEUR" || u == "XAUGBP" || u == "XAUAUD" ||
+         u == "GBPUSD" || u == "BTCUSD" || u == "ETHUSD" ||
+         u == "US30" || u == "NAS100" || u == "OIL" || u == "USOIL" || u == "UKOIL" ||
+         u == "GOLDENCOIN" || u == "SILVER" || u == "XAGUSD.A")
+         return false;
+      if(StringFind(u, "XAG") == 0)
+         return false;
+      if(StringFind(u, "GOLDEN") == 0)
+         return false;
+
+      string core = StripKnownPrefixes(u);
+      core = StripKnownSuffixes(core);
+      return MatchCore(core, out_base);
+     }
+
    // Returns true only for approved spot-gold aliases (+ optional broker affixes)
    bool IsApprovedGoldSymbol(const string symbol, string &out_base)
      {
@@ -243,6 +278,13 @@ public:
       string core = StripKnownPrefixes(u);
       core = StripKnownSuffixes(core);
       return MatchCore(core, out_base);
+     }
+
+   bool IsApprovedDeskSymbol(const string symbol, string &out_base)
+     {
+      CVantageGoldSymbolValidator desk;
+      desk.ConfigureDesk(m_allow_suffix, m_allow_prefix);
+      return desk.MatchDeskCore(symbol, out_base);
      }
 
    bool IsApprovedGoldSymbol(const string symbol)
@@ -272,6 +314,19 @@ bool IsApprovedGoldSymbol(const string symbol, const string aliases_csv,
    CVantageGoldSymbolValidator v;
    v.Configure(aliases_csv, allow_suffix, allow_prefix);
    return v.IsApprovedGoldSymbol(symbol, out_base);
+  }
+
+bool IsApprovedDeskSymbol(const string symbol, string &out_base)
+  {
+   CVantageGoldSymbolValidator v;
+   v.ConfigureDesk(true, true);
+   return v.MatchDeskCore(symbol, out_base);
+  }
+
+bool IsApprovedDeskSymbol(const string symbol)
+  {
+   string base;
+   return IsApprovedDeskSymbol(symbol, base);
   }
 
 #endif

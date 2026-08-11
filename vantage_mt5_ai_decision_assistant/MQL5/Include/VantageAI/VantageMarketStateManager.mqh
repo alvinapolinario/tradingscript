@@ -694,7 +694,7 @@ public:
 
       if(!m_cfg.enable) { out.valid = true; out.disable_reason = "Market State Engine disabled"; return true; }
       string base = "";
-      out.gold_symbol_valid = m_validator.IsApprovedGoldSymbol(m_symbol, base);
+      out.gold_symbol_valid = IsApprovedDeskSymbol(m_symbol, base);
       out.base_symbol = base;
       if(m_cfg.gold_only && !out.gold_symbol_valid)
         { out.valid = true; out.disable_reason = VANTAGE_MSE_DISABLE_MSG; return true; }

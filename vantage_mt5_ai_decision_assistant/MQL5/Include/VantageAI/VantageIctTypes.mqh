@@ -6,7 +6,7 @@
 
 #define VANTAGE_ICT_VERSION "1.0"
 #define VANTAGE_ICT_DISABLE_MSG \
-  "ICT Strategy Engine supports XAUUSD/Gold only."
+  "ICT Strategy Engine is disabled. Supported pairs: XAUUSD, EURUSD, USDJPY."
 
 enum ENUM_ICT_DECISION
   {

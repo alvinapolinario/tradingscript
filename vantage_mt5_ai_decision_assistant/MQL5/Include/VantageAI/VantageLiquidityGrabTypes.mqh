@@ -8,7 +8,7 @@
 
 #define VANTAGE_LIQGRAB_VERSION "1.0"
 #define VANTAGE_LIQGRAB_DISABLE_MSG \
-  "Liquidity Grab Monitor is disabled. This module supports XAUUSD/Gold only."
+  "Liquidity Grab Monitor is disabled. Supported pairs: XAUUSD, EURUSD, USDJPY."
 #define LG_MAX_LEVELS 48
 #define LG_MAX_CANDIDATES 8
 #define LG_MAX_EVIDENCE 16

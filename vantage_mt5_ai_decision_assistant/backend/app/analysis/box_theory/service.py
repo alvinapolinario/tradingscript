@@ -21,7 +21,7 @@ from app.analysis.box_theory.types import (
     SignalDecision,
 )
 from app.analysis.box_theory.utils import atr, candles_from_payload, validate_candles
-from app.analysis.gold_symbol_validator import is_approved_gold_symbol
+from app.analysis.desk_symbol_validator import desk_disable_message, is_approved_desk_symbol
 
 _log = logging.getLogger(__name__)
 
@@ -47,9 +47,9 @@ def analyze_box_strategy(
 ) -> dict[str, Any]:
     st = cfg or DEFAULT_BOX_STRATEGY_CONFIG
     sym = (symbol or "XAUUSD").upper()
-    gold_ok, base = is_approved_gold_symbol(sym)
-    if not gold_ok and base not in st.allowed_symbols:
-        return _disabled(sym, "Box Theory supports XAUUSD/Gold only.")
+    desk_ok, base = is_approved_desk_symbol(sym)
+    if not desk_ok:
+        return _disabled(sym, desk_disable_message("Box Theory Strategy"))
 
     err = validate_candles(candles_box)
     if err:

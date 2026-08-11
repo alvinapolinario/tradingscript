@@ -4,7 +4,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from app.analysis.gold_symbol_validator import is_approved_gold_symbol
+from app.analysis.desk_symbol_validator import desk_disable_message, is_approved_desk_symbol
 from app.analysis.ict.bias import compute_htf_bias
 from app.analysis.ict.explain import build_explanation
 from app.analysis.ict.liquidity import build_liquidity_levels
@@ -62,9 +62,9 @@ def analyze_ict_strategy(
     """Run ICT analysis on closed OHLC arrays. No look-ahead."""
     st = cfg or DEFAULT_ICT_CONFIG
     sym = (symbol or "XAUUSD").upper()
-    gold_ok, _base = is_approved_gold_symbol(sym)
-    if not gold_ok and sym.split(".")[0] not in st.allowed_symbols:
-        return _disabled(sym, "ICT supports XAUUSD/Gold only.")
+    desk_ok, _base = is_approved_desk_symbol(sym)
+    if not desk_ok:
+        return _disabled(sym, desk_disable_message("ICT Strategy Engine"))
 
     tf_map: dict[str, list[Candle]] = dict(candles_by_timeframe or {})
     setup = candles_setup or tf_map.get(st.primary_setup_timeframe) or []

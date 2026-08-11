@@ -73,14 +73,14 @@ def test_market_state_disabled_blob():
             "market_state_engine": {
                 "valid": True,
                 "gold_symbol_valid": False,
-                "disable_reason": "Market State Engine v2 is disabled. This module supports XAUUSD/Gold only.",
+                "disable_reason": "Market State Engine v2 is disabled. Supported pairs: XAUUSD, EURUSD, USDJPY.",
             },
         }
     )
     monitor_store.select_symbol("BTCUSD")
     body = client.get("/api/v1/market-state/status").json()
     assert body["market_state_engine"]["gold_symbol_valid"] is False
-    assert "XAUUSD/Gold only" in body["market_state_engine"]["disable_reason"]
+    assert "Supported pairs" in body["market_state_engine"]["disable_reason"]
 
 
 def test_market_state_page_served():

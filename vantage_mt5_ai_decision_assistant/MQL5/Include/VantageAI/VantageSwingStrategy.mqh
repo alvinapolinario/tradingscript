@@ -602,7 +602,7 @@ public:
          return true;
         }
       string base = "";
-      out.gold_symbol_valid = m_validator.IsApprovedGoldSymbol(m_symbol, base);
+      out.gold_symbol_valid = IsApprovedDeskSymbol(m_symbol, base);
       out.base_symbol = base;
       if(m_cfg.gold_only && !out.gold_symbol_valid)
         {

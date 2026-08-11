@@ -99,25 +99,45 @@ def test_liquidity_grab_status_passthrough():
     assert "liquidity_grab" in body["links"]
 
 
-def test_liquidity_grab_disabled_blob():
+def test_liquidity_grab_eurusd_passthrough():
+    sample = dict(SAMPLE_LIQUIDITY_GRAB)
+    sample.update({"symbol": "EURUSD", "base_symbol": "EURUSD", "liquidity_level_price": 1.0850, "sweep_price": 1.0852})
     monitor_store.record_heartbeat(
         {
             "symbol": "EURUSD",
-            "bid": 1.0,
-            "ask": 1.1,
+            "bid": 1.0850,
+            "ask": 1.0851,
             "digits": 5,
-            "liquidity_grab": {
-                "valid": True,
-                "gold_symbol_valid": False,
-                "disable_reason": "Liquidity Grab Monitor is disabled. This module supports XAUUSD/Gold only.",
-            },
+            "liquidity_grab": sample,
         }
     )
     monitor_store.select_symbol("EURUSD")
     client = TestClient(app)
     body = client.get("/api/v1/liquidity-grab/status").json()
+    assert body["liquidity_grab_supported"] is True
+    assert body["liquidity_grab"]["gold_symbol_valid"] is True
+    assert body["liquidity_grab"]["symbol"] == "EURUSD"
+
+
+def test_liquidity_grab_disabled_blob():
+    monitor_store.record_heartbeat(
+        {
+            "symbol": "BTCUSD",
+            "bid": 90000.0,
+            "ask": 90001.0,
+            "digits": 2,
+            "liquidity_grab": {
+                "valid": True,
+                "gold_symbol_valid": False,
+                "disable_reason": "Liquidity Grab Monitor is disabled. Supported pairs: XAUUSD, EURUSD, USDJPY.",
+            },
+        }
+    )
+    monitor_store.select_symbol("BTCUSD")
+    client = TestClient(app)
+    body = client.get("/api/v1/liquidity-grab/status").json()
     assert body["liquidity_grab"]["gold_symbol_valid"] is False
-    assert "XAUUSD/Gold only" in body["liquidity_grab"]["disable_reason"]
+    assert "Supported pairs" in body["liquidity_grab"]["disable_reason"]
 
 
 def test_liquidity_grab_page_served():

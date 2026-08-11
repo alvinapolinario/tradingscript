@@ -47,9 +47,15 @@ def _bearish_ict_series() -> tuple[list[Candle], list[Candle]]:
     return setup, exec_candles
 
 
-def test_non_gold_symbol_disabled():
-    r = analyze_ict_strategy(symbol="EURUSD", candles_setup=[_c(1, 1, 2, 0.5, 1.5)] * 20)
+def test_unsupported_symbol_disabled():
+    r = analyze_ict_strategy(symbol="GBPUSD", candles_setup=[_c(1, 1, 2, 0.5, 1.5)] * 20)
     assert r["valid"] is False
+
+
+def test_eurusd_symbol_enabled():
+    r = analyze_ict_strategy(symbol="EURUSD", candles_setup=[_c(1, 1, 2, 0.5, 1.5)] * 20)
+    assert r["valid"] is True
+    assert r["gold_symbol_valid"] is True
 
 
 def test_liquidity_levels_from_swings():

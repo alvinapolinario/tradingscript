@@ -8,7 +8,7 @@
 
 #define VANTAGE_SWING_STRAT_VERSION "1.0"
 #define VANTAGE_SWING_STRAT_DISABLE_MSG \
-  "Swing Strategy Engine is disabled. This module supports XAUUSD/Gold only."
+  "Swing Strategy Engine is disabled. Supported pairs: XAUUSD, EURUSD, USDJPY."
 #define SWING_STRAT_MAX_SWINGS 48
 
 enum ENUM_SWING_STRAT_TREND

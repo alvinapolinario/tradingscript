@@ -6,7 +6,7 @@
 
 #define VANTAGE_BOXTHEORY_VERSION "1.0"
 #define VANTAGE_BOXTHEORY_DISABLE_MSG \
-  "Box Theory Strategy is disabled. This module supports XAUUSD/Gold only."
+  "Box Theory Strategy is disabled. Supported pairs: XAUUSD, EURUSD, USDJPY."
 
 enum ENUM_BOX_SIGNAL
   {

@@ -6,7 +6,7 @@
 
 #define VANTAGE_AMDIFVG_VERSION "1.0"
 #define VANTAGE_AMDIFVG_DISABLE_MSG \
-  "AMD + iFVG Strategy is disabled. This module supports XAUUSD/Gold only."
+  "AMD + iFVG Strategy is disabled. Supported pairs: XAUUSD, EURUSD, USDJPY."
 
 enum ENUM_AMDIFVG_DECISION
   {

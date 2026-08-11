@@ -8,7 +8,7 @@
 
 #define VANTAGE_MSE_VERSION "2.0"
 #define VANTAGE_MSE_DISABLE_MSG \
-  "Market State Engine v2 is disabled. This module supports XAUUSD/Gold only."
+  "Market State Engine v2 is disabled. Supported pairs: XAUUSD, EURUSD, USDJPY."
 #define MSE_MAX_SWINGS 48
 #define MSE_MAX_TIMELINE 24
 #define MSE_MAX_EVENTS 32

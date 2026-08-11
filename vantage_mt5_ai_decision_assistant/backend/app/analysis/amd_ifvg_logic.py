@@ -9,7 +9,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
 
-from app.analysis.gold_symbol_validator import is_approved_gold_symbol
+from app.analysis.desk_symbol_validator import desk_disable_message, is_approved_desk_symbol
 from app.market_structure import (
     Candle,
     FvgStatus,
@@ -63,7 +63,7 @@ class Decision(str, Enum):
 @dataclass
 class AmdIfvgConfig:
     enabled: bool = True
-    allowed_symbols: tuple[str, ...] = ("XAUUSD", "GOLD")
+    allowed_symbols: tuple[str, ...] = ("XAUUSD", "GOLD", "EURUSD", "USDJPY")
     min_candles: int = 80
     pivot_left: int = 2
     pivot_right: int = 2
@@ -256,10 +256,9 @@ def analyze_amd_ifvg(
     """Main analyzer — closed-bar only, no look-ahead."""
     st = cfg or DEFAULT_AMD_IFVG_CONFIG
     sym = (symbol or "").upper()
-    base = sym.split(".")[0].split("+")[0]
-    gold_ok, _ = is_approved_gold_symbol(sym)
-    if not gold_ok and base not in st.allowed_symbols:
-        return _disabled_blob(sym, "AMD + iFVG supports XAUUSD/Gold only.")
+    desk_ok, _ = is_approved_desk_symbol(sym)
+    if not desk_ok:
+        return _disabled_blob(sym, desk_disable_message("AMD + iFVG Strategy"))
 
     err = _validate_candles(candles_setup)
     if err:

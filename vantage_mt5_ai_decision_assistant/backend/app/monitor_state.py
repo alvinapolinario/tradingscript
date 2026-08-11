@@ -28,6 +28,7 @@ def _norm_symbol(symbol: str | None) -> str:
 
 def _canonical_monitor_symbol(symbol: str | None) -> str:
     """Map broker symbols (XAUUSD+, GOLD.pro, BTCUSDm) to monitor pair keys."""
+    from app.analysis.desk_symbol_validator import is_approved_desk_symbol
     from app.analysis.gold_symbol_validator import is_approved_gold_symbol
 
     u = _norm_symbol(symbol)
@@ -38,6 +39,10 @@ def _canonical_monitor_symbol(symbol: str | None) -> str:
     if ok:
         # UI pair selector uses XAUUSD for all gold aliases.
         return "XAUUSD" if base in ("XAUUSD", "GOLD") else base
+
+    desk_ok, desk_base = is_approved_desk_symbol(u)
+    if desk_ok:
+        return "XAUUSD" if desk_base in ("XAUUSD", "GOLD") else desk_base
 
     core = u
     for suffix in ("+", ".", "M", "I"):

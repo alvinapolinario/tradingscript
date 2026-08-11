@@ -35,7 +35,7 @@ class IctDecision(str, Enum):
 @dataclass
 class IctConfig:
     enabled: bool = True
-    allowed_symbols: tuple[str, ...] = ("XAUUSD", "GOLD")
+    allowed_symbols: tuple[str, ...] = ("XAUUSD", "GOLD", "EURUSD", "USDJPY")
     min_candles: int = 60
     higher_timeframes: tuple[str, ...] = ("D1", "H4", "H1")
     setup_timeframes: tuple[str, ...] = ("H1", "M15")
