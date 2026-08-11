@@ -46,7 +46,9 @@ def normalize_macro_signal(
     if macro_status is None:
         from app.market_news.service import build_symbol_status
 
-        symbol = str(ea.get("symbol") or "XAUUSD").upper()
+        from app.market_news.pair_bias import normalize_symbol
+
+        symbol = normalize_symbol(str(ea.get("symbol") or ea.get("broker_symbol") or "XAUUSD"))
         macro_status = build_symbol_status(symbol, settings, ea_snapshot=ea)
 
     bias = macro_status.get("macro_bias") if isinstance(macro_status.get("macro_bias"), dict) else {}

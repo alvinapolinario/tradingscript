@@ -2,15 +2,16 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
-from typing import Any
+from typing import Any, Sequence
 
 from app.config import Settings
 from app.market_news.central_bank import build_central_bank_context, build_central_bank_map
 from app.market_news.conflict import macro_technical_conflict
 from app.market_news.pair_bias import build_pair_macro_bias, currency_sentiments_for_symbol, normalize_symbol, parse_symbol_legs
+from app.market_news.pair_bias import DEFAULT_MAJOR_MACRO_PAIRS
 from app.market_news.providers.registry import get_registry
 from app.market_news.risk_window import build_event_risk
-from app.market_news.sentiment import build_currency_sentiment
+from app.market_news.sentiment import build_currency_sentiment, _news_matches_currency
 from app.market_news.store import get_central_bank_overlay, get_central_bank_overlays
 from app.market_news.surprise import interpret_surprise
 from app.market_news.types import EconomicEvent, MacroBiasDirection, NormalizedNewsItem, NewsImportance, parse_utc
@@ -46,7 +47,7 @@ def _upcoming_events(events: list[EconomicEvent], *, currencies: set[str], now: 
 def _recent_news(news: list[NormalizedNewsItem], *, currencies: set[str], limit: int = 8) -> list[dict]:
     out = []
     for item in news:
-        if currencies and not (set(item.currencies) & currencies):
+        if currencies and not any(_news_matches_currency(item, ccy) for ccy in currencies):
             continue
         out.append(item.to_dict())
         if len(out) >= limit:
@@ -76,7 +77,7 @@ def _timeline(events: list[EconomicEvent], news: list[NormalizedNewsItem], *, cu
             )
         )
     for item in news:
-        if currencies and not (set(item.currencies) & currencies):
+        if currencies and not any(_news_matches_currency(item, ccy) for ccy in currencies):
             continue
         dt = parse_utc(item.published_at) or now
         rows.append(
@@ -268,6 +269,68 @@ def _major_currency_heatmap(
     return out
 
 
+def parse_major_macro_pairs(settings: Settings) -> tuple[str, ...]:
+    raw = (settings.market_news_major_pairs or "").strip()
+    if not raw:
+        return DEFAULT_MAJOR_MACRO_PAIRS
+    out: list[str] = []
+    seen: set[str] = set()
+    for part in raw.split(","):
+        sym = normalize_symbol(part)
+        if not sym or sym in seen:
+            continue
+        seen.add(sym)
+        out.append(sym)
+    return tuple(out) if out else DEFAULT_MAJOR_MACRO_PAIRS
+
+
+def _pair_status_line(status: dict[str, Any]) -> str:
+    macro = status.get("macro_bias") if isinstance(status.get("macro_bias"), dict) else {}
+    risk = status.get("event_risk") if isinstance(status.get("event_risk"), dict) else {}
+    return (
+        f"Macro {macro.get('direction', 'NEUTRAL')} {float(macro.get('confidence') or 0):.0f}% · "
+        f"{risk.get('message') or 'Calendar synced'}"
+    )
+
+
+def build_pair_macro_summary(
+    symbol: str,
+    settings: Settings,
+    *,
+    ea_snapshot: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Compact macro snapshot for a single pair (major-pair watch row)."""
+    sym = normalize_symbol(symbol)
+    status = build_symbol_status(sym, settings, ea_snapshot=ea_snapshot)
+    return {
+        "symbol": sym,
+        "macro_bias": status.get("macro_bias"),
+        "horizons": status.get("horizons"),
+        "currency_bias": status.get("currency_bias"),
+        "central_bank": status.get("central_bank"),
+        "event_risk": status.get("event_risk"),
+        "technical_alignment": status.get("technical_alignment"),
+        "drivers": (status.get("drivers") or [])[:4],
+        "status_line": _pair_status_line(status),
+    }
+
+
+def build_major_pairs_macro(
+    settings: Settings,
+    *,
+    ea_snapshot: dict[str, Any] | None = None,
+    symbols: Sequence[str] | None = None,
+) -> dict[str, dict[str, Any]]:
+    """Macro analysis for gold + major FX pairs (EURUSD, USDJPY, …)."""
+    pairs = symbols or parse_major_macro_pairs(settings)
+    ea_sym = normalize_symbol(str((ea_snapshot or {}).get("symbol") or ""))
+    out: dict[str, dict[str, Any]] = {}
+    for sym in pairs:
+        snap = ea_snapshot if ea_sym and normalize_symbol(sym) == ea_sym else None
+        out[normalize_symbol(sym)] = build_pair_macro_summary(sym, settings, ea_snapshot=snap)
+    return out
+
+
 def build_macro_desk_status(
     settings: Settings,
     *,
@@ -291,5 +354,7 @@ def build_macro_desk_status(
         for row in payload["calendar_table"]
         if row.get("importance") in {NewsImportance.HIGH.value, NewsImportance.CRITICAL.value}
     ][:8]
+    payload["major_pairs"] = build_major_pairs_macro(settings, ea_snapshot=ea_snapshot)
+    payload["major_pair_symbols"] = list(parse_major_macro_pairs(settings))
     payload["ai_interpret_enabled"] = bool(settings.market_news_ai_enabled and settings.use_llm)
     return payload

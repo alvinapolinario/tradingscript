@@ -41,3 +41,26 @@ def test_sentiment_from_hawkish_headline():
     ]
     sent = build_currency_sentiment("USD", events=[], news=news, now=now)
     assert sent.direction == MacroBiasDirection.BULLISH
+
+
+def test_news_matches_eur_from_headline():
+    from app.market_news.sentiment import _news_matches_currency
+
+    item = NormalizedNewsItem(
+        source=NewsSource.MANUAL,
+        headline="ECB Lagarde hints at rate cut in September",
+        published_at="2026-08-10T12:00:00Z",
+    )
+    assert _news_matches_currency(item, "EUR") is True
+    assert _news_matches_currency(item, "JPY") is False
+
+
+def test_news_matches_jpy_from_headline():
+    from app.market_news.sentiment import _news_matches_currency
+
+    item = NormalizedNewsItem(
+        source=NewsSource.MANUAL,
+        headline="BOJ Ueda keeps ultra-loose policy unchanged",
+        published_at="2026-08-10T12:00:00Z",
+    )
+    assert _news_matches_currency(item, "JPY") is True

@@ -16,8 +16,9 @@ def load_macro_context(ea: dict[str, Any]) -> dict[str, Any] | None:
         return None
     try:
         from app.market_news.service import build_symbol_status
+        from app.market_news.pair_bias import normalize_symbol
 
-        symbol = str(ea.get("symbol") or "XAUUSD").upper()
+        symbol = normalize_symbol(str(ea.get("symbol") or ea.get("broker_symbol") or "XAUUSD"))
         return build_symbol_status(symbol, settings, ea_snapshot=ea)
     except Exception:
         return None

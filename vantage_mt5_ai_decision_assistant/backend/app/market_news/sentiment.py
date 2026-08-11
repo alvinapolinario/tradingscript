@@ -79,6 +79,21 @@ def _news_contribution(item: NormalizedNewsItem, now: datetime) -> tuple[float, 
     return score, weight * classified.confidence, classified.driver
 
 
+def _news_matches_currency(item: NormalizedNewsItem, ccy: str) -> bool:
+    if ccy in item.currencies:
+        return True
+    text = f" {item.headline} {item.summary} ".upper()
+    if ccy == "XAU" and any(k in text for k in (" GOLD", " XAU", "PRECIOUS METAL")):
+        return True
+    if ccy == "EUR" and any(k in text for k in (" EUR", " EURO", " ECB", "EUROZONE")):
+        return True
+    if ccy == "JPY" and any(k in text for k in (" JPY", " YEN", " BOJ", "JAPAN")):
+        return True
+    if ccy == "USD" and any(k in text for k in (" USD", " U.S.", " FED", " FOMC", "DOLLAR")):
+        return True
+    return False
+
+
 def build_currency_sentiment(
     currency: str,
     *,
@@ -102,7 +117,7 @@ def build_currency_sentiment(
             drivers.append(driver)
 
     for item in news:
-        if ccy not in item.currencies:
+        if not _news_matches_currency(item, ccy):
             continue
         score, w, driver = _news_contribution(item, now)
         total_score += score

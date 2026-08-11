@@ -10,6 +10,9 @@ from app.market_news.types import CurrencySentiment, EconomicEvent, MacroBiasDir
 METAL_BASES = {"XAU", "XAG", "GOLD", "SILVER"}
 CRYPTO_BASES = {"BTC", "ETH", "BITCOIN"}
 
+# Primary macro desk pairs — gold plus major FX crosses (Step 14+ expansion).
+DEFAULT_MAJOR_MACRO_PAIRS = ("XAUUSD", "EURUSD", "USDJPY")
+
 
 def normalize_symbol(symbol: str) -> str:
     return (symbol or "").upper().replace("#", "").replace(".", "").strip()

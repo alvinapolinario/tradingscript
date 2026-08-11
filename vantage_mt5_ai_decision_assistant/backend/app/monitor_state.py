@@ -10,7 +10,7 @@ from typing import Any
 
 
 # Always offered in the monitor pair selector (plus any other live EA symbols).
-DEFAULT_MONITOR_PAIRS = ("XAUUSD", "BTCUSD")
+DEFAULT_MONITOR_PAIRS = ("XAUUSD", "EURUSD", "USDJPY", "BTCUSD")
 
 
 def _utc_now() -> datetime:

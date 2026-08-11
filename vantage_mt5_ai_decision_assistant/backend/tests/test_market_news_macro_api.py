@@ -81,3 +81,19 @@ def test_status_endpoint(tmp_market_news_db):
     assert body["module"] == "market_news"
     assert "status_line" in body
     assert body["symbol"] == "XAUUSD"
+
+
+def test_status_includes_major_fx_pairs(tmp_market_news_db):
+    _seed_usd_cpi()
+    r = client.get("/api/v1/market-news/status?symbol=EURUSD")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["symbol"] == "EURUSD"
+    assert "major_pairs" in body
+    assert "EURUSD" in body["major_pairs"]
+    assert "USDJPY" in body["major_pairs"]
+    assert "XAUUSD" in body["major_pairs"]
+    eur = body["major_pairs"]["EURUSD"]
+    assert "macro_bias" in eur
+    assert "EUR" in eur.get("currency_bias", {})
+    assert "USD" in eur.get("currency_bias", {})

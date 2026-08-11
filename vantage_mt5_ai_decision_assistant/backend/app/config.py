@@ -106,6 +106,8 @@ class Settings(BaseSettings):
     newsapi_key: str | None = None
     newsapi_query: str = "forex OR gold OR federal reserve OR CPI OR FOMC"
     market_news_external_fetch_timeout_sec: float = 15.0
+    # Comma-separated macro desk watchlist (default: gold + major FX)
+    market_news_major_pairs: str = "XAUUSD,EURUSD,USDJPY"
     # FXSTREET_API_KEY=  # reserved for future licensed adapter
 
 

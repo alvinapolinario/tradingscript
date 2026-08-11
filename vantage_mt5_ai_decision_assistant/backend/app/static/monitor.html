@@ -422,6 +422,8 @@
         <label for="pairSelect">Pair</label>
         <select id="pairSelect" aria-label="Monitor pair">
           <option value="XAUUSD">XAUUSD</option>
+          <option value="EURUSD">EURUSD</option>
+          <option value="USDJPY">USDJPY</option>
           <option value="BTCUSD">BTCUSD</option>
         </select>
       </div>
@@ -1213,8 +1215,8 @@
       const symbols = status.symbols || [];
       const names = (status.available_symbols && status.available_symbols.length)
         ? status.available_symbols.slice()
-        : ["XAUUSD", "BTCUSD"];
-      ["XAUUSD", "BTCUSD"].forEach((p) => { if (!names.includes(p)) names.unshift(p); });
+        : ["XAUUSD", "EURUSD", "USDJPY", "BTCUSD"];
+      ["XAUUSD", "EURUSD", "USDJPY", "BTCUSD"].forEach((p) => { if (!names.includes(p)) names.unshift(p); });
       const byName = Object.fromEntries(symbols.map((x) => [x.symbol, x]));
       const current = sel.value;
       sel.innerHTML = names.map((name) => {
