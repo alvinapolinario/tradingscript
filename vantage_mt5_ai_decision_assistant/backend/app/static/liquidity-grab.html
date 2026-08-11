@@ -56,7 +56,7 @@
   <header>
     <div>
       <h1>Liquidity Grab Monitor</h1>
-      <div class="sub">XAUUSD / Gold · rule-based SMC · advisory only · sessions shown in Asia/Manila on web</div>
+      <div class="sub">XAUUSD, EURUSD, USDJPY · rule-based SMC · advisory only · sessions shown in Asia/Manila on web</div>
     </div>
     <span class="pill" id="statusPill">—</span>
   </header>
@@ -94,7 +94,7 @@
 
       if (!lg.gold_symbol_valid) {
         document.getElementById("statusPill").textContent = "wrong symbol";
-        root.innerHTML = `<div class="warn-box">${lg.disable_reason || "Gold / XAUUSD only."}</div>`;
+        root.innerHTML = `<div class="warn-box">${lg.disable_reason || "Supported pairs: XAUUSD, EURUSD, USDJPY."}</div>`;
         return;
       }
 

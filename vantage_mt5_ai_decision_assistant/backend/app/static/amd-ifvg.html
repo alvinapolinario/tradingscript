@@ -62,7 +62,7 @@
   <header>
     <div>
       <h1>AMD + iFVG Strategy</h1>
-      <div class="sub">XAUUSD / Gold · Accumulation → Manipulation → Distribution + inversion FVG · advisory only — never auto-trades</div>
+      <div class="sub">XAUUSD, EURUSD, USDJPY · Accumulation → Manipulation → Distribution + inversion FVG · advisory only — never auto-trades</div>
     </div>
     <span id="pill" class="pill wait">—</span>
   </header>
@@ -137,7 +137,7 @@
       if (!a.gold_symbol_valid) {
         pill.textContent = "wrong symbol";
         pill.className = "pill muted";
-        root.innerHTML = `<div class="warn-box">${a.disable_reason || "Gold / XAUUSD only."}</div>`;
+        root.innerHTML = `<div class="warn-box">${a.disable_reason || "Supported pairs: XAUUSD, EURUSD, USDJPY."}</div>`;
         return;
       }
 

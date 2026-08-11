@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
 
+from app.analysis.desk_symbol_validator import DESK_STRATEGY_CAPTION
 from app.analysis.decision import decide
 from app.analysis.technical import validate_symbol_sanity
 from app.config import Settings, get_settings
@@ -373,7 +374,7 @@ def liquidity_grab_status() -> dict:
     selected = str(st.get("selected_symbol") or ea.get("symbol") or "").upper()
     return {
         "advisory_only": True,
-        "caption": "Advisory only — never places, modifies, or cancels MT5 orders. Gold / XAUUSD only.",
+        "caption": DESK_STRATEGY_CAPTION,
         "ea_online": bool(link.get("ea_online") or ea.get("connected")),
         "liquidity_grab_supported": bool(ea.get("liquidity_grab_supported")),
         "selected_symbol": selected,
@@ -404,7 +405,7 @@ def breakout_structure_status() -> dict:
     selected = str(st.get("selected_symbol") or ea.get("symbol") or "").upper()
     return {
         "advisory_only": True,
-        "caption": "Advisory only — never places, modifies, or cancels MT5 orders. Gold / XAUUSD only.",
+        "caption": DESK_STRATEGY_CAPTION,
         "ea_online": bool(link.get("ea_online") or ea.get("connected")),
         "breakout_structure_supported": bool(ea.get("breakout_structure_supported")),
         "selected_symbol": selected,
@@ -436,7 +437,7 @@ def market_state_status() -> dict:
     selected = str(st.get("selected_symbol") or ea.get("symbol") or "").upper()
     return {
         "advisory_only": True,
-        "caption": "Advisory only — never places, modifies, or cancels MT5 orders. Gold / XAUUSD only.",
+        "caption": DESK_STRATEGY_CAPTION,
         "ea_online": bool(link.get("ea_online") or ea.get("connected")),
         "market_state_engine_supported": bool(ea.get("market_state_engine_supported")),
         "selected_symbol": selected,
@@ -469,7 +470,7 @@ def swing_strategy_status() -> dict:
     selected = str(st.get("selected_symbol") or ea.get("symbol") or "").upper()
     return {
         "advisory_only": True,
-        "caption": "Advisory only — never places, modifies, or cancels MT5 orders. Gold / XAUUSD only.",
+        "caption": DESK_STRATEGY_CAPTION,
         "ea_online": bool(link.get("ea_online") or ea.get("connected")),
         "swing_strategy_supported": bool(ea.get("swing_strategy_supported")),
         "selected_symbol": selected,
@@ -502,7 +503,7 @@ def amd_ifvg_status() -> dict:
     selected = str(st.get("selected_symbol") or ea.get("symbol") or "").upper()
     return {
         "advisory_only": True,
-        "caption": "Advisory only — never places, modifies, or cancels MT5 orders. Gold / XAUUSD only.",
+        "caption": DESK_STRATEGY_CAPTION,
         "ea_online": bool(link.get("ea_online") or ea.get("connected")),
         "amd_ifvg_supported": bool(ea.get("amd_ifvg_supported")),
         "selected_symbol": selected,
@@ -568,7 +569,7 @@ def box_theory_status() -> dict:
     selected = str(st.get("selected_symbol") or ea.get("symbol") or "").upper()
     return {
         "advisory_only": True,
-        "caption": "Advisory only — never places, modifies, or cancels MT5 orders. Gold / XAUUSD only.",
+        "caption": DESK_STRATEGY_CAPTION,
         "ea_online": bool(link.get("ea_online") or ea.get("connected")),
         "box_theory_supported": bool(ea.get("box_theory_supported")),
         "selected_symbol": selected,
@@ -693,7 +694,7 @@ def ict_status() -> dict:
 
     return {
         "advisory_only": True,
-        "caption": "Advisory only — never places, modifies, or cancels MT5 orders. Gold / XAUUSD only.",
+        "caption": DESK_STRATEGY_CAPTION,
         "ea_online": bool(link.get("ea_online") or ea.get("connected")),
         "ict_supported": bool(ea.get("ict_supported")) or backend_active,
         "backend_engine_available": True,

@@ -10,6 +10,11 @@ from app.analysis.gold_symbol_validator import (
 
 DEFAULT_DESK_ALIASES = ("XAUUSD", "GOLD", "EURUSD", "USDJPY")
 DESK_SUPPORTED_PAIRS = "XAUUSD, EURUSD, USDJPY"
+DESK_STRATEGY_CAPTION = (
+    "Advisory only — never places, modifies, or cancels MT5 orders. "
+    f"Supported pairs: {DESK_SUPPORTED_PAIRS}."
+)
+DESK_UNSUPPORTED_FALLBACK = f"Supported pairs: {DESK_SUPPORTED_PAIRS}."
 
 _DESK_HARD_REJECT = {
     "XAGUSD",

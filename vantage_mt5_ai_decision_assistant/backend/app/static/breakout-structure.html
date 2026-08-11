@@ -116,7 +116,7 @@
   <header>
     <div>
       <h1>📊 BREAKOUT STRUCTURE INTELLIGENCE</h1>
-      <div class="sub">XAUUSD / Gold only · lifecycle breakout analyst · advisory — never places orders</div>
+      <div class="sub">XAUUSD, EURUSD, USDJPY · lifecycle breakout analyst · advisory — never places orders</div>
     </div>
     <span id="pill" class="pill c-inactive">—</span>
   </header>
@@ -213,7 +213,7 @@
         return;
       }
       if (!b.gold_symbol_valid) {
-        root.innerHTML = `<div class="empty">${b.disable_reason || "This module supports XAUUSD / Gold only."}</div>`;
+        root.innerHTML = `<div class="empty">${b.disable_reason || "Supported pairs: XAUUSD, EURUSD, USDJPY."}</div>`;
         return;
       }
 
@@ -340,7 +340,7 @@
             <p class="hint" style="margin:0;font-size:.84rem;color:var(--text);line-height:1.6">${b.ai_reasoning || b.recommendation || "—"}</p>
           </div>
         </div>
-        <p style="color:var(--muted);font-size:.74rem;text-align:center;margin-top:1rem">Advisory structural intelligence · XAUUSD only · no MT5 orders</p>`;
+        <p style="color:var(--muted);font-size:.74rem;text-align:center;margin-top:1rem">Advisory structural intelligence · XAUUSD, EURUSD, USDJPY · no MT5 orders</p>`;
     }
 
     async function tick() {

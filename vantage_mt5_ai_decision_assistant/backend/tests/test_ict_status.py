@@ -28,6 +28,7 @@ def test_ict_status_passthrough():
     body = TestClient(app).get("/api/v1/ict/status").json()
     assert body["ict_supported"] is True
     assert body["backend_engine_available"] is True
+    assert "EURUSD, USDJPY" in body["caption"]
     assert body["ict"]["decision"] == "WAIT"
 
 

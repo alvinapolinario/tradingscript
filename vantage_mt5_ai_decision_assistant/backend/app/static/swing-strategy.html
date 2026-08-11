@@ -40,7 +40,7 @@
   <header>
     <div>
       <h1>Swing Strategy Engine</h1>
-      <div class="sub">XAUUSD / Gold only · multi-TF SMC swing validation · advisory — never auto-trades</div>
+      <div class="sub">XAUUSD, EURUSD, USDJPY · multi-TF SMC swing validation · advisory — never auto-trades</div>
     </div>
     <span id="modePill" class="pill wait">—</span>
     <span id="pill" class="pill wait">—</span>
@@ -69,7 +69,7 @@
         root.innerHTML = `<div class="empty">EA not sending <b>swing_strategy</b>. Recompile with groups AK–AO enabled.</div>`;
         return;
       }
-      if (!s.gold_symbol_valid) { root.innerHTML = `<div class="empty">${s.disable_reason || "Gold only."}</div>`; return; }
+      if (!s.gold_symbol_valid) { root.innerHTML = `<div class="empty">${s.disable_reason || "Supported pairs: XAUUSD, EURUSD, USDJPY."}</div>`; return; }
 
       const sig = signature(s);
       const pill = document.getElementById("pill");

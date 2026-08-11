@@ -36,7 +36,7 @@
   <header>
     <div>
       <h1>Institutional Market State Engine v2</h1>
-      <div class="sub">XAUUSD / Gold only · lifecycle intelligence · explainable scoring · no trade orders</div>
+      <div class="sub">XAUUSD, EURUSD, USDJPY · lifecycle intelligence · explainable scoring · no trade orders</div>
     </div>
     <span id="pill" style="font-size:.78rem;color:var(--muted)">—</span>
   </header>
@@ -82,7 +82,7 @@
         return;
       }
       if (!m.gold_symbol_valid) {
-        root.innerHTML = `<div class="empty">${m.disable_reason || "Gold only."}</div>`;
+        root.innerHTML = `<div class="empty">${m.disable_reason || "Supported pairs: XAUUSD, EURUSD, USDJPY."}</div>`;
         return;
       }
       document.getElementById("pill").textContent = m.signal_lifecycle || "—";

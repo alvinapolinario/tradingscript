@@ -75,13 +75,15 @@
   <header>
     <div>
       <h1>ICT Strategy Engine</h1>
-      <div class="sub">XAUUSD / Gold · liquidity sweep → displacement → MSS → FVG retrace · advisory only — never auto-trades</div>
+      <div class="sub">XAUUSD, EURUSD, USDJPY · liquidity sweep → displacement → MSS → FVG retrace · advisory only — never auto-trades</div>
     </div>
     <span id="pill" class="pill wait">—</span>
   </header>
   <main id="main"><div class="empty">Loading…</div></main>
   <script src="/static/shell.js"></script>
   <script>
+    const DESK_PAIRS = "XAUUSD, EURUSD, USDJPY";
+    const DESK_UNSUPPORTED = `Supported pairs: ${DESK_PAIRS}.`;
     const STEP_LABELS = {
       HTF_BIAS: "HTF bias",
       LIQUIDITY: "Liquidity map",
@@ -170,7 +172,7 @@
         pill.className = "pill muted";
         if (!p.ea_online) {
           root.innerHTML = `<div class="empty">
-            EA offline. Attach the Vantage EA on <b>XAUUSD</b>, or run offline analysis via
+            EA offline. Attach the Vantage EA on <b>${p.symbol || DESK_PAIRS.split(", ")[0]}</b>, or run offline analysis via
             <code>POST /api/v1/ict/analyze</code> with multi-TF candle data.
             ${p.backend_engine_available ? "<br/><br/>Backend ICT engine is available for offline analyze." : ""}
           </div>`;
@@ -190,14 +192,19 @@
           </div>`;
           return;
         }
-        root.innerHTML = `<div class="empty">Scanning closed bars for ICT setup on ${p.symbol || "XAUUSD"}…</div>`;
+        root.innerHTML = `<div class="empty">Scanning closed bars for ICT setup on ${p.symbol || "—"}…</div>`;
         return;
       }
 
       if (i.gold_symbol_valid === false && i.valid !== false) {
         pill.textContent = "wrong symbol";
         pill.className = "pill muted";
-        root.innerHTML = `<div class="warn-box">${i.disable_reason || "Gold / XAUUSD only."}</div>`;
+        const sym = String(p.symbol || p.selected_symbol || i.symbol || "").toUpperCase();
+        const deskPair = ["XAUUSD", "EURUSD", "USDJPY"].includes(sym);
+        const recompileHint = deskPair
+          ? `<br/><br/>EA on <b>${sym}</b> may need a recompiled <code>VantageMT5AIDecisionAssistant.mq5</code> reload.`
+          : "";
+        root.innerHTML = `<div class="warn-box">${i.disable_reason || DESK_UNSUPPORTED}${recompileHint}</div>`;
         return;
       }
 

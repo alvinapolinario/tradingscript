@@ -44,7 +44,7 @@
   <header>
     <div>
       <h1>Box Theory Strategy</h1>
-      <div class="sub">XAUUSD / Gold · consolidation box → breakout → retest → confirmation · advisory only — never auto-trades</div>
+      <div class="sub">XAUUSD, EURUSD, USDJPY · consolidation box → breakout → retest → confirmation · advisory only — never auto-trades</div>
     </div>
     <span id="pill" class="pill wait">—</span>
   </header>
@@ -105,7 +105,7 @@
       if (b.gold_symbol_valid === false && b.valid !== false) {
         pill.textContent = "wrong symbol";
         pill.className = "pill muted";
-        root.innerHTML = `<div class="warn-box">${b.disable_reason || "Gold / XAUUSD only."}</div>`;
+        root.innerHTML = `<div class="warn-box">${b.disable_reason || "Supported pairs: XAUUSD, EURUSD, USDJPY."}</div>`;
         return;
       }
 

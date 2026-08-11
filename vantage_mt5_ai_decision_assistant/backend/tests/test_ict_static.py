@@ -10,4 +10,5 @@ def test_ict_page_loads():
     assert "ICT Strategy" in r.text
     assert "/api/v1/ict/status" in r.text
     assert "Setup progress" in r.text
+    assert "EURUSD, USDJPY" in r.text
     assert "renderProgress" in r.text
