@@ -78,3 +78,21 @@ def is_approved_desk_symbol(
 
 def desk_disable_message(module: str) -> str:
     return f"{module} is disabled. Supported pairs: {DESK_SUPPORTED_PAIRS}."
+
+
+def normalize_strategy_symbol_blob(blob: dict | None, symbol: str | None) -> dict | None:
+    """Correct stale EA gold_symbol_valid flags when broker symbol uses Vantage suffixes."""
+    if not isinstance(blob, dict):
+        return blob
+    sym = (symbol or blob.get("symbol") or blob.get("base_symbol") or "").strip().upper()
+    if not sym:
+        return blob
+    ok, base = is_approved_desk_symbol(sym)
+    if not ok or blob.get("gold_symbol_valid") is not False:
+        return blob
+    fixed = dict(blob)
+    fixed["gold_symbol_valid"] = True
+    fixed["base_symbol"] = base or sym
+    if fixed.get("disable_reason"):
+        fixed["disable_reason"] = ""
+    return fixed

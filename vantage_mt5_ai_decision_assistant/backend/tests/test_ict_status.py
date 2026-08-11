@@ -62,6 +62,28 @@ def test_ict_strategy_summary_endpoint():
     assert body["decision"] == "WAIT"
 
 
+def test_ict_status_normalizes_vantage_plus_symbol():
+    monitor_store.record_heartbeat(
+        {
+            "symbol": "EURUSD+",
+            "bid": 1.085,
+            "ask": 1.0851,
+            "digits": 5,
+            "ict": {
+                "valid": True,
+                "gold_symbol_valid": False,
+                "symbol": "EURUSD+",
+                "disable_reason": "ICT Strategy Engine is disabled. Supported pairs: XAUUSD, EURUSD, USDJPY.",
+                "decision": "WAIT",
+            },
+        }
+    )
+    monitor_store.select_symbol("EURUSD")
+    body = TestClient(app).get("/api/v1/ict/status").json()
+    assert body["ict"]["gold_symbol_valid"] is True
+    assert body["ict"]["base_symbol"] == "EURUSD"
+
+
 def test_ict_analyze_endpoint():
     candles = []
     base = 4000.0

@@ -57,6 +57,9 @@ def _strip_suffixes(s: str, allow: bool) -> str:
     if not allow:
         return s
     out = s
+    # Vantage / raw account symbols: EURUSD+, XAUUSD+, etc.
+    while len(out) > 4 and out[-1] in "+#":
+        out = out[:-1]
     for _ in range(4):
         m = re.match(r"^(.+)[._\-]([A-Z0-9]{1,6})$", out)
         if not m:

@@ -201,8 +201,9 @@
         pill.className = "pill muted";
         const sym = String(p.symbol || p.selected_symbol || i.symbol || "").toUpperCase();
         const deskPair = ["XAUUSD", "EURUSD", "USDJPY"].includes(sym);
+        const brokerSym = String(i.symbol || p.symbol || p.selected_symbol || sym || "—");
         const recompileHint = deskPair
-          ? `<br/><br/>EA on <b>${sym}</b> may need a recompiled <code>VantageMT5AIDecisionAssistant.mq5</code> reload.`
+          ? `<br/><br/>Broker symbol <b>${brokerSym}</b> — if this persists after recompile, restart the backend and confirm Market Watch uses EURUSD / USDJPY (Vantage may show <b>EURUSD+</b>).`
           : "";
         root.innerHTML = `<div class="warn-box">${i.disable_reason || DESK_UNSUPPORTED}${recompileHint}</div>`;
         return;

@@ -51,6 +51,11 @@ private:
       if(!m_allow_suffix)
          return upper;
       string s = upper;
+      // Vantage raw/ECN symbols: EURUSD+, XAUUSD+, USDJPY+
+      while(StringLen(s) > 4 && StringGetCharacter(s, StringLen(s) - 1) == '+')
+         s = StringSubstr(s, 0, StringLen(s) - 1);
+      while(StringLen(s) > 4 && StringGetCharacter(s, StringLen(s) - 1) == '#')
+         s = StringSubstr(s, 0, StringLen(s) - 1);
       // Repeated strip of common trailing patterns
       for(int pass = 0; pass < 4; pass++)
         {

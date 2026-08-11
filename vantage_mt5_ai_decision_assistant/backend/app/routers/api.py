@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
 
-from app.analysis.desk_symbol_validator import DESK_STRATEGY_CAPTION
+from app.analysis.desk_symbol_validator import DESK_STRATEGY_CAPTION, normalize_strategy_symbol_blob
 from app.analysis.decision import decide
 from app.analysis.technical import validate_symbol_sanity
 from app.config import Settings, get_settings
@@ -26,6 +26,11 @@ from app.schemas import (
 )
 
 router = APIRouter()
+
+
+def _ea_strategy_blob(ea: dict, field: str, selected: str):
+    sym = str(ea.get("symbol") or selected or "").upper()
+    return normalize_strategy_symbol_blob(ea.get(field), sym)
 
 
 def require_bearer(
@@ -370,8 +375,8 @@ def liquidity_grab_status() -> dict:
     st = monitor_store.status()
     ea = st.get("vantage_ea") or {}
     link = st.get("link_health") or {}
-    blob = ea.get("liquidity_grab")
     selected = str(st.get("selected_symbol") or ea.get("symbol") or "").upper()
+    blob = _ea_strategy_blob(ea, "liquidity_grab", selected)
     return {
         "advisory_only": True,
         "caption": DESK_STRATEGY_CAPTION,
@@ -401,8 +406,8 @@ def breakout_structure_status() -> dict:
     st = monitor_store.status()
     ea = st.get("vantage_ea") or {}
     link = st.get("link_health") or {}
-    blob = ea.get("breakout_structure")
     selected = str(st.get("selected_symbol") or ea.get("symbol") or "").upper()
+    blob = _ea_strategy_blob(ea, "breakout_structure", selected)
     return {
         "advisory_only": True,
         "caption": DESK_STRATEGY_CAPTION,
@@ -433,8 +438,8 @@ def market_state_status() -> dict:
     st = monitor_store.status()
     ea = st.get("vantage_ea") or {}
     link = st.get("link_health") or {}
-    blob = ea.get("market_state_engine")
     selected = str(st.get("selected_symbol") or ea.get("symbol") or "").upper()
+    blob = _ea_strategy_blob(ea, "market_state_engine", selected)
     return {
         "advisory_only": True,
         "caption": DESK_STRATEGY_CAPTION,
@@ -466,8 +471,8 @@ def swing_strategy_status() -> dict:
     st = monitor_store.status()
     ea = st.get("vantage_ea") or {}
     link = st.get("link_health") or {}
-    blob = ea.get("swing_strategy")
     selected = str(st.get("selected_symbol") or ea.get("symbol") or "").upper()
+    blob = _ea_strategy_blob(ea, "swing_strategy", selected)
     return {
         "advisory_only": True,
         "caption": DESK_STRATEGY_CAPTION,
@@ -499,8 +504,8 @@ def amd_ifvg_status() -> dict:
     st = monitor_store.status()
     ea = st.get("vantage_ea") or {}
     link = st.get("link_health") or {}
-    blob = ea.get("amd_ifvg")
     selected = str(st.get("selected_symbol") or ea.get("symbol") or "").upper()
+    blob = _ea_strategy_blob(ea, "amd_ifvg", selected)
     return {
         "advisory_only": True,
         "caption": DESK_STRATEGY_CAPTION,
@@ -565,8 +570,8 @@ def box_theory_status() -> dict:
     st = monitor_store.status()
     ea = st.get("vantage_ea") or {}
     link = st.get("link_health") or {}
-    blob = ea.get("box_theory")
     selected = str(st.get("selected_symbol") or ea.get("symbol") or "").upper()
+    blob = _ea_strategy_blob(ea, "box_theory", selected)
     return {
         "advisory_only": True,
         "caption": DESK_STRATEGY_CAPTION,
@@ -691,6 +696,9 @@ def ict_status() -> dict:
                     "setup_record": record_to_dict(active),
                     "status": active.state.value,
                 }
+
+    sym = str(ea.get("symbol") or selected).upper()
+    blob = normalize_strategy_symbol_blob(blob, sym)
 
     return {
         "advisory_only": True,
