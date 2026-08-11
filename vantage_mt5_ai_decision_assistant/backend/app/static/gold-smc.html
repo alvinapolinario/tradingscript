@@ -125,10 +125,41 @@
       document.getElementById("statusPill").textContent = g.gold_symbol_valid ? "gold ok" : "not gold";
 
       if (!g.gold_symbol_valid) {
+        const sym = g.symbol || payload.selected_symbol || "—";
+        const macroHref = sym && sym !== "—" ? `/market-news?symbol=${encodeURIComponent(sym)}` : "/market-news";
         root.innerHTML = `<div class="warn-box"><strong>${g.disable_reason || DISABLE_MSG}</strong><br/>
-          <span class="meta" style="color:inherit">Selected: ${g.symbol || payload.selected_symbol || "—"}</span></div>
+          <span class="meta" style="color:inherit">Selected: ${sym}</span></div>
+          <div class="card">
+            <div class="k">This page is Gold SMC only</div>
+            <div class="v" style="font-family:var(--sans);font-size:.88rem;font-weight:600">
+              For <b>${sym}</b> macro bias, calendar, and currency analysis, use <b>News / Macro Intelligence</b>.
+            </div>
+            <div class="meta" style="margin-top:.55rem">
+              Gold SMC = chart structure (BOS, POI, liquidity) on XAUUSD.
+              News / Macro = economic calendar + EUR/USD/JPY bias for major pairs.
+            </div>
+            <div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-top:.75rem">
+              <a href="${macroHref}" style="display:inline-flex;align-items:center;padding:.45rem .75rem;border-radius:10px;border:1px solid rgba(126,184,255,.45);background:rgba(126,184,255,.1);color:#9ec5ff;text-decoration:none;font-size:.82rem;font-weight:650">Open News / Macro → ${sym}</a>
+              <button type="button" id="switchGoldBtn" style="padding:.45rem .75rem;border-radius:10px;border:1px solid var(--line);background:var(--panel);color:var(--text);font-size:.82rem;cursor:pointer">Switch desk to XAUUSD</button>
+            </div>
+          </div>
           <div class="card"><div class="k">Status</div><div class="v">${g.status_line || "DISABLED"}</div>
           <div class="meta">${g.technical_narrative || ""}</div></div>`;
+        const btn = document.getElementById("switchGoldBtn");
+        if (btn) {
+          btn.addEventListener("click", async () => {
+            selectingSymbol = true;
+            try {
+              await fetch("/api/v1/monitor/select-symbol", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ symbol: "XAUUSD" }),
+              });
+            } catch (_) {}
+            selectingSymbol = false;
+            await refresh();
+          });
+        }
         return;
       }
 
