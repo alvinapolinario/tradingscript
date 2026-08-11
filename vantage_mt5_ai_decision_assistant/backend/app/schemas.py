@@ -378,3 +378,81 @@ class AiAnalyzeRequest(BaseModel):
     symbol: str = ""
     extra_question: str = ""
     bypass_cache: bool = False
+
+
+# --- Market news / macro intelligence (Step 2+) ---
+
+
+class MarketNewsEconomicEventIn(BaseModel):
+    """Single economic calendar row from MT5 bridge or external provider."""
+
+    event_id: str = ""
+    external_event_id: str = ""
+    currency: str
+    country: str = ""
+    event: str
+    importance: str = "MEDIUM"
+    scheduled_at: str
+    previous: float | None = None
+    forecast: float | None = None
+    actual: float | None = None
+    status: str = "SCHEDULED"
+    category: str = "OTHER"
+
+
+class Mt5CalendarIngestRequest(BaseModel):
+    """POST /api/v1/market-news/mt5-calendar payload (Step 3)."""
+
+    source: str = "MT5_CALENDAR"
+    server_time_utc: str = ""
+    terminal: str = ""
+    broker: str = ""
+    events: list[MarketNewsEconomicEventIn] = Field(default_factory=list)
+
+
+class NormalizedNewsItemIn(BaseModel):
+    """Textual news ingest (manual / RSS / licensed API)."""
+
+    source: str = "NEWS_PROVIDER"
+    external_id: str = ""
+    headline: str
+    summary: str = ""
+    body: str = ""
+    published_at: str
+    currencies: list[str] = Field(default_factory=list)
+    symbols: list[str] = Field(default_factory=list)
+    category: str = "OTHER"
+    importance: str = "MEDIUM"
+    raw_url: str = ""
+
+
+class MarketNewsIngestRequest(BaseModel):
+    """Bulk news ingest — Step 5+."""
+
+    items: list[NormalizedNewsItemIn] = Field(default_factory=list)
+
+
+class MarketNewsCurrencyBiasOut(BaseModel):
+    direction: str
+    confidence: float
+    horizon: str = "INTRADAY"
+
+
+class MarketNewsAiAnalysisOut(BaseModel):
+    """Structured AI interpretation shape (Step 11)."""
+
+    headline: str
+    category: str
+    time_horizon: str
+    currencies: dict[str, MarketNewsCurrencyBiasOut] = Field(default_factory=dict)
+    symbols: dict[str, MarketNewsCurrencyBiasOut] = Field(default_factory=dict)
+    drivers: list[str] = Field(default_factory=list)
+    counter_drivers: list[str] = Field(default_factory=list)
+
+
+class MarketNewsAnalyzeRequest(BaseModel):
+    """POST /api/v1/market-news/analyze — manual re-run (Step 11)."""
+
+    symbol: str = "XAUUSD"
+    headline: str | None = None
+    force: bool = False

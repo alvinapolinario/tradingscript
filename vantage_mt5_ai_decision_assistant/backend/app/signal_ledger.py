@@ -792,6 +792,14 @@ def build_analyzer_status(
     elif h1:
         pattern_label = f"H1 {h1.title()} bias"
 
+    macro_section: dict[str, Any] = {"enabled": False}
+    try:
+        from app.market_news.verdict_integration import analyzer_macro_section
+
+        macro_section = analyzer_macro_section(ea)
+    except Exception:
+        pass
+
     return {
         "advisory_only": True,
         "mode": mode,
@@ -813,6 +821,7 @@ def build_analyzer_status(
             "label": pattern_label,
             "bias_pct": (active or {}).get("score"),
         },
+        "macro": macro_section,
         "active_signal": active,
         "dashboard": dash,
         "symbols": symbols,

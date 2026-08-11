@@ -8,6 +8,42 @@ from app.analysis.confluence.types import ConfluenceConfig, ConfluenceResult, Di
 from app.analysis.confluence.weights import DEFAULT_STRATEGY_WEIGHTS
 
 
+def collect_confluence_signals(ea: dict[str, Any], cfg: ConfluenceConfig | None = None) -> list[StrategySignal]:
+    """EA strategy signals plus optional MACRO signal when market news is enabled."""
+    st = cfg or ConfluenceConfig()
+    signals = normalize_ea_signals(ea, st)
+    try:
+        from app.market_news.confluence_signal import normalize_macro_signal
+
+        macro = normalize_macro_signal(ea, st)
+        if macro:
+            signals.append(macro)
+    except Exception:
+        pass
+    return signals
+
+
+def _dominant_technical_direction(
+    signals: list[StrategySignal],
+    cfg: ConfluenceConfig,
+) -> Direction:
+    score_long = 0.0
+    score_short = 0.0
+    for sig in signals:
+        if sig.strategy == "MACRO" or not sig.active or sig.direction not in ("LONG", "SHORT"):
+            continue
+        eff = _effective_weight(sig, cfg)
+        contrib = eff * sig.confidence
+        if sig.direction == "LONG":
+            score_long += contrib
+        else:
+            score_short += contrib
+    margin = abs(score_long - score_short)
+    if margin < cfg.neutral_threshold:
+        return "NEUTRAL"
+    return "LONG" if score_long > score_short else "SHORT"
+
+
 def _freshness_factor(sig: StrategySignal, cfg: ConfluenceConfig) -> float:
     if sig.freshness_sec <= 0:
         return 1.0
@@ -84,6 +120,19 @@ def compute_confluence(signals: list[StrategySignal], cfg: ConfluenceConfig | No
     agreeing = 0
     if overall in ("LONG", "SHORT"):
         agreeing = sum(1 for s in directional if s.direction == overall)
+
+    macro_sig = next((s for s in signals if s.strategy == "MACRO" and s.active), None)
+    macro_direction: Direction | None = None
+    macro_conflict = False
+    if macro_sig and macro_sig.direction in ("LONG", "SHORT"):
+        macro_direction = macro_sig.direction
+        tech_overall = _dominant_technical_direction(signals, st)
+        if tech_overall in ("LONG", "SHORT") and macro_direction != tech_overall:
+            macro_conflict = True
+            confidence = max(0.0, confidence - st.macro_conflict_penalty)
+            if "MACRO" not in conflicts:
+                conflicts = sorted(set(conflicts) | {"MACRO"})
+
     active_count = len(directional)
     agreement = f"{agreeing}/{active_count}" if active_count else "0/0"
 
@@ -100,6 +149,9 @@ def compute_confluence(signals: list[StrategySignal], cfg: ConfluenceConfig | No
     else:
         summary = f"Early {overall} bias — wait for more agreement."
 
+    if macro_conflict:
+        summary = f"Macro vs technical conflict — wait for confirmation. {summary}"
+
     return ConfluenceResult(
         overall_direction=overall,
         confidence=confidence,
@@ -112,13 +164,15 @@ def compute_confluence(signals: list[StrategySignal], cfg: ConfluenceConfig | No
         summary=summary,
         score_long=score_long,
         score_short=score_short,
+        macro_conflict=macro_conflict,
+        macro_direction=macro_direction,
     )
 
 
 def compute_confluence_from_ea(ea: dict[str, Any], cfg: ConfluenceConfig | None = None) -> dict[str, Any]:
     """Normalize EA payload and return confluence result dict."""
     st = cfg or ConfluenceConfig()
-    signals = normalize_ea_signals(ea, st)
+    signals = collect_confluence_signals(ea, st)
     result = compute_confluence(signals, st)
     return {
         "success": True,
@@ -134,6 +188,7 @@ def confluence_config_from_settings() -> ConfluenceConfig:
 
     s = get_settings()
     weights = dict(DEFAULT_STRATEGY_WEIGHTS)
+    weights["MACRO"] = float(s.confluence_macro_weight)
     return ConfluenceConfig(
         enabled=bool(s.confluence_enabled),
         freshness_threshold_sec=float(s.confluence_freshness_threshold_sec),
@@ -142,6 +197,8 @@ def confluence_config_from_settings() -> ConfluenceConfig:
         min_confidence_strong=float(s.confluence_min_confidence_strong),
         min_confidence_setup=float(s.confluence_min_confidence_setup),
         conflict_penalty=float(s.confluence_conflict_penalty),
+        macro_enabled=bool(s.market_news_enabled),
+        macro_conflict_penalty=float(s.confluence_conflict_penalty) * 0.67,
         strategy_weights=weights,
     )
 
@@ -158,6 +215,9 @@ def verdict_from_confluence(
         if conf.confidence >= st.min_confidence_setup:
             return "WATCH", "warn", conf.summary + " Caution: " + "; ".join(blocks[:2]) + "."
         return "NO TRADE", "muted", conf.summary + " Blocked: " + "; ".join(blocks[:2]) + "."
+
+    if conf.macro_conflict and conf.agreeing_count < st.min_agreeing_for_strong:
+        return "WATCH", "warn", conf.summary
 
     if (
         conf.overall_direction in ("LONG", "SHORT")

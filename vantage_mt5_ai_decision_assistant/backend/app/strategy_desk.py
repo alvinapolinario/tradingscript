@@ -322,46 +322,57 @@ def evaluate_gates(monitor_status: dict[str, Any]) -> list[dict[str, Any]]:
             )
         )
 
-    # 7) News block
-    news_blocked = st.get("news_blocked")
-    mins_to = st.get("minutes_to_high_impact")
-    news_available = st.get("news_available")
-    if news_available is False:
-        gates.append(
-            _gate(
-                "news",
-                "High-impact news window",
-                "warn",
-                f"Broker calendar unavailable — check manually · "
-                f"{spec['news_block']['minutes_before']}m before / "
-                f"{spec['news_block']['minutes_after']}m after",
-            )
-        )
-    elif news_blocked is True:
-        gates.append(
-            _gate(
-                "news",
-                "High-impact news window",
-                "fail",
-                f"Blocked · {spec['news_block']['minutes_before']}m before / "
-                f"{spec['news_block']['minutes_after']}m after",
-            )
-        )
-    elif news_blocked is False:
-        detail = "Clear of high-impact window"
-        if mins_to is not None and int(mins_to) >= 0:
-            detail += f" · next in ~{mins_to}m"
-        gates.append(_gate("news", "High-impact news window", "pass", detail))
+    # 7) News block — EA feed merged with backend calendar when market news enabled
+    news_gate = None
+    try:
+        from app.market_news.verdict_integration import build_news_gate
+
+        news_gate = build_news_gate(symbol=symbol, spec=spec, st=st, ea=ea)
+    except Exception:
+        news_gate = None
+
+    if news_gate is not None:
+        gates.append(news_gate)
     else:
-        gates.append(
-            _gate(
-                "news",
-                "High-impact news window",
-                "unknown",
-                f"Block {spec['news_block']['minutes_before']}m before / "
-                f"{spec['news_block']['minutes_after']}m after high-impact · check calendar manually",
+        news_blocked = st.get("news_blocked")
+        mins_to = st.get("minutes_to_high_impact")
+        news_available = st.get("news_available")
+        if news_available is False:
+            gates.append(
+                _gate(
+                    "news",
+                    "High-impact news window",
+                    "warn",
+                    f"Broker calendar unavailable — check manually · "
+                    f"{spec['news_block']['minutes_before']}m before / "
+                    f"{spec['news_block']['minutes_after']}m after",
+                )
             )
-        )
+        elif news_blocked is True:
+            gates.append(
+                _gate(
+                    "news",
+                    "High-impact news window",
+                    "fail",
+                    f"Blocked · {spec['news_block']['minutes_before']}m before / "
+                    f"{spec['news_block']['minutes_after']}m after",
+                )
+            )
+        elif news_blocked is False:
+            detail = "Clear of high-impact window"
+            if mins_to is not None and int(mins_to) >= 0:
+                detail += f" · next in ~{mins_to}m"
+            gates.append(_gate("news", "High-impact news window", "pass", detail))
+        else:
+            gates.append(
+                _gate(
+                    "news",
+                    "High-impact news window",
+                    "unknown",
+                    f"Block {spec['news_block']['minutes_before']}m before / "
+                    f"{spec['news_block']['minutes_after']}m after high-impact · check calendar manually",
+                )
+            )
 
     # 8) Setup age
     age = st.get("setup_age_m5")

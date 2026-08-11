@@ -154,6 +154,15 @@ def liquidity_grab_page():
     return FileResponse(page)
 
 
+@app.get("/market-news")
+def market_news_page():
+    """News / Macro Intelligence desk — economic calendar + bias heatmap."""
+    page = STATIC_DIR / "market-news.html"
+    if not page.exists():
+        return {"error": "market-news.html missing", "path": str(page)}
+    return FileResponse(page)
+
+
 @app.get("/breakout-structure")
 def breakout_structure_page():
     """Breakout Structure Intelligence desk — advisory only, XAUUSD/Gold."""

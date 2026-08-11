@@ -1,5 +1,6 @@
 """Multi-strategy confluence engine."""
 from app.analysis.confluence.engine import (
+    collect_confluence_signals,
     compute_confluence,
     compute_confluence_from_ea,
     confluence_config_from_settings,
@@ -14,6 +15,7 @@ __all__ = [
     "ConfluenceResult",
     "StrategySignal",
     "DEFAULT_STRATEGY_WEIGHTS",
+    "collect_confluence_signals",
     "compute_confluence",
     "compute_confluence_from_ea",
     "confluence_config_from_settings",

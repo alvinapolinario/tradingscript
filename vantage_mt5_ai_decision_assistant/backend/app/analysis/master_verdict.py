@@ -81,6 +81,16 @@ def _build_module_chips(ea: dict[str, Any]) -> list[dict[str, str]]:
         tone = "ok" if dec in ("BUY", "SELL") and iconf >= 75 else ("warn" if dec == "WAIT" else "muted")
         modules.append(_module_chip("ICT", dec, f"{iconf:.0f}% · {ist}", tone))
 
+    try:
+        from app.market_news.verdict_integration import macro_module_chip, load_macro_context
+
+        macro_ctx = load_macro_context(ea)
+        chip = macro_module_chip(macro_ctx)
+        if chip:
+            modules.insert(0, chip)
+    except Exception:
+        pass
+
     modules.append(
         _module_chip(
             "M30 core",
@@ -250,6 +260,23 @@ def build_master_verdict(ea: dict[str, Any]) -> dict[str, Any]:
     modules = _build_module_chips(ea)
     blocks, boosts = _collect_blocks_and_boosts(ea)
 
+    macro_ctx = None
+    macro_rec: dict[str, Any] = {}
+    try:
+        from app.market_news.verdict_integration import (
+            load_macro_context,
+            macro_blocks_and_boosts,
+            macro_recommendation_block,
+        )
+
+        macro_ctx = load_macro_context(ea)
+        macro_rec = macro_recommendation_block(macro_ctx)
+        mb, mbst = macro_blocks_and_boosts(macro_ctx)
+        blocks = blocks + mb
+        boosts = boosts + mbst
+    except Exception:
+        pass
+
     risk = _u(ea.get("risk_status"))
     exceeds = bool(ea.get("exceeds_max_position_risk"))
     if risk == "CRITICAL" or exceeds:
@@ -269,16 +296,29 @@ def build_master_verdict(ea: dict[str, Any]) -> dict[str, Any]:
     st = get_settings()
     if st.confluence_enabled:
         from app.analysis.confluence import (
+            collect_confluence_signals,
             compute_confluence,
             confluence_config_from_settings,
-            normalize_ea_signals,
             verdict_from_confluence,
         )
 
         cfg = confluence_config_from_settings()
-        signals = normalize_ea_signals(ea, cfg)
+        signals = collect_confluence_signals(ea, cfg)
         conf = compute_confluence(signals, cfg)
         verdict, tone, summary = verdict_from_confluence(conf, blocks=blocks, cfg=cfg)
+        try:
+            from app.market_news.verdict_integration import apply_macro_verdict_rules
+
+            verdict, tone, summary = apply_macro_verdict_rules(
+                verdict,
+                tone,
+                summary,
+                macro_ctx,
+                ea=ea,
+                confluence=conf.to_dict(),
+            )
+        except Exception:
+            pass
         side = "—"
         if conf.overall_direction == "LONG":
             side = "BUY"
@@ -295,6 +335,24 @@ def build_master_verdict(ea: dict[str, Any]) -> dict[str, Any]:
             "boosts": boosts,
             "modules": modules,
             "confluence": conf.to_dict(),
+            "macro_recommendation": macro_rec,
         }
 
-    return _legacy_verdict(ea, modules, blocks, boosts)
+    legacy = _legacy_verdict(ea, modules, blocks, boosts)
+    try:
+        from app.market_news.verdict_integration import apply_macro_verdict_rules
+
+        verdict, tone, summary = apply_macro_verdict_rules(
+            legacy["verdict"],
+            legacy["tone"],
+            legacy["summary"],
+            macro_ctx,
+            ea=ea,
+        )
+        legacy["verdict"] = verdict
+        legacy["tone"] = tone
+        legacy["summary"] = summary
+        legacy["macro_recommendation"] = macro_rec
+    except Exception:
+        legacy["macro_recommendation"] = macro_rec
+    return legacy

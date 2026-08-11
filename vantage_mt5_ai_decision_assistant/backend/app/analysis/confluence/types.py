@@ -31,6 +31,8 @@ class ConfluenceConfig:
     min_confidence_setup: float = 62.0
     conflict_penalty: float = 18.0
     neutral_threshold: float = 8.0
+    macro_enabled: bool = True
+    macro_conflict_penalty: float = 12.0
     strategy_weights: dict[str, float] = field(default_factory=dict)
 
 
@@ -47,6 +49,8 @@ class ConfluenceResult:
     summary: str
     score_long: float = 0.0
     score_short: float = 0.0
+    macro_conflict: bool = False
+    macro_direction: Direction | None = None
 
     def to_dict(self) -> dict:
         return {
@@ -61,4 +65,6 @@ class ConfluenceResult:
             "summary": self.summary,
             "score_long": round(self.score_long, 2),
             "score_short": round(self.score_short, 2),
+            "macro_conflict": self.macro_conflict,
+            "macro_direction": self.macro_direction,
         }

@@ -83,6 +83,30 @@ class Settings(BaseSettings):
     confluence_min_confidence_strong: float = 78.0
     confluence_min_confidence_setup: float = 62.0
     confluence_conflict_penalty: float = 18.0
+    confluence_macro_weight: float = 0.35
+
+    # Market news / macro intelligence (Step 3+)
+    market_news_enabled: bool = True
+    market_news_ai_enabled: bool = False
+    news_risk_high_before: int = 30
+    news_risk_high_after: int = 15
+    central_bank_seed_path: str = ""
+
+    # Discord macro / news alerts (Step 12)
+    discord_macro_alerts_enabled: bool = False
+    discord_macro_webhook_url: str | None = None
+    discord_macro_cooldown_sec: int = 300
+    discord_macro_approach_minutes: str = "15,30"
+    discord_macro_alignment_min_confidence: float = 65.0
+
+    # External news providers (Step 13)
+    market_news_rss_enabled: bool = False
+    market_news_rss_feeds: str = ""
+    market_news_api_enabled: bool = False
+    newsapi_key: str | None = None
+    newsapi_query: str = "forex OR gold OR federal reserve OR CPI OR FOMC"
+    market_news_external_fetch_timeout_sec: float = 15.0
+    # FXSTREET_API_KEY=  # reserved for future licensed adapter
 
 
 @lru_cache

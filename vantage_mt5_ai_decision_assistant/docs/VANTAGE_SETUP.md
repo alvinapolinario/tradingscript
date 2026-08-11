@@ -73,6 +73,7 @@ If this step is skipped, the EA logs clear setup guidance and sets action `BACKE
 1. Open MT5 → File → Open Data Folder.
 2. Copy project files:
    - `MQL5/Experts/VantageMT5AIDecisionAssistant.mq5` → `MQL5/Experts/`
+   - `MQL5/Experts/VantageMacroBridge.mq5` → `MQL5/Experts/` (optional — economic calendar sync)
    - `MQL5/Include/VantageAI/*` → `MQL5/Include/VantageAI/`
 3. In MetaEditor: open the EA → Compile (F7).
 4. Confirm zero errors. The build must **not** reference `CTrade` / `Trade.mqh`.
@@ -147,6 +148,113 @@ The web monitor has a **Pair** selector (**XAUUSD** / **BTCUSD**). Each chart ne
    - `InpApiOnlyUi = true` — hide all on-chart HUD/lines/zones; data still in `/monitor`, `/gold-smc`, etc.
    - `InpChartHideHorizontalLines = true` (default) — hide PDH/BSL/TP/invalidation **H-lines** but **keep Gold SMC vertical premium/discount/OTE zones** on chart.
 6. Check Experts log for masked login, symbol specs, and backend health.
+
+## 9b. Economic calendar bridge (`VantageMacroBridge`)
+
+The **Macro Bridge** is a separate lightweight EA that reads the MT5 economic calendar and POSTs normalized rows to the backend. It does **not** trade and does **not** replace the advisory EA heartbeat.
+
+**Purpose:** populate `market_news.db` for upcoming macro intelligence (Step 6+). The main advisory EA only gates USD **high** news locally via `VantageM5Desk.mqh`; the bridge feeds the shared calendar API.
+
+### Install
+
+1. Copy and compile (see §7):
+   - `MQL5/Experts/VantageMacroBridge.mq5`
+   - `MQL5/Include/VantageAI/VantageMacroBridge.mqh`
+   - `MQL5/Include/VantageAI/VantageMacroBridgeTypes.mqh`
+2. Same WebRequest allowlist as §6: `http://187.77.142.118:8000`
+3. Backend must be running with `MARKET_NEWS_ENABLED=true` (default).
+
+### Attach (any chart — symbol does not matter)
+
+1. Navigator → `VantageMacroBridge` → attach to any chart (e.g. EURUSD M5).
+2. Inputs:
+   - `InpBackendUrl` = `http://187.77.142.118:8000`
+   - `InpApiToken` = same as backend `LOCAL_API_TOKEN`
+   - `InpPollSeconds` = `300` (5 min default)
+   - `InpCurrencies` = `USD,EUR,GBP,JPY,AUD,NZD,CAD,CHF`
+   - `InpMinImportance` = `2` (MEDIUM+; use `3` for HIGH only)
+   - `InpLookbackHours` = `6`, `InpLookaheadDays` = `7`
+3. Enable Algo Trading.
+4. Chart comment shows last sync: event count + inserted/updated/unchanged.
+
+### Verify
+
+```powershell
+curl "http://187.77.142.118:8000/api/v1/market-news/calendar?currency=USD&limit=5"
+```
+
+Expect JSON `items[]` with `event`, `scheduled_at`, `importance`, `status`. Ingest auth uses the same Bearer token as heartbeat.
+
+**Troubleshooting**
+
+| Symptom | Fix |
+|--------|-----|
+| `Calendar unavailable` | Broker must provide MT5 calendar; try live/demo with calendar enabled |
+| WebRequest err 4014 | Add backend URL to allowlist (§6) |
+| HTTP 401 | Match `InpApiToken` to `LOCAL_API_TOKEN` |
+| `0 events` | Widen lookahead or lower `InpMinImportance` |
+
+## 9c. News / Macro Intelligence desk
+
+Full macro module: calendar ingest, headline feeds, currency bias, pair horizons, event-risk banner, optional AI interpret, and Discord macro alerts.
+
+### Web desk
+
+Open **`/market-news`** (sidebar: **News / Macro**). Polls:
+
+- `GET /api/v1/market-news/status?symbol=XAUUSD`
+- `POST /api/v1/market-news/analyze` (rule-based by default; LLM when enabled)
+
+### Backend `.env` (market news core)
+
+```env
+MARKET_NEWS_ENABLED=true
+NEWS_RISK_HIGH_BEFORE=30
+NEWS_RISK_HIGH_AFTER=15
+CONFLUENCE_MACRO_WEIGHT=0.35
+
+# Optional AI interpret (server-side only)
+MARKET_NEWS_AI_ENABLED=false
+# USE_LLM=true
+# OPENAI_API_KEY=sk-...
+
+# Discord macro alerts (separate webhook recommended)
+DISCORD_MACRO_ALERTS_ENABLED=false
+# DISCORD_MACRO_WEBHOOK_URL=https://discord.com/api/webhooks/...
+```
+
+Alerts: high-impact release + surprise, 15/30m event approaching, macro+technical alignment (deduped; not every heartbeat).
+
+### External headline feeds (optional — Step 13)
+
+No MT5 calendar required for **text headlines** — RSS and/or NewsAPI pull into `market_news.db`.
+
+```env
+MARKET_NEWS_RSS_ENABLED=true
+MARKET_NEWS_RSS_FEEDS=https://www.forexlive.com/feed/news
+
+MARKET_NEWS_API_ENABLED=true
+NEWSAPI_KEY=your_newsapi_key
+NEWSAPI_QUERY=forex OR gold OR federal reserve OR CPI OR FOMC
+```
+
+Manual pull (Bearer = `LOCAL_API_TOKEN`):
+
+```bash
+curl -X POST "http://187.77.142.118:8000/api/v1/market-news/fetch?limit=50" \
+  -H "Authorization: Bearer YOUR_LOCAL_API_TOKEN"
+```
+
+Optional VPS cron (every 30 min):
+
+```bash
+*/30 * * * * curl -sS -X POST "http://127.0.0.1:8000/api/v1/market-news/fetch" \
+  -H "Authorization: Bearer YOUR_LOCAL_API_TOKEN" >/dev/null
+```
+
+Verify headlines: `GET /api/v1/market-news/latest` · providers: `GET /api/v1/market-news/providers`
+
+**Security:** API keys (`NEWSAPI_KEY`, `OPENAI_API_KEY`) stay in backend `.env` only — never in EA, browser, or MQL5.
 
 ## 10. Enabling MT5 push notifications
 
@@ -394,8 +502,11 @@ Default publish port: **8000** (confirm it is free: `ss -tulnp | grep 8000`).
 | Sidebar | URL |
 |---------|-----|
 | Market Overview | `/monitor` |
+| News / Macro | `/market-news` |
 | Smart Analyzer | `/analyzer` |
 | Signal Center | `/signals` |
+| Liquidity Grab Desk | `/liquidity-grab` |
+| ICT Strategy | `/ict` |
 | Opportunity Radar | `/dashboard` |
 | Pattern Strategy | `/patterns` |
 | Strategy Scanner | `/scanner` |
@@ -444,6 +555,15 @@ bash /var/www/tradingscript/vantage_mt5_ai_decision_assistant/deploy/update-from
 
 Keeps `.env` and the `vantage_signal_data` Docker volume (signal ledger). Rebuilds the image from `main`.
 
+### Post-deploy checklist (News / Macro module)
+
+1. `.env` — `MARKET_NEWS_ENABLED=true`; `LOCAL_API_TOKEN` matches EA + Macro Bridge.
+2. MT5 — attach `VantageMacroBridge` (§9b); verify `GET /api/v1/market-news/calendar`.
+3. Optional — RSS/NewsAPI + cron `POST /api/v1/market-news/fetch` (§9c).
+4. Optional — `DISCORD_MACRO_WEBHOOK_URL` + `DISCORD_MACRO_ALERTS_ENABLED=true`.
+5. Web — open `/market-news`; confirm calendar + bias sections populate.
+6. Regression — `cd backend && python -m pytest -q` (339+ tests expected after News module).
+
 ### Pending Orders desk (`/orders`)
 - Backend: `GET /api/v1/orders/pending` + page `/orders` (advisory risk / trend / suggestions).
 - **Requires a recompiled EA** that sends `pending_orders` on heartbeat/analyze (`VantagePendingOrders.mqh`).
@@ -469,6 +589,12 @@ Keeps `.env` and the `vantage_signal_data` Docker volume (signal ledger). Rebuil
 - Sidebar: **Liquidity Grab Desk** under Workspace (shared `shell.js` nav).
 - **Requires a recompiled EA** with `VantageLiquidityGrab*.mqh` sending top-level `"liquidity_grab"` (inputs groups U–Z).
 - Does **not** trade or affect SETUP_OK. See [LIQUIDITY_GRAB.md](LIQUIDITY_GRAB.md).
+
+### News / Macro Intelligence (`/market-news`)
+- Backend: `GET /api/v1/market-news/status`, `POST /api/v1/market-news/fetch`, `POST /api/v1/market-news/analyze`.
+- Sidebar: **News / Macro** (shared `shell.js` nav).
+- Calendar via `VantageMacroBridge` (§9b); optional RSS/NewsAPI (§9c).
+- Architecture reference: [NEWS_INTELLIGENCE_ARCHITECTURE.md](NEWS_INTELLIGENCE_ARCHITECTURE.md).
 
 ### Demo auto-execution (optional — separate package)
 

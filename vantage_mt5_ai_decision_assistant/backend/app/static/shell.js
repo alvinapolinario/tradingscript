@@ -14,6 +14,7 @@
     layers: '<svg class="sb-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m12 3 8 4.5-8 4.5L4 7.5 12 3Z"/><path d="m4 12 8 4.5 8-4.5"/><path d="m4 16.5 8 4.5 8-4.5"/></svg>',
     wave: '<svg class="sb-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 12c2-4 4-4 6 0s4 4 6 0 4-4 6 0"/><path d="M3 17c2-4 4-4 6 0s4 4 6 0 4-4 6 0"/></svg>',
     gold: '<svg class="sb-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 17h16l-2.5-8h-11L4 17Z"/><path d="M8 9V7a4 4 0 0 1 8 0v2"/></svg>',
+    news: '<svg class="sb-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 19h16"/><path d="M6 5h12v12H6z"/><path d="M8 9h8M8 13h5"/></svg>',
     liquidity: '<svg class="sb-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 18h16"/><path d="M8 14V8l4-4 4 4v6"/><path d="M12 4v3"/><circle cx="17" cy="7" r="2"/></svg>',
     chart: '<svg class="sb-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 19h16"/><path d="M7 16V10"/><path d="M12 16V6"/><path d="M17 16v-4"/></svg>',
     calc: '<svg class="sb-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M8 7h8M8 11h2M12 11h2M16 11h0M8 15h2M12 15h2M16 15h0"/></svg>',
@@ -23,6 +24,7 @@
 
   const WORKSPACE = [
     { id: "monitor", href: "/monitor", label: "Market Overview", icon: "grid" },
+    { id: "market-news", href: "/market-news", label: "News / Macro", icon: "news" },
     { id: "analyzer", href: "/analyzer", label: "Smart Analyzer", icon: "target" },
     { id: "signals", href: "/signals", label: "Signal Center", icon: "signal", badgeId: "sbRadarBadge" },
     { id: "orders", href: "/orders", label: "Pending Orders", icon: "layers" },

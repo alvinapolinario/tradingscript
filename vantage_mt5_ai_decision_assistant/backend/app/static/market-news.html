@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>News / Macro · Vantage</title>
+  <link rel="stylesheet" href="/static/shell.css" />
+  <style>
+    :root {
+      --bg: #0a0e14; --panel: #121824; --line: #263044; --text: #e8eef8;
+      --muted: #8a96aa; --accent: #7eb8ff; --good: #3dd68c; --warn: #e8c547;
+      --bad: #f07178; --mono: "Cascadia Code", Consolas, ui-monospace, monospace;
+    }
+    body { margin: 0; font-family: "Segoe UI", system-ui, sans-serif; color: var(--text); background: var(--bg); min-height: 100vh; }
+    header {
+      padding: .9rem 1.25rem; border-bottom: 1px solid var(--line);
+      display: flex; justify-content: space-between; align-items: flex-start; gap: .75rem; flex-wrap: wrap;
+      background: rgba(10,14,20,.92); position: sticky; top: 0; z-index: 5;
+    }
+    header h1 { margin: 0; font-size: 1.05rem; }
+    .sub { color: var(--muted); font-size: .76rem; margin-top: .25rem; max-width: 720px; line-height: 1.45; }
+    .hdr-actions { display: flex; gap: .45rem; flex-wrap: wrap; align-items: center; }
+    select, button {
+      background: var(--panel); color: var(--text); border: 1px solid var(--line);
+      border-radius: 10px; padding: .4rem .65rem; font-size: .78rem;
+    }
+    button { cursor: pointer; }
+    button:hover { border-color: var(--accent); }
+    main { max-width: 1120px; margin: 0 auto; padding: 1rem 1rem 2.5rem; }
+    .banner {
+      border-radius: 14px; padding: .85rem 1rem; margin-bottom: .85rem; font-size: .84rem; line-height: 1.5;
+    }
+    .banner.risk { border: 1px solid rgba(240,113,120,.45); background: rgba(240,113,120,.08); color: var(--bad); }
+    .banner.clear { border: 1px solid rgba(61,214,140,.35); background: rgba(61,214,140,.06); color: var(--good); }
+    .banner.info { border: 1px solid rgba(126,184,255,.35); background: rgba(126,184,255,.06); color: var(--accent); }
+    .grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: .7rem; }
+    .span2 { grid-column: span 2; }
+    .card { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: .85rem .95rem; }
+    .hero { background: linear-gradient(135deg, #152033, var(--panel)); border-color: #33415a; }
+    .k { font-size: .66rem; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }
+    .v { font-family: var(--mono); font-size: .9rem; font-weight: 650; margin-top: .2rem; }
+    .sig { font-size: 1.25rem; font-weight: 800; color: var(--accent); margin: .35rem 0; }
+    .pill {
+      display: inline-flex; align-items: center; gap: .35rem;
+      font-size: .72rem; font-weight: 700; padding: .3rem .6rem; border-radius: 999px; border: 1px solid var(--line);
+    }
+    .pill.bull { color: var(--good); border-color: rgba(61,214,140,.4); }
+    .pill.bear { color: var(--bad); border-color: rgba(240,113,120,.4); }
+    .pill.neutral { color: var(--warn); }
+    .heat { display: flex; flex-wrap: wrap; gap: .45rem; margin-top: .65rem; }
+    .heat-item {
+      min-width: 92px; border: 1px solid var(--line); border-radius: 10px; padding: .45rem .55rem;
+      background: rgba(10,14,20,.35);
+    }
+    .heat-item .ccy { font-family: var(--mono); font-weight: 800; font-size: .82rem; }
+    .heat-item .dir { font-size: .72rem; margin-top: .15rem; }
+    table { width: 100%; border-collapse: collapse; font-size: .78rem; margin-top: .55rem; }
+    th, td { text-align: left; padding: .4rem .35rem; border-bottom: 1px solid rgba(38,48,68,.65); vertical-align: top; }
+    th { color: var(--muted); font-size: .66rem; text-transform: uppercase; letter-spacing: .06em; }
+    .news-list { list-style: none; margin: .55rem 0 0; padding: 0; }
+    .news-list li { padding: .55rem 0; border-bottom: 1px solid rgba(38,48,68,.55); line-height: 1.45; }
+    .news-list li:last-child { border-bottom: none; }
+    .news-meta { color: var(--muted); font-size: .72rem; margin-top: .2rem; }
+    .timeline { display: flex; flex-direction: column; gap: .45rem; margin-top: .55rem; }
+    .tl-row {
+      display: grid; grid-template-columns: 110px 1fr; gap: .55rem; align-items: start;
+      border-left: 2px solid var(--line); padding-left: .65rem;
+    }
+    .tl-time { font-family: var(--mono); font-size: .72rem; color: var(--muted); }
+    .tl-title { font-size: .82rem; }
+    .tl-tag { font-size: .66rem; color: var(--muted); margin-top: .12rem; }
+    .horizons { display: flex; flex-wrap: wrap; gap: .45rem; margin-top: .55rem; }
+    .hz {
+      flex: 1 1 calc(33% - .45rem); min-width: 120px; border: 1px solid var(--line);
+      border-radius: 10px; padding: .5rem .6rem; background: rgba(10,14,20,.35);
+    }
+    .empty { border: 1px dashed var(--line); border-radius: 14px; padding: 1.2rem; color: var(--muted); text-align: center; line-height: 1.5; }
+    .ai-box { margin-top: .65rem; padding: .65rem .75rem; border: 1px dashed rgba(126,184,255,.35); border-radius: 12px; font-size: .82rem; color: var(--muted); }
+    ul.drivers { margin: .45rem 0 0; padding-left: 1.1rem; color: var(--muted); font-size: .82rem; line-height: 1.55; }
+    @media (max-width: 820px) { .grid { grid-template-columns: 1fr; } .span2 { grid-column: span 1; } .tl-row { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body data-nav="market-news">
+  <header>
+    <div>
+      <h1>News / Macro Intelligence</h1>
+      <div class="sub">Economic calendar · currency bias · pair macro horizons · advisory only — ingest via VantageMacroBridge or manual POST</div>
+    </div>
+    <div class="hdr-actions">
+      <select id="symbolSel" aria-label="Symbol">
+        <option value="XAUUSD">XAUUSD</option>
+        <option value="EURUSD">EURUSD</option>
+        <option value="GBPUSD">GBPUSD</option>
+        <option value="USDJPY">USDJPY</option>
+        <option value="AUDUSD">AUDUSD</option>
+      </select>
+      <button id="aiBtn" type="button" title="Rule-based unless MARKET_NEWS_AI_ENABLED + USE_LLM">Run AI interpret</button>
+      <span id="pill" class="pill neutral">—</span>
+    </div>
+  </header>
+  <main id="main"><div class="empty">Loading…</div></main>
+  <script src="/static/shell.js"></script>
+  <script>
+    const symbolSel = document.getElementById("symbolSel");
+    const aiBtn = document.getElementById("aiBtn");
+    let pollTimer = null;
+    let aiPayload = null;
+
+    function dirClass(d) {
+      const u = String(d || "").toUpperCase();
+      if (u.includes("BULL")) return "bull";
+      if (u.includes("BEAR")) return "bear";
+      return "neutral";
+    }
+    function dirArrow(d) {
+      const u = String(d || "").toUpperCase();
+      if (u.includes("BULL")) return "↑";
+      if (u.includes("BEAR")) return "↓";
+      return "→";
+    }
+    function fmtTime(iso) {
+      if (!iso) return "—";
+      try {
+        const d = new Date(iso);
+        return d.toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+      } catch { return iso; }
+    }
+    function fmtNum(v) {
+      if (v == null || v === "") return "—";
+      const n = Number(v);
+      return Number.isFinite(n) ? n.toFixed(2) : String(v);
+    }
+
+    function renderRiskBanner(er) {
+      if (!er) return `<div class="banner info">Calendar status unknown.</div>`;
+      if (er.blocked) {
+        const n = er.next_event || {};
+        return `<div class="banner risk"><strong>Event risk active</strong> — ${er.message || "High-impact window"}<br/>
+          ${n.event ? `${n.event} (${n.currency}) · ${fmtTime(n.scheduled_at)}` : ""}</div>`;
+      }
+      if (er.message) return `<div class="banner clear">${er.message}</div>`;
+      return `<div class="banner info">No high-impact event window in the next ${er.high_impact_before_minutes || 30} minutes.</div>`;
+    }
+
+    function renderHeat(map) {
+      const entries = Object.entries(map || {});
+      if (!entries.length) return `<div class="empty" style="margin-top:.55rem">No currency bias data yet.</div>`;
+      return `<div class="heat">${entries.map(([ccy, row]) => {
+        const d = row.direction || "NEUTRAL";
+        return `<div class="heat-item">
+          <div class="ccy">${ccy}</div>
+          <div class="dir ${dirClass(d)}">${dirArrow(d)} ${d} · ${Math.round(row.confidence || 0)}%</div>
+        </div>`;
+      }).join("")}</div>`;
+    }
+
+    function renderCalendar(rows) {
+      if (!rows || !rows.length) {
+        return `<div class="empty" style="margin-top:.55rem">No calendar rows — run VantageMacroBridge or POST ingest.</div>`;
+      }
+      const body = rows.map((r) => {
+        const surprise = r.surprise_label
+          ? `<span class="pill ${dirClass(r.surprise_direction)}">${r.surprise_label}</span>`
+          : "—";
+        return `<tr>
+          <td>${fmtTime(r.scheduled_at)}</td>
+          <td>${r.currency || "—"}</td>
+          <td>${r.event || "—"}<div class="tl-tag">${r.importance || ""} · ${r.status || ""}</div></td>
+          <td>${fmtNum(r.previous)}</td>
+          <td>${fmtNum(r.forecast)}</td>
+          <td>${fmtNum(r.actual)}</td>
+          <td>${surprise}</td>
+        </tr>`;
+      }).join("");
+      return `<table><thead><tr>
+        <th>When</th><th>CCY</th><th>Event</th><th>Prev</th><th>Fcst</th><th>Act</th><th>Surprise</th>
+      </tr></thead><tbody>${body}</tbody></table>`;
+    }
+
+    function renderNews(items) {
+      if (!items || !items.length) {
+        return `<div class="empty" style="margin-top:.55rem">No headlines ingested yet.</div>`;
+      }
+      return `<ul class="news-list">${items.map((n) => `
+        <li>
+          <div>${n.headline || "—"}</div>
+          <div class="news-meta">${fmtTime(n.published_at)} · ${n.category || "OTHER"} · ${(n.currencies || []).join(", ") || "—"} · ${n.source || ""}</div>
+        </li>`).join("")}</ul>`;
+    }
+
+    function renderTimeline(items) {
+      if (!items || !items.length) return `<div class="empty" style="margin-top:.55rem">Timeline empty.</div>`;
+      return `<div class="timeline">${items.map((t) => `
+        <div class="tl-row">
+          <div class="tl-time">${fmtTime(t.at)}</div>
+          <div>
+            <div class="tl-title">${t.title || "—"}</div>
+            <div class="tl-tag">${t.type || ""} · ${t.currency || (t.currencies || []).join(", ") || ""} · ${t.importance || ""}</div>
+          </div>
+        </div>`).join("")}</div>`;
+    }
+
+    function renderHorizons(hz, macro) {
+      const entries = Object.entries(hz || {});
+      if (!entries.length) {
+        return `<div class="v">${macro?.direction || "NEUTRAL"} · ${Math.round(macro?.confidence || 0)}%</div>`;
+      }
+      return `<div class="horizons">${entries.map(([k, v]) => `
+        <div class="hz"><div class="k">${k.replace(/_/g, " ")}</div>
+        <div class="v ${dirClass(v)}">${dirArrow(v)} ${v}</div></div>`).join("")}</div>`;
+    }
+
+    function renderAiBox() {
+      if (!aiPayload) {
+        return `<div class="ai-box">Click <b>Run AI interpret</b> for structured macro commentary (rule-based by default).</div>`;
+      }
+      const mode = aiPayload.mode || aiPayload.ai_model || "—";
+      const drivers = (aiPayload.drivers || []).map((d) => `<li>${d}</li>`).join("");
+      const counter = (aiPayload.counter_drivers || []).map((d) => `<li>${d}</li>`).join("");
+      return `<div class="ai-box">
+        <div><strong>${aiPayload.headline || "Interpretation"}</strong> · ${mode}${aiPayload.cached ? " (cached)" : ""}</div>
+        ${drivers ? `<ul class="drivers">${drivers}</ul>` : ""}
+        ${counter ? `<div class="k" style="margin-top:.45rem">Counter drivers</div><ul class="drivers">${counter}</ul>` : ""}
+      </div>`;
+    }
+
+    function render(payload) {
+      const root = document.getElementById("main");
+      if (!payload.enabled) {
+        document.getElementById("pill").textContent = "disabled";
+        root.innerHTML = `<div class="empty">Market news module disabled — set MARKET_NEWS_ENABLED=true in backend .env</div>`;
+        return;
+      }
+
+      const macro = payload.macro_bias || {};
+      const align = payload.technical_alignment || {};
+      document.getElementById("pill").textContent = payload.status_line || "synced";
+      document.getElementById("pill").className = `pill ${dirClass(macro.direction)}`;
+
+      root.innerHTML = `
+        ${renderRiskBanner(payload.event_risk)}
+        <div class="grid">
+          <div class="card hero span2">
+            <div class="k">Pair macro bias · ${payload.symbol || symbolSel.value}</div>
+            <div class="sig ${dirClass(macro.direction)}">${dirArrow(macro.direction)} ${macro.direction || "NEUTRAL"} · ${Math.round(macro.confidence || 0)}%</div>
+            <div class="sub" style="margin-top:.35rem">Horizon: ${macro.horizon || "—"} · Technical alignment: ${align.status || "—"} — ${align.reason || ""}</div>
+            ${renderHorizons(payload.horizons, macro)}
+            ${renderAiBox()}
+          </div>
+
+          <div class="card span2">
+            <div class="k">Currency bias heatmap</div>
+            ${renderHeat(payload.major_currency_bias || payload.currency_bias)}
+          </div>
+
+          <div class="card span2">
+            <div class="k">Market news headlines</div>
+            ${renderNews(payload.news_feed || payload.recent_news)}
+          </div>
+
+          <div class="card span2">
+            <div class="k">Economic calendar</div>
+            ${renderCalendar(payload.calendar_table || payload.upcoming_events)}
+          </div>
+
+          <div class="card">
+            <div class="k">Drivers</div>
+            <ul class="drivers">${(payload.drivers || []).map((d) => `<li>${d}</li>`).join("") || "<li>—</li>"}</ul>
+          </div>
+          <div class="card">
+            <div class="k">Counter drivers</div>
+            <ul class="drivers">${(payload.counter_drivers || []).map((d) => `<li>${d}</li>`).join("") || "<li>—</li>"}</ul>
+          </div>
+
+          <div class="card span2">
+            <div class="k">Session timeline</div>
+            ${renderTimeline(payload.timeline)}
+          </div>
+        </div>`;
+    }
+
+    async function loadStatus() {
+      const sym = symbolSel.value;
+      const r = await fetch(`/api/v1/market-news/status?symbol=${encodeURIComponent(sym)}`);
+      const payload = await r.json();
+      render(payload);
+    }
+
+    async function runAi() {
+      aiBtn.disabled = true;
+      aiBtn.textContent = "Analyzing…";
+      try {
+        const r = await fetch("/api/v1/market-news/analyze", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ symbol: symbolSel.value, force: false }),
+        });
+        aiPayload = await r.json();
+        await loadStatus();
+      } catch (e) {
+        aiPayload = { headline: "Analyze failed", drivers: [String(e)] };
+        await loadStatus();
+      } finally {
+        aiBtn.disabled = false;
+        aiBtn.textContent = "Run AI interpret";
+      }
+    }
+
+    symbolSel.addEventListener("change", () => { aiPayload = null; loadStatus(); });
+    aiBtn.addEventListener("click", runAi);
+    loadStatus();
+    pollTimer = setInterval(loadStatus, 15000);
+  </script>
+</body>
+</html>

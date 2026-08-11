@@ -1,6 +1,7 @@
 """Health, analyze, heartbeat, and monitor API routes."""
 from __future__ import annotations
 
+import json
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
@@ -17,6 +18,9 @@ from app.schemas import (
     HealthResponse,
     HeartbeatRequest,
     HeartbeatResponse,
+    MarketNewsAnalyzeRequest,
+    MarketNewsIngestRequest,
+    Mt5CalendarIngestRequest,
     SelectSymbolRequest,
 )
 
@@ -940,6 +944,213 @@ def signal_decision(signal_id: str, body: dict) -> dict:
         "caption": "Records your decision only — no MT5 order is sent.",
         "signal": updated,
     }
+
+
+@router.post("/api/v1/market-news/mt5-calendar")
+def ingest_mt5_calendar(
+    req: Mt5CalendarIngestRequest,
+    _: None = Depends(require_bearer),
+    settings: Settings = Depends(get_settings),
+) -> dict:
+    """Ingest normalized economic calendar rows from MT5 bridge EA."""
+    if not settings.market_news_enabled:
+        raise HTTPException(status_code=503, detail="Market news module disabled")
+    from app.market_news.ingest import ingest_mt5_calendar as run_ingest
+
+    result = run_ingest(req)
+    monitor_store.add_log(
+        "INFO",
+        "market_news",
+        f"MT5 calendar ingest · received={result.get('received')} "
+        f"inserted={result.get('inserted')} updated={result.get('updated')}",
+    )
+    return result
+
+
+@router.get("/api/v1/market-news/calendar")
+def market_news_calendar(
+    limit: int = Query(default=100, ge=1, le=500),
+    currency: str | None = Query(default=None),
+    from_utc: str | None = Query(default=None),
+    to_utc: str | None = Query(default=None),
+    settings: Settings = Depends(get_settings),
+) -> dict:
+    """List persisted economic calendar events (newest scheduled first)."""
+    if not settings.market_news_enabled:
+        return {"advisory_only": True, "enabled": False, "count": 0, "items": []}
+    from app.market_news.providers.registry import get_registry
+    from app.market_news.types import parse_utc
+
+    registry = get_registry()
+    start = parse_utc(from_utc) if from_utc else None
+    end = parse_utc(to_utc) if to_utc else None
+    currencies = [currency.strip().upper()] if currency else None
+    events, _providers = registry.fetch_calendar(
+        from_utc=start,
+        to_utc=end,
+        currencies=currencies,
+        limit=limit,
+        unbounded=not from_utc and not to_utc,
+    )
+    items = [ev.to_dict() for ev in events]
+    return {
+        "advisory_only": True,
+        "enabled": True,
+        "provider": "mt5_calendar",
+        "count": len(items),
+        "items": items,
+    }
+
+
+@router.get("/api/v1/market-news/latest")
+def market_news_latest(
+    limit: int = Query(default=50, ge=1, le=200),
+    source: str | None = Query(default=None),
+    settings: Settings = Depends(get_settings),
+) -> dict:
+    """Recent normalized news headlines from registered providers."""
+    if not settings.market_news_enabled:
+        return {"advisory_only": True, "enabled": False, "count": 0, "items": []}
+    from app.market_news.providers.registry import get_registry
+
+    registry = get_registry()
+    provider_names = None
+    if source:
+        provider_names = [source.strip().lower()]
+    items, provider_results = registry.fetch_latest(limit=limit, providers=provider_names)
+    return {
+        "advisory_only": True,
+        "enabled": True,
+        "count": len(items),
+        "items": [item.to_dict() for item in items],
+        "providers": [r.to_dict() for r in provider_results],
+    }
+
+
+@router.get("/api/v1/market-news/providers")
+def market_news_providers(settings: Settings = Depends(get_settings)) -> dict:
+    """List registered news/calendar provider adapters (Step 5)."""
+    if not settings.market_news_enabled:
+        return {"advisory_only": True, "enabled": False, "providers": []}
+    from app.market_news.providers.registry import get_registry
+
+    registry = get_registry()
+    return {
+        "advisory_only": True,
+        "enabled": True,
+        "providers": registry.describe(),
+    }
+
+
+@router.post("/api/v1/market-news/ingest")
+def ingest_market_news(
+    req: MarketNewsIngestRequest,
+    _: None = Depends(require_bearer),
+    settings: Settings = Depends(get_settings),
+) -> dict:
+    """Manual / provider bulk news ingest (textual headlines)."""
+    if not settings.market_news_enabled:
+        raise HTTPException(status_code=503, detail="Market news module disabled")
+    from app.market_news.ingest import ingest_news_items as run_ingest
+
+    result = run_ingest(req)
+    monitor_store.add_log(
+        "INFO",
+        "market_news",
+        f"News ingest · received={result.get('received')} "
+        f"inserted={result.get('inserted')} updated={result.get('updated')}",
+    )
+    return result
+
+
+@router.get("/api/v1/market-news/currency/{ccy}")
+def market_news_currency(
+    ccy: str,
+    settings: Settings = Depends(get_settings),
+) -> dict:
+    """Currency macro sentiment, event risk, and timeline."""
+    if not settings.market_news_enabled:
+        return {"advisory_only": True, "enabled": False, "currency": ccy.upper()}
+    from app.market_news.service import build_currency_status
+
+    try:
+        return build_currency_status(ccy, settings)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.get("/api/v1/market-news/symbol/{symbol}")
+def market_news_symbol(
+    symbol: str,
+    settings: Settings = Depends(get_settings),
+) -> dict:
+    """Pair macro bias, horizons, event risk, and technical alignment."""
+    if not settings.market_news_enabled:
+        return {"advisory_only": True, "enabled": False, "symbol": symbol.upper()}
+    from app.market_news.service import build_symbol_status
+
+    ea = monitor_store.status().get("ea") or {}
+    return build_symbol_status(symbol, settings, ea_snapshot=ea)
+
+
+@router.get("/api/v1/market-news/status")
+def market_news_status(
+    symbol: str | None = Query(default=None),
+    settings: Settings = Depends(get_settings),
+) -> dict:
+    """Desk-style composite macro status (default symbol XAUUSD)."""
+    if not settings.market_news_enabled:
+        return {"advisory_only": True, "enabled": False, "module": "market_news"}
+    from app.market_news.service import build_macro_desk_status
+
+    ea = monitor_store.status().get("ea") or {}
+    return build_macro_desk_status(settings, symbol=symbol, ea_snapshot=ea)
+
+
+@router.post("/api/v1/market-news/analyze")
+def market_news_analyze(
+    req: MarketNewsAnalyzeRequest,
+    settings: Settings = Depends(get_settings),
+) -> dict:
+    """Structured macro/news interpretation — rule-based or LLM when enabled."""
+    if not settings.market_news_enabled:
+        return {"advisory_only": True, "enabled": False, "status": "disabled"}
+    from app.market_news.ai_interpret import interpret_macro
+
+    ea = monitor_store.status().get("ea") or {}
+    try:
+        return interpret_macro(
+            symbol=req.symbol,
+            headline=req.headline,
+            settings=settings,
+            ea_snapshot=ea,
+            force=req.force,
+        )
+    except RuntimeError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    except (ValueError, json.JSONDecodeError) as exc:
+        raise HTTPException(status_code=422, detail=f"Invalid AI response: {exc}") from exc
+
+
+@router.post("/api/v1/market-news/fetch")
+def fetch_external_market_news(
+    _: None = Depends(require_bearer),
+    settings: Settings = Depends(get_settings),
+    limit: int = Query(default=50, ge=1, le=100),
+) -> dict:
+    """Pull RSS / licensed API headlines and upsert into market_news.db (Step 13)."""
+    if not settings.market_news_enabled:
+        raise HTTPException(status_code=503, detail="Market news module disabled")
+    from app.market_news.external_fetch import fetch_and_persist_external_news
+
+    result = fetch_and_persist_external_news(settings, limit=limit)
+    monitor_store.add_log(
+        "INFO",
+        "market_news",
+        f"External fetch · received={result.get('received')} "
+        f"inserted={result.get('inserted')} updated={result.get('updated')}",
+    )
+    return result
 
 
 @router.get("/api/v1/patterns/status")

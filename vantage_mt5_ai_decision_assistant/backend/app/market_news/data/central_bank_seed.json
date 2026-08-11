@@ -1,0 +1,104 @@
+{
+  "version": "1.0.0",
+  "updated": "2026-08-01",
+  "advisory_only": true,
+  "banks": [
+    {
+      "central_bank": "Federal Reserve",
+      "currency": "USD",
+      "policy_bias": "NEUTRAL",
+      "confidence": 62.0,
+      "policy_rate": 5.25,
+      "next_meeting_at": null,
+      "drivers": [
+        "Data-dependent policy stance",
+        "Inflation progress uneven",
+        "Labor market cooling gradually"
+      ]
+    },
+    {
+      "central_bank": "European Central Bank",
+      "currency": "EUR",
+      "policy_bias": "MILD_DOVISH",
+      "confidence": 58.0,
+      "policy_rate": 4.25,
+      "next_meeting_at": null,
+      "drivers": [
+        "Growth concerns in core economies",
+        "Inflation nearing target band"
+      ]
+    },
+    {
+      "central_bank": "Bank of England",
+      "currency": "GBP",
+      "policy_bias": "NEUTRAL",
+      "confidence": 55.0,
+      "policy_rate": 5.25,
+      "next_meeting_at": null,
+      "drivers": [
+        "Sticky services inflation",
+        "Mixed growth signals"
+      ]
+    },
+    {
+      "central_bank": "Bank of Japan",
+      "currency": "JPY",
+      "policy_bias": "MILD_HAWKISH",
+      "confidence": 64.0,
+      "policy_rate": 0.25,
+      "next_meeting_at": null,
+      "drivers": [
+        "Gradual normalization path",
+        "Yen weakness on watch"
+      ]
+    },
+    {
+      "central_bank": "Reserve Bank of Australia",
+      "currency": "AUD",
+      "policy_bias": "NEUTRAL",
+      "confidence": 52.0,
+      "policy_rate": 4.35,
+      "next_meeting_at": null,
+      "drivers": [
+        "China demand sensitivity",
+        "Labor market resilience"
+      ]
+    },
+    {
+      "central_bank": "Reserve Bank of New Zealand",
+      "currency": "NZD",
+      "policy_bias": "MILD_DOVISH",
+      "confidence": 56.0,
+      "policy_rate": 5.50,
+      "next_meeting_at": null,
+      "drivers": [
+        "Growth slowing",
+        "Inflation returning toward band"
+      ]
+    },
+    {
+      "central_bank": "Bank of Canada",
+      "currency": "CAD",
+      "policy_bias": "NEUTRAL",
+      "confidence": 54.0,
+      "policy_rate": 4.50,
+      "next_meeting_at": null,
+      "drivers": [
+        "Oil-linked terms of trade",
+        "Housing market adjustment"
+      ]
+    },
+    {
+      "central_bank": "Swiss National Bank",
+      "currency": "CHF",
+      "policy_bias": "NEUTRAL",
+      "confidence": 50.0,
+      "policy_rate": 1.50,
+      "next_meeting_at": null,
+      "drivers": [
+        "Franc strength risk",
+        "Low inflation environment"
+      ]
+    }
+  ]
+}
