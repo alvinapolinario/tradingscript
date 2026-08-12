@@ -341,6 +341,8 @@ class HeartbeatRequest(BaseModel):
     strategy: Optional[dict[str, Any]] = None
     # Pullback Probability Analyzer blob (advisory; not used by SETUP_OK gates)
     pullback: Optional[dict[str, Any]] = None
+    # Pullback Desk V2 experimental blob (advisory; independent scores)
+    pullback_v2: Optional[dict[str, Any]] = None
     # Gold SMC Intelligence Engine blob (advisory; Gold-only; Phase 1 scaffold)
     gold_smc: Optional[dict[str, Any]] = None
     # Liquidity Grab Detection blob (advisory; Gold-only)

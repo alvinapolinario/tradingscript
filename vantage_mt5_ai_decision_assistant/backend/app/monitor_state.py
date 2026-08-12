@@ -137,6 +137,8 @@ class EaSnapshot:
     strategy: dict | None = None
     pullback: dict | None = None
     pullback_supported: bool = False
+    pullback_v2: dict | None = None
+    pullback_v2_supported: bool = False
     gold_smc: dict | None = None
     gold_smc_supported: bool = False
     liquidity_grab: dict | None = None
@@ -268,6 +270,9 @@ def _apply_heartbeat_fields(ea: EaSnapshot, payload: dict[str, Any]) -> None:
     if isinstance(payload.get("pullback"), dict):
         ea.pullback = payload["pullback"]
         ea.pullback_supported = True
+    if isinstance(payload.get("pullback_v2"), dict):
+        ea.pullback_v2 = payload["pullback_v2"]
+        ea.pullback_v2_supported = True
     if isinstance(payload.get("gold_smc"), dict):
         ea.gold_smc = payload["gold_smc"]
         ea.gold_smc_supported = True
@@ -615,6 +620,8 @@ class MonitorStore:
             "strategy": ea.strategy,
             "pullback": ea.pullback,
             "pullback_supported": ea.pullback_supported,
+            "pullback_v2": ea.pullback_v2,
+            "pullback_v2_supported": ea.pullback_v2_supported,
             "gold_smc": ea.gold_smc,
             "gold_smc_supported": ea.gold_smc_supported,
             "liquidity_grab": ea.liquidity_grab,

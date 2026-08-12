@@ -40,6 +40,8 @@
 #include <VantageAI/VantageDiagnostics.mqh>
 #include <VantageAI/VantageM5Desk.mqh>
 #include <VantageAI/VantagePullback.mqh>
+#include <VantageAI/VantagePullbackV2.mqh>
+#include <VantageAI/VantagePullbackV2Logger.mqh>
 #include <VantageAI/VantageGoldSMC.mqh>
 #include <VantageAI/VantageLiquidityGrab.mqh>
 #include <VantageAI/VantageBreakoutStructure.mqh>
@@ -170,6 +172,43 @@ input int    InpPbAlertCoolSec = 300;
 input int    InpPbUtcOffsetHrs = 0;
 input bool   InpPbShowChartObj = true;
 input bool   InpPbShowDash     = true;
+
+input group "L2. Pullback Desk V2 — Enable"
+input bool             InpPullbackV2Enable   = true;
+input bool             InpPbV2ShowDash       = true;
+
+input group "L3. Pullback Desk V2 — Prediction Definition"
+input double           InpPbV2PullbackAtrThreshold = 0.50;
+input int              InpPbV2PredictionBars   = 6;
+input ENUM_TIMEFRAMES  InpPbV2HorizonTF       = PERIOD_M15;
+
+input group "L4. Pullback Desk V2 — Displacement / Premium-Discount"
+input double           InpPbV2MinMssDisplacement = 55.0;
+input double           InpPbV2DeepDiscountPct  = 0.25;
+input double           InpPbV2DeepPremiumPct   = 0.75;
+
+input group "L5. Pullback Desk V2 — Liquidity Integration"
+input bool             InpPbV2UseLiquidityGrab = true;
+input double           InpPbV2LiqApproachAtr   = 0.60;
+input double           InpPbV2LiqTouchAtr      = 0.15;
+
+input group "L6. Pullback Desk V2 — POI / FVG / OB"
+input bool             InpPbV2UseGoldSmcPoi    = true;
+input double           InpPbV2MinFvgAtr        = 0.12;
+input int              InpPbV2MaxPoiScan       = 80;
+input double           InpPbV2PoiApproachAtr   = 0.50;
+
+input group "L7. Pullback Desk V2 — Depth / OTE"
+input bool             InpPbV2UseGoldSmcOte     = true;
+input bool             InpPbV2EnableOte        = true;
+input double           InpPbV2OteLowPct        = 0.618;
+input double           InpPbV2OteMidPct        = 0.705;
+input double           InpPbV2OteHighPct       = 0.790;
+
+input group "L8. Pullback Desk V2 — CSV / Calibration"
+input bool             InpPbV2CsvLogEnable     = true;
+input bool             InpPbV2CsvLogV1Shadow    = true;
+input string           InpPbV2CsvFilePrefix     = "pullback_v2_shadow";
 
 input group "M. Gold SMC Intelligence — Symbol Gate"
 input bool   InpGoldSmcEnable       = true;
@@ -573,6 +612,9 @@ CVantageM5Desk       g_m5desk;
 VantageM5DeskSnap    g_m5snap;
 CVantagePullback     g_pullback;
 VantagePullbackResult g_pbsnap;
+CVantagePullbackV2   g_pullback_v2;
+VantagePullbackV2Snapshot g_pbsnap_v2;
+CVantagePullbackV2Logger g_pbv2_log;
 CVantageGoldSMC      g_goldsmc;
 VantageGoldSMCResult g_gsmsnap;
 CVantageLiquidityGrab g_liqgrab;
@@ -1091,6 +1133,8 @@ string BuildHeartbeatPayload(void)
      }
    if(InpPullbackEnable && g_pbsnap.valid)
       j += ",\"pullback\":" + g_pullback.ToJson(g_pbsnap);
+   if(InpPullbackV2Enable && g_pbsnap_v2.valid)
+      j += ",\"pullback_v2\":" + g_pullback_v2.ToJson(g_pbsnap_v2);
    if(g_gsmsnap.valid)
       j += ",\"gold_smc\":" + g_goldsmc.ToJson(g_gsmsnap);
    if(g_liqgrabsnap.valid)
@@ -1162,6 +1206,98 @@ void MaybeEvalPullback(const bool force)
    VantagePullbackResult r;
    if(g_pullback.Evaluate(force, r))
       g_pbsnap = r;
+  }
+
+void FillPullbackV2Config(VantagePullbackV2Config &cfg)
+  {
+   ZeroMemory(cfg);
+   cfg.tf_h1 = InpPullbackTF_H1;
+   cfg.tf_m15 = InpPullbackTF_M15;
+   cfg.tf_m5 = InpPullbackTF_M5;
+   cfg.horizon_tf = InpPbV2HorizonTF;
+   cfg.ema_fast = InpPbEmaFast;
+   cfg.ema_slow = InpPbEmaSlow;
+   cfg.ema_long = InpPbEmaLong;
+   cfg.rsi_period = InpPbRsiPeriod;
+   cfg.rsi_ob = InpPbRsiOB;
+   cfg.rsi_os = InpPbRsiOS;
+   cfg.atr_period = InpPbAtrPeriod;
+   cfg.bb_period = InpPbBbPeriod;
+   cfg.bb_dev = InpPbBbDev;
+   cfg.adx_period = InpPbAdxPeriod;
+   cfg.adx_min = InpPbAdxMin;
+   cfg.swing_left = InpPbSwingLeft;
+   cfg.swing_right = InpPbSwingRight;
+   cfg.pullback_atr_threshold = InpPbV2PullbackAtrThreshold;
+   cfg.prediction_bars = InpPbV2PredictionBars;
+   cfg.min_mss_displacement = InpPbV2MinMssDisplacement;
+   cfg.deep_discount_pct = InpPbV2DeepDiscountPct;
+   cfg.deep_premium_pct = InpPbV2DeepPremiumPct;
+   cfg.liquidity_approach_atr = InpPbV2LiqApproachAtr;
+   cfg.liquidity_touch_atr = InpPbV2LiqTouchAtr;
+   cfg.prefer_liquidity_grab = InpPbV2UseLiquidityGrab;
+   cfg.prefer_gold_smc_poi = InpPbV2UseGoldSmcPoi;
+   cfg.min_fvg_atr = InpPbV2MinFvgAtr;
+   cfg.max_poi_scan = InpPbV2MaxPoiScan;
+   cfg.poi_approach_atr = InpPbV2PoiApproachAtr;
+   cfg.prefer_gold_smc_ote = InpPbV2UseGoldSmcOte;
+   cfg.enable_ote = InpPbV2EnableOte;
+   cfg.ote_low_pct = InpPbV2OteLowPct;
+   cfg.ote_mid_pct = InpPbV2OteMidPct;
+   cfg.ote_high_pct = InpPbV2OteHighPct;
+   cfg.csv_log_enable = InpPbV2CsvLogEnable;
+   cfg.csv_log_v1_shadow = InpPbV2CsvLogV1Shadow;
+   cfg.csv_log_prefix = InpPbV2CsvFilePrefix;
+   cfg.show_dashboard = InpPbV2ShowDash && WantModuleDashboard();
+  }
+
+void InitPullbackV2Logger(void)
+  {
+   VantagePullbackV2LogConfig lcfg;
+   ZeroMemory(lcfg);
+   lcfg.enable = InpPbV2CsvLogEnable;
+   lcfg.log_v1_shadow = InpPbV2CsvLogV1Shadow;
+   lcfg.file_prefix = InpPbV2CsvFilePrefix;
+   if(!g_pbv2_log.Init(_Symbol, lcfg))
+      Print("[VantageAI] Pullback V2 CSV logger init failed.");
+  }
+
+void MaybeEvalPullbackV2(const bool force)
+  {
+   if(!InpPullbackV2Enable)
+      return;
+   VantagePullbackV2Snapshot r;
+   const VantageLiquidityGrabResult *lg_ptr = NULL;
+   VantageLiquidityGrabResult lg_local;
+   if(InpPbV2UseLiquidityGrab && InpLiqGrabEnable && g_liqgrabsnap.valid)
+     {
+      lg_local = g_liqgrabsnap;
+      lg_ptr = &lg_local;
+     }
+   const VantageGoldSMCResult *gsm_ptr = NULL;
+   VantageGoldSMCResult gsm_local;
+   if((InpPbV2UseGoldSmcPoi || InpPbV2UseGoldSmcOte) && InpGoldSmcEnable && g_gsmsnap.valid)
+     {
+      gsm_local = g_gsmsnap;
+      gsm_ptr = &gsm_local;
+     }
+   static datetime s_last_csv_m5 = 0;
+   if(g_pullback_v2.Evaluate(force, r, lg_ptr, gsm_ptr))
+     {
+      g_pbsnap_v2 = r;
+      if(r.valid && InpPbV2CsvLogEnable && r.eval_bar_m5 != s_last_csv_m5)
+        {
+         const VantagePullbackResult *v1_ptr = NULL;
+         VantagePullbackResult v1_local;
+         if(InpPbV2CsvLogV1Shadow && InpPullbackEnable && g_pbsnap.valid)
+           {
+            v1_local = g_pbsnap;
+            v1_ptr = &v1_local;
+           }
+         if(g_pbv2_log.WriteRow(g_pbsnap_v2, v1_ptr, r.eval_bar_m5))
+            s_last_csv_m5 = r.eval_bar_m5;
+        }
+     }
   }
 
 void FillGoldSmcConfig(VantageGoldSMCConfig &cfg)
@@ -1678,8 +1814,9 @@ void MaybeSendHeartbeat(void)
    else
       g_m5snap.valid = false;
    MaybeEvalPullback(false);
-   MaybeEvalGoldSmc(false);
    MaybeEvalLiquidityGrab(false);
+   MaybeEvalGoldSmc(false);
+   MaybeEvalPullbackV2(false);
    MaybeEvalBreakoutStructure(false);
    MaybeEvalMarketState(false);
    MaybeEvalSwingStrategy(false);
@@ -1892,8 +2029,9 @@ void ProcessReplayBar(const datetime closed_time)
      }
 
    MaybeEvalPullback(false);
-   MaybeEvalGoldSmc(false);
    MaybeEvalLiquidityGrab(false);
+   MaybeEvalGoldSmc(false);
+   MaybeEvalPullbackV2(false);
    MaybeEvalBreakoutStructure(false);
    MaybeEvalMarketState(false);
    MaybeEvalSwingStrategy(false);
@@ -2029,8 +2167,9 @@ void RefreshDashboard(void)
    string ts = (g_reply.timestamp_utc != "" ? g_reply.timestamp_utc : "n/a");
 
    MaybeEvalPullback(false);
-   MaybeEvalGoldSmc(false);
    MaybeEvalLiquidityGrab(false);
+   MaybeEvalGoldSmc(false);
+   MaybeEvalPullbackV2(false);
    MaybeEvalBreakoutStructure(false);
    MaybeEvalMarketState(false);
    MaybeEvalSwingStrategy(false);
@@ -2055,7 +2194,8 @@ void RefreshDashboard(void)
                  g_liqgrabsnap, show_lg,
                  g_bossnap, show_bos,
                  g_msesnap, show_mse,
-                 g_swingsnap, show_swing);
+                 g_swingsnap, show_swing,
+                 g_pbsnap_v2, WantModuleDashboard() && InpPbV2ShowDash && InpPullbackV2Enable);
   }
 
 //+------------------------------------------------------------------+
@@ -2121,6 +2261,16 @@ int OnInit()
          MaybeEvalPullback(true);
      }
 
+   if(InpLiqGrabEnable)
+     {
+      VantageLiquidityGrabConfig lcfg;
+      FillLiquidityGrabConfig(lcfg);
+      if(!g_liqgrab.Init(_Symbol, lcfg))
+         Print("[VantageAI] Liquidity Grab Monitor init failed.");
+      else
+         MaybeEvalLiquidityGrab(true);
+     }
+
    {
     VantageGoldSMCConfig gcfg;
     FillGoldSmcConfig(gcfg);
@@ -2130,14 +2280,17 @@ int OnInit()
        MaybeEvalGoldSmc(true);
    }
 
-   if(InpLiqGrabEnable)
+   if(InpPullbackV2Enable)
      {
-      VantageLiquidityGrabConfig lcfg;
-      FillLiquidityGrabConfig(lcfg);
-      if(!g_liqgrab.Init(_Symbol, lcfg))
-         Print("[VantageAI] Liquidity Grab Monitor init failed.");
+      VantagePullbackV2Config p2cfg;
+      FillPullbackV2Config(p2cfg);
+      if(!g_pullback_v2.Init(_Symbol, p2cfg))
+         Print("[VantageAI] Pullback Desk V2 init failed.");
       else
-         MaybeEvalLiquidityGrab(true);
+        {
+         InitPullbackV2Logger();
+         MaybeEvalPullbackV2(true);
+        }
      }
 
    if(InpBosEnable)
@@ -2276,6 +2429,8 @@ void OnDeinit(const int reason)
    g_analysis.Release();
    g_m5desk.Release();
    g_pullback.Release();
+   g_pullback_v2.Release();
+   g_pbv2_log.Release();
    g_goldsmc.Release();
    g_liqgrab.Release();
    g_breakout.Release();

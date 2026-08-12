@@ -340,8 +340,104 @@ def pullback_status() -> dict:
         "bid": ea.get("bid"),
         "ask": ea.get("ask"),
         "pullback": pb,
-        "links": {"pullback": "/pullback", "analyzer": "/analyzer", "monitor": "/monitor"},
+        "pullback_v2_supported": bool(ea.get("pullback_v2_supported")),
+        "pullback_v2": ea.get("pullback_v2"),
+        "links": {
+            "pullback": "/pullback",
+            "pullback_v2_shadow": "/api/v1/pullback/v2/shadow",
+            "pullback_v2_calibrate": "/api/v1/pullback/v2/calibrate",
+            "analyzer": "/analyzer",
+            "monitor": "/monitor",
+        },
     }
+
+
+@router.get("/api/v1/pullback/v2/shadow")
+def pullback_v2_shadow_live() -> dict:
+    """Live V1 vs V2 shadow comparison from latest heartbeat."""
+    from app.analysis.pullback_v2.shadow_compare import live_shadow_compare
+
+    st = monitor_store.status()
+    ea = st.get("vantage_ea") or {}
+    link = st.get("link_health") or {}
+    shadow = live_shadow_compare(ea.get("pullback"), ea.get("pullback_v2"))
+    shadow["ea_online"] = bool(link.get("ea_online") or ea.get("connected"))
+    shadow["symbol"] = str(ea.get("symbol") or st.get("selected_symbol") or "").upper()
+    return shadow
+
+
+@router.post("/api/v1/pullback/v2/label")
+def pullback_v2_label(body: dict) -> dict:
+    """Offline outcome labeler — requires aligned future M15 candles (no live lookahead)."""
+    from app.analysis.pullback_v2.outcome_labeler import label_rows
+
+    rows = body.get("rows") or []
+    if not isinstance(rows, list):
+        return {"error": "rows must be a list", "module": "pullback_v2_labeler"}
+    candles = body.get("candles_m15") or body.get("candles") or []
+    horizon = body.get("horizon_bars")
+    return label_rows(rows, candles_m15=candles, horizon_bars=horizon)
+
+
+@router.post("/api/v1/pullback/v2/shadow/analyze")
+def pullback_v2_shadow_analyze(body: dict) -> dict:
+    """Label CSV rows then aggregate V1 vs V2 shadow metrics."""
+    from app.analysis.pullback_v2.calibration_buckets import build_calibration_report
+    from app.analysis.pullback_v2.outcome_labeler import label_rows
+    from app.analysis.pullback_v2.shadow_compare import aggregate_shadow_metrics
+
+    labeled = label_rows(
+        body.get("rows") or [],
+        candles_m15=body.get("candles_m15") or body.get("candles") or [],
+        horizon_bars=body.get("horizon_bars"),
+    )
+    rows = labeled.get("rows") or []
+    thresholds: dict[str, float] = {}
+    calibration = None
+    if body.get("include_calibration"):
+        calibration = build_calibration_report(
+            rows,
+            bucket_width=int(body.get("bucket_width") or 10),
+            min_samples=int(body.get("min_samples") or 5),
+        )
+        v2_thr = (calibration.get("scores") or {}).get("v2_pullback_score", {}).get(
+            "recommended_threshold"
+        )
+        v1_thr = (calibration.get("scores") or {}).get("v1_pullback_prob", {}).get(
+            "recommended_threshold"
+        )
+        if v2_thr is not None:
+            thresholds["v2_pullback_score"] = float(v2_thr)
+        if v1_thr is not None:
+            thresholds["v1_pullback_prob"] = float(v1_thr)
+
+    metrics = aggregate_shadow_metrics(rows, thresholds=thresholds or None)
+    out: dict = {"labeler": labeled, "shadow": metrics}
+    if calibration is not None:
+        out["calibration"] = calibration
+    return out
+
+
+@router.post("/api/v1/pullback/v2/calibrate")
+def pullback_v2_calibrate(body: dict) -> dict:
+    """Label CSV rows and produce offline calibration bucket report."""
+    from app.analysis.pullback_v2.calibration_buckets import build_calibration_report
+    from app.analysis.pullback_v2.outcome_labeler import label_rows
+
+    rows_in = body.get("rows") or []
+    if not isinstance(rows_in, list):
+        return {"error": "rows must be a list", "module": "pullback_v2_calibration"}
+    labeled = label_rows(
+        rows_in,
+        candles_m15=body.get("candles_m15") or body.get("candles") or [],
+        horizon_bars=body.get("horizon_bars"),
+    )
+    report = build_calibration_report(
+        labeled.get("rows") or [],
+        bucket_width=int(body.get("bucket_width") or 10),
+        min_samples=int(body.get("min_samples") or 5),
+    )
+    return {"labeler": labeled, "calibration": report}
 
 
 @router.get("/api/v1/gold-smc/status")

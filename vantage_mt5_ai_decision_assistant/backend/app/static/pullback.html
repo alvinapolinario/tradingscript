@@ -97,6 +97,16 @@
     .kpi.cons .v { color: var(--warn); }
     .kpi.rev .v { color: var(--sell); }
     .kpi.hot .v { color: var(--warn); }
+    .v2-banner {
+      border: 1px solid #3a5a4a;
+      background: rgba(94, 224, 181, 0.08);
+      border-radius: 12px;
+      padding: .55rem .75rem;
+      font-size: .75rem;
+      color: var(--accent);
+      margin-bottom: .75rem;
+    }
+    .kpi.v2 .v { color: var(--accent); }
     .section-title {
       font-size: .72rem; letter-spacing: .1em; text-transform: uppercase;
       color: var(--muted); margin: .2rem 0 .55rem;
@@ -177,6 +187,10 @@
       if (n == null || Number.isNaN(Number(n))) return "—";
       return Number(n).toFixed(0) + "%";
     }
+    function fmtScore(n) {
+      if (n == null || Number.isNaN(Number(n))) return "—";
+      return Number(n).toFixed(0) + "/100";
+    }
     function splitReasons(s) {
       if (!s) return [];
       return String(s).split(";").map((x) => x.trim()).filter(Boolean);
@@ -252,6 +266,70 @@
 
       const pos = splitReasons(pb.reasons_positive).map((r) => `<li class="pos">${r}</li>`).join("");
       const neg = splitReasons(pb.reasons_negative).map((r) => `<li class="neg">${r}</li>`).join("");
+      const v2 = payload.pullback_v2;
+      let v2Html = "";
+      if (payload.pullback_v2_supported && v2 && v2.valid !== false) {
+        const ms = v2.market_structure || {};
+        const hz = v2.prediction_horizon || {};
+        const ev = v2.pullback_event_definition || {};
+        const dr = v2.dealing_range || {};
+        const mom = v2.momentum || {};
+        const liq = v2.liquidity || {};
+        const poi = v2.poi || {};
+        const ote = v2.ote || {};
+        const depth = v2.depth || {};
+        const pos2 = splitReasons(v2.reasons_positive).map((r) => `<li class="pos">${r}</li>`).join("");
+        const neg2 = splitReasons(v2.reasons_negative).map((r) => `<li class="neg">${r}</li>`).join("");
+        v2Html = `
+        <div class="v2-banner">Pullback Desk V2 Milestone 7 — Raw scores on chart; calibration buckets computed offline from CSV + labeled outcomes.</div>
+        <div class="section-title">Pullback Desk V2 · independent scores</div>
+        <div class="kpi-grid">
+          <div class="kpi v2"><div class="k">Pullback score</div><div class="v">${fmtScore(v2.pullback_score)}</div><div class="s">independent</div></div>
+          <div class="kpi cont"><div class="k">Immediate continuation</div><div class="v">${fmtScore(v2.immediate_continuation_score)}</div><div class="s">without pullback</div></div>
+          <div class="kpi"><div class="k">Continuation after PB</div><div class="v">${fmtScore(v2.continuation_after_pullback_score)}</div><div class="s">if pullback occurs</div></div>
+          <div class="kpi rev"><div class="k">Reversal risk</div><div class="v">${fmtScore(v2.reversal_risk_score)}</div><div class="s">structural</div></div>
+        </div>
+        <div class="kpi-grid scores">
+          <div class="kpi hot"><div class="k">Extension</div><div class="v">${fmtScore(v2.extension_score)}</div><div class="s">market stretch</div></div>
+          <div class="kpi"><div class="k">Displacement</div><div class="v">${fmtScore(v2.displacement_score)}</div><div class="s">impulse quality</div></div>
+          <div class="kpi"><div class="k">Entry location</div><div class="v">${fmtScore(v2.entry_location_score)}</div><div class="s">trend-entry quality</div></div>
+        </div>
+        <div class="kpi-grid scores">
+          <div class="kpi"><div class="k">Premium / Discount</div><div class="v">${dr.location || v2.premium_discount_location || "—"}</div><div class="s">${dr.position_pct != null ? Number(dr.position_pct).toFixed(0) + "% of range" : "—"}</div></div>
+          <div class="kpi"><div class="k">Momentum</div><div class="v">${mom.state || v2.momentum_state || "—"}</div><div class="s">RSI ${mom.rsi_level != null ? Number(mom.rsi_level).toFixed(1) : (v2.rsi_level != null ? Number(v2.rsi_level).toFixed(1) : "—")}</div></div>
+        </div>
+        <div class="kpi-grid scores">
+          <div class="kpi"><div class="k">Liquidity draw</div><div class="v">${liq.draw || v2.liquidity_draw || "—"}</div><div class="s">${liq.state || v2.liquidity_state || "—"}</div></div>
+          <div class="kpi"><div class="k">Liquidity distance</div><div class="v">${liq.distance_atr != null ? Number(liq.distance_atr).toFixed(2) + " ATR" : (v2.liquidity_distance_atr != null ? Number(v2.liquidity_distance_atr).toFixed(2) + " ATR" : "—")}</div><div class="s">${liq.from_liquidity_grab ? "Liquidity Grab module" : "Structural fallback"}</div></div>
+          <div class="kpi"><div class="k">Expected depth</div><div class="v">${v2.expected_depth || "—"}</div><div class="s">${v2.expected_pullback_atr != null ? Number(v2.expected_pullback_atr).toFixed(2) + " ATR est." : "—"}</div></div>
+        </div>
+        <div class="kpi-grid scores">
+          <div class="kpi"><div class="k">Primary POI</div><div class="v">${poi.primary_type || v2.poi_primary_type || "—"}</div><div class="s">${poi.primary_dir || "—"} · ${poi.status || "—"}</div></div>
+          <div class="kpi"><div class="k">POI quality</div><div class="v">${poi.quality != null ? Number(poi.quality).toFixed(0) : "—"}</div><div class="s">Target ${poi.pullback_target_score != null ? Number(poi.pullback_target_score).toFixed(0) : (v2.poi_pullback_target_score != null ? Number(v2.poi_pullback_target_score).toFixed(0) : "—")}/100</div></div>
+          <div class="kpi"><div class="k">POI distance</div><div class="v">${poi.distance_atr != null ? Number(poi.distance_atr).toFixed(2) + " ATR" : "—"}</div><div class="s">${poi.price_inside ? "Inside zone" : (poi.price_approaching ? "Approaching" : (poi.from_gold_smc ? "Gold SMC" : "M15 fallback"))}</div></div>
+        </div>
+        <div class="kpi-grid scores">
+          <div class="kpi"><div class="k">OTE zone</div><div class="v">${ote.valid ? (ote.price_in_ote ? "IN OTE" : "Outside") : "—"}</div><div class="s">${ote.poi_overlaps_ote ? "POI overlap" : (ote.from_gold_smc ? "Gold SMC" : "M15 fallback")}</div></div>
+          <div class="kpi"><div class="k">Depth target</div><div class="v">${depth.expected_depth || v2.expected_depth || "—"}</div><div class="s">${depth.expected_pullback_atr != null ? Number(depth.expected_pullback_atr).toFixed(2) + " ATR" : (v2.expected_pullback_atr != null ? Number(v2.expected_pullback_atr).toFixed(2) + " ATR" : "—")}</div></div>
+          <div class="kpi"><div class="k">Cont. after PB</div><div class="v">${fmtScore(v2.continuation_after_pullback_score)}</div><div class="s">${depth.source || v2.depth_source || "—"} · fib ${depth.fib_retrace_pct != null ? Number(depth.fib_retrace_pct).toFixed(0) + "%" : "—"}</div></div>
+        </div>
+        <div class="card">
+          <div class="state">${v2.market_state || "—"}</div>
+          <div class="meta">${v2.explanation || v2.short_reason || "—"}</div>
+          <div class="meta">Horizon: ${hz.bars || "—"} ${hz.timeframe || "M15"} bars (~${hz.minutes || "—"} min) · Event: ≥ ${ev.threshold_atr != null ? Number(ev.threshold_atr).toFixed(2) : "—"} ATR retracement</div>
+          <div class="meta">Structure H1/M15/M5: ${ms.h1 || "—"} / ${ms.m15 || "—"} / ${ms.m5 || "—"} · BOS ${ms.bullish_bos ? "bull" : ""}${ms.bearish_bos ? "bear" : ""}${!ms.bullish_bos && !ms.bearish_bos ? "none" : ""} · CHoCH ${ms.bullish_choch || ms.bearish_choch ? "yes" : "none"} · MSS ${ms.bullish_mss || ms.bearish_mss ? "yes" : "none"}</div>
+          ${dr.low != null && dr.high != null ? `<div class="meta">Dealing range: ${fmtPx(dr.low, dig)} – ${fmtPx(dr.high, dig)}</div>` : ""}
+          ${liq.target_price != null && liq.target_price > 0 ? `<div class="meta">Liquidity target: ${fmtPx(liq.target_price, dig)} (${liq.target_label || "—"})</div>` : ""}
+          ${poi.lower != null && poi.upper != null && poi.upper > poi.lower ? `<div class="meta">POI zone: ${fmtPx(poi.lower, dig)} – ${fmtPx(poi.upper, dig)} · FVG ${poi.fvg_count != null ? poi.fvg_count : 0} · OB ${poi.ob_count != null ? poi.ob_count : 0}</div>` : ""}
+          ${ote.ote_low != null && ote.ote_high != null && ote.ote_high > ote.ote_low ? `<div class="meta">OTE zone: ${fmtPx(ote.ote_low, dig)} – ${fmtPx(ote.ote_high, dig)} · mid ${fmtPx(ote.ote_mid, dig)}</div>` : ""}
+          ${depth.target_mid != null && depth.target_mid > 0 ? `<div class="meta">Depth target mid: ${fmtPx(depth.target_mid, dig)} (${depth.source || "—"})</div>` : ""}
+        </div>
+        <div class="section-title">V2 factor checklist</div>
+        <div class="card"><ul class="checks">${pos2 || "<li class='pos'>No positive factors listed</li>"}${neg2}</ul></div>
+        <div id="shadowBox"></div>`;
+      } else if (payload.ea_online && payload.pullback_supported) {
+        v2Html = `<div class="card"><div class="meta">Pullback Desk V2 not available yet for this EA build. Recompile with <b>VantagePullbackV2.mqh</b> and enable <b>InpPullbackV2Enable</b>.</div></div>`;
+      }
       body.innerHTML = `
         <div class="section-title">Market state · ${payload.selected_symbol || payload.symbol || "—"}</div>
         <div class="card">
@@ -272,13 +350,39 @@
         <div class="card">
           <ul class="checks">${pos || "<li class='pos'>No positive factors listed</li>"}${neg}</ul>
         </div>
-        <p class="meta" style="text-align:center">Advisory only — never places, modifies, or cancels MT5 orders. Bid ${fmtPx(payload.bid, dig)} / Ask ${fmtPx(payload.ask, dig)}</p>`;
+        <p class="meta" style="text-align:center">Advisory only — never places, modifies, or cancels MT5 orders. Bid ${fmtPx(payload.bid, dig)} / Ask ${fmtPx(payload.ask, dig)}</p>
+        ${v2Html}`;
+    }
+    async function loadShadow() {
+      const box = document.getElementById("shadowBox");
+      if (!box) return;
+      try {
+        const r = await fetch("/api/v1/pullback/v2/shadow");
+        const s = await r.json();
+        if (!s.available) {
+          box.innerHTML = `<div class="card"><div class="meta">V1/V2 shadow compare unavailable — need both heartbeat blobs.</div></div>`;
+          return;
+        }
+        const gaps = (s.gap_notes || []).map((n) => `<li class="neg">${n}</li>`).join("");
+        box.innerHTML = `
+        <div class="section-title">V1 vs V2 shadow (live)</div>
+        <div class="kpi-grid scores">
+          <div class="kpi"><div class="k">V1 dominant</div><div class="v">${s.v1_dominant_outcome || "—"}</div><div class="s">PB ${s.v1_probs?.pullback ?? "—"}%</div></div>
+          <div class="kpi"><div class="k">V2 posture</div><div class="v">${s.v2_posture || "—"}</div><div class="s">PB score ${s.v2_scores?.pullback ?? "—"}</div></div>
+          <div class="kpi"><div class="k">Alignment</div><div class="v">${s.aligned ? "ALIGNED" : "GAP"}</div><div class="s">CSV ${s.csv_logging_enabled ? "on" : "off"}</div></div>
+        </div>
+        ${gaps ? `<div class="card"><ul class="checks">${gaps}</ul></div>` : ""}
+        <div class="card"><div class="meta">Offline: POST /api/v1/pullback/v2/label · POST /api/v1/pullback/v2/calibrate · POST /api/v1/pullback/v2/shadow/analyze (add <code>include_calibration: true</code> for bucket thresholds).</div></div>`;
+      } catch (e) {
+        box.innerHTML = "";
+      }
     }
     async function refresh() {
       try {
         const r = await fetch("/api/v1/pullback/status");
         const j = await r.json();
         render(j);
+        await loadShadow();
       } catch (e) {
         document.getElementById("body").innerHTML =
           `<div class="empty">Failed to load pullback status</div>`;

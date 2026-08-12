@@ -10,6 +10,7 @@
 #include "VantageDecision.mqh"
 #include "VantageHistory.mqh"
 #include "VantagePullback.mqh"
+#include "VantagePullbackV2.mqh"
 #include "VantageGoldSMC.mqh"
 #include "VantageLiquidityGrab.mqh"
 #include "VantageBreakoutStructure.mqh"
@@ -94,7 +95,9 @@ public:
                const VantageMseResult &mse,
                const bool show_mse,
                const VantageSwingStratResult &swing,
-               const bool show_swing)
+               const bool show_swing,
+               const VantagePullbackV2Snapshot &pbv2,
+               const bool show_pullback_v2)
      {
       int r = 0;
       color riskCol = clrSilver;
@@ -208,6 +211,35 @@ public:
                   " | Quality " + DoubleToString(pb.pullback_quality, 0), clrSilver);
          SetLabel("tpb3", r++, "State: " + pb.market_state, clrYellow);
          SetLabel("tpb4", r++, StringSubstr(pb.short_reason != "" ? pb.short_reason : pb.explanation, 0, 90), clrSilver);
+        }
+
+      if(show_pullback_v2 && pbv2.valid)
+        {
+         color v2Col = clrGold;
+         if(pbv2.dominant_dir > 0) v2Col = clrLime;
+         else if(pbv2.dominant_dir < 0) v2Col = clrOrange;
+         SetLabel("tpbv0", r++, "--- PULLBACK DESK V2 (experimental) ---", clrAqua);
+         SetLabel("tpbv1", r++, "Trend: " + pbv2.dominant_trend +
+                  " | PB " + DoubleToString(pbv2.pullback_score, 0) +
+                  "/100 | Imm " + DoubleToString(pbv2.immediate_continuation_score, 0) +
+                  "/100 | RevR " + DoubleToString(pbv2.reversal_risk_score, 0) + "/100", v2Col);
+         SetLabel("tpbv2", r++, "Ext " + DoubleToString(pbv2.extension_score, 0) +
+                  " | Disp " + DoubleToString(pbv2.displacement_score, 0) +
+                  " | Entry " + DoubleToString(pbv2.entry_location_score, 0), clrSilver);
+         SetLabel("tpbv3", r++, "PD " + pbv2.premium_discount_location +
+                  " (" + DoubleToString(pbv2.range_position_pct, 0) + "%) | Liq " +
+                  pbv2.liquidity_draw + " " + pbv2.liquidity_state +
+                  " " + DoubleToString(pbv2.liquidity_distance_atr, 2) + "ATR", clrSilver);
+         SetLabel("tpbv4", r++, "POI " + (pbv2.poi_primary_type != "" ? pbv2.poi_primary_dir + " " + pbv2.poi_primary_type : "none") +
+                  " Q" + DoubleToString(pbv2.poi_quality, 0) +
+                  " | " + DoubleToString(pbv2.poi_distance_atr, 2) + "ATR" +
+                  (pbv2.poi_price_inside ? " INSIDE" : (pbv2.poi_price_approaching ? " NEAR" : "")), clrAqua);
+         SetLabel("tpbv5", r++, "Mom " + pbv2.momentum_state + " | Depth " + pbv2.expected_depth +
+                  " " + DoubleToString(pbv2.expected_pullback_atr, 2) + "ATR", clrYellow);
+         SetLabel("tpbv6", r++, "OTE " + (pbv2.ote_valid ? (pbv2.price_in_ote ? "IN" : "out") : "—") +
+                  " | ContPB " + DoubleToString(pbv2.continuation_after_pullback_score, 0) +
+                  " | " + pbv2.market_state, clrGold);
+         SetLabel("tpbv7", r++, StringSubstr(pbv2.short_reason != "" ? pbv2.short_reason : pbv2.explanation, 0, 90), clrSilver);
         }
 
       if(show_gold_smc && gsm.valid)
