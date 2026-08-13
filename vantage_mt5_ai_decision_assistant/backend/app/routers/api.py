@@ -850,6 +850,49 @@ def _ict_candles_from_request(candles_raw: dict) -> tuple[dict, list, list]:
     return by_tf, setup, execution
 
 
+@router.get("/api/v1/h4-m15-fvg/status")
+def h4_m15_fvg_status() -> dict:
+    """Latest H4→M15 FVG setup snapshots from persistence."""
+    from app.analysis.h4_m15_fvg.store import list_setups
+
+    st = monitor_store.status()
+    ea = st.get("vantage_ea") or {}
+    selected = str(st.get("selected_symbol") or ea.get("symbol") or "XAUUSD").upper()
+    items = list_setups(selected, limit=10)
+    return {
+        "module": "h4_m15_fvg",
+        "advisory_only": True,
+        "symbol": selected,
+        "setups": items,
+        "links": {
+            "analyze": "/api/v1/h4-m15-fvg/analyze",
+            "docs": "/docs/FVG_H4_M15_IMPLEMENTATION.md",
+        },
+    }
+
+
+@router.post("/api/v1/h4-m15-fvg/analyze")
+@router.post("/api/v1/strategy/h4-m15-fvg/analyze")
+def h4_m15_fvg_analyze(body: dict) -> dict:
+    """Offline H4→M15 FVG orchestration from closed candles (ENTRY_READY only, no trades)."""
+    from app.analysis.h4_m15_fvg import analyze_h4_m15_fvg, candles_from_request
+    from app.analysis.h4_m15_fvg.types import H4M15FvgConfig
+
+    payload = body or {}
+    symbol = str(payload.get("symbol") or "XAUUSD").upper()
+    candles_raw = payload.get("candles") if isinstance(payload.get("candles"), dict) else {}
+    cfg_raw = payload.get("config") if isinstance(payload.get("config"), dict) else {}
+    by_tf = candles_from_request(candles_raw)
+    cfg_kwargs = {k: v for k, v in cfg_raw.items() if hasattr(H4M15FvgConfig, k)}
+    cfg = H4M15FvgConfig(**cfg_kwargs) if cfg_kwargs else None
+    return analyze_h4_m15_fvg(
+        symbol=symbol,
+        candles_by_timeframe=by_tf,
+        cfg=cfg,
+        persist=bool(payload.get("persist", True)),
+    )
+
+
 @router.post("/api/v1/ict/analyze")
 @router.post("/api/v1/strategy/ict/analyze")
 def ict_analyze(body: dict) -> dict:

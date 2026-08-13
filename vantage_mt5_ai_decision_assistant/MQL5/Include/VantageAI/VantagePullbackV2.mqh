@@ -1108,11 +1108,11 @@ private:
      }
 
    PbV2LiquiditySnap ResolveLiquidity(const int dom, const PbV2TfSnap &m15, const PbV2TfSnap &m5s,
-                                      const VantageLiquidityGrabResult *lg)
+                                      const bool lg_active, const VantageLiquidityGrabResult &lg)
      {
-      if(m_cfg.prefer_liquidity_grab && lg != NULL && lg->valid && lg->analysis_active &&
-         lg->liquidity_level_price > 0)
-         return MapLiquidityGrab(dom, m15, *lg);
+      if(m_cfg.prefer_liquidity_grab && lg_active && lg.valid && lg.analysis_active &&
+         lg.liquidity_level_price > 0)
+         return MapLiquidityGrab(dom, m15, lg);
       return CalcLiquidityFallback(dom, m15, m5s);
      }
 
@@ -1422,11 +1422,11 @@ private:
      }
 
    PbV2PoiSnap ResolvePoi(const int dom, const PbV2TfSnap &m15, const PbV2DealingRangeSnap &dr,
-                          const VantageGoldSMCResult *gsm)
+                          const bool gsm_active, const VantageGoldSMCResult &gsm)
      {
-      if(m_cfg.prefer_gold_smc_poi && gsm != NULL && gsm->valid && gsm->analysis_active &&
-         gsm->gold_symbol_valid && gsm->primary_poi_type != "" && gsm->primary_poi_type != "None")
-         return MapGoldSmcPoi(dom, m15, dr, *gsm);
+      if(m_cfg.prefer_gold_smc_poi && gsm_active && gsm.valid && gsm.analysis_active &&
+         gsm.gold_symbol_valid && gsm.primary_poi_type != "" && gsm.primary_poi_type != "None")
+         return MapGoldSmcPoi(dom, m15, dr, gsm);
       return CalcPoiFallback(dom, m15, dr);
      }
 
@@ -1511,12 +1511,12 @@ private:
      }
 
    PbV2OteSnap ResolveOte(const int dom, const PbV2TfSnap &m15, const PbV2DealingRangeSnap &dr,
-                          const PbV2PoiSnap &poi, const VantageGoldSMCResult *gsm)
+                          const PbV2PoiSnap &poi, const bool gsm_active, const VantageGoldSMCResult &gsm)
      {
       PbV2OteSnap ote;
-      if(m_cfg.prefer_gold_smc_ote && gsm != NULL && gsm->valid && gsm->analysis_active &&
-         gsm->gold_symbol_valid && gsm->ote_enabled_hit && gsm->ote_high > gsm->ote_low)
-         ote = MapGoldSmcOte(poi, *gsm);
+      if(m_cfg.prefer_gold_smc_ote && gsm_active && gsm.valid && gsm.analysis_active &&
+         gsm.gold_symbol_valid && gsm.ote_enabled_hit && gsm.ote_high > gsm.ote_low)
+         ote = MapGoldSmcOte(poi, gsm);
       else
          ote = CalcOteFallback(dom, m15, dr, poi);
       ote.alignment_score = ScoreOteAlignment(dom, ote, poi, dr);
@@ -1933,8 +1933,8 @@ public:
    VantagePullbackV2Snapshot Last(void) const { return m_last; }
 
    bool Evaluate(const bool force, VantagePullbackV2Snapshot &out,
-                 const VantageLiquidityGrabResult *lg = NULL,
-                 const VantageGoldSMCResult *gsm = NULL)
+                 const bool lg_active, const VantageLiquidityGrabResult &lg,
+                 const bool gsm_active, const VantageGoldSMCResult &gsm)
      {
       ZeroMemory(out);
       out.valid = false;
@@ -2029,7 +2029,7 @@ public:
       out.premium_discount_location = dr.location;
 
       // --- Milestone 3 liquidity ---
-      PbV2LiquiditySnap liq = ResolveLiquidity(dom, m15, m5s, lg);
+      PbV2LiquiditySnap liq = ResolveLiquidity(dom, m15, m5s, lg_active, lg);
       out.liquidity_draw = liq.draw;
       out.liquidity_state = liq.state_label;
       out.liquidity_target_price = liq.target_price;
@@ -2038,7 +2038,7 @@ public:
       out.liquidity_from_grab_module = liq.from_liquidity_grab;
 
       // --- Milestone 4 POI / FVG / OB ---
-      PbV2PoiSnap poi = ResolvePoi(dom, m15, dr, gsm);
+      PbV2PoiSnap poi = ResolvePoi(dom, m15, dr, gsm_active, gsm);
       out.poi_primary_type = poi.primary_type;
       out.poi_primary_dir = poi.primary_dir;
       out.poi_status = poi.status;
@@ -2057,7 +2057,7 @@ public:
       out.poi_price_approaching = poi.price_approaching;
 
       // --- Milestone 5 OTE + expected depth ---
-      PbV2OteSnap ote = ResolveOte(dom, m15, dr, poi, gsm);
+      PbV2OteSnap ote = ResolveOte(dom, m15, dr, poi, gsm_active, gsm);
       out.ote_valid = ote.valid;
       out.ote_low = ote.ote_low;
       out.ote_mid = ote.ote_mid;

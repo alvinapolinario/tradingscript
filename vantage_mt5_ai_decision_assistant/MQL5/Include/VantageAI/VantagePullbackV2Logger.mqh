@@ -93,7 +93,8 @@ public:
    string Filename(void) const { return m_filename; }
 
    bool WriteRow(const VantagePullbackV2Snapshot &v2,
-                 const VantagePullbackResult *v1,
+                 const bool v1_active,
+                 const VantagePullbackResult &v1,
                  const datetime eval_time)
      {
       if(!m_cfg.enable || m_file == INVALID_HANDLE || !v2.valid)
@@ -101,13 +102,13 @@ public:
 
       double v1_pb = 0, v1_cont = 0, v1_cons = 0, v1_rev = 0;
       string v1_state = "";
-      if(m_cfg.log_v1_shadow && v1 != NULL && v1->valid)
+      if(m_cfg.log_v1_shadow && v1_active && v1.valid)
         {
-         v1_pb = v1->pullback_prob;
-         v1_cont = v1->continuation_prob;
-         v1_cons = v1->consolidation_prob;
-         v1_rev = v1->reversal_prob;
-         v1_state = v1->market_state;
+         v1_pb = v1.pullback_prob;
+         v1_cont = v1.continuation_prob;
+         v1_cons = v1.consolidation_prob;
+         v1_rev = v1.reversal_prob;
+         v1_state = v1.market_state;
         }
 
       FileWrite(m_file,

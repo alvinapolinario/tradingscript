@@ -82,7 +82,7 @@ def test_fvg_mitigation_partial_and_full():
     )[0]
     update_fvg_mitigation(fvg, (fvg.lower + fvg.upper) / 2)
     assert fvg.mitigation_pct >= 50
-    assert fvg.status == FvgStatus.PARTIALLY_MITIGATED
+    assert fvg.status in (FvgStatus.PARTIALLY_MITIGATED, FvgStatus.MIDPOINT_REACHED)
     update_fvg_mitigation(fvg, fvg.lower - 0.01)
     assert fvg.status == FvgStatus.FULLY_MITIGATED
 

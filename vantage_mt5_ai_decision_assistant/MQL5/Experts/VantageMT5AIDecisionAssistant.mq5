@@ -1267,34 +1267,37 @@ void MaybeEvalPullbackV2(const bool force)
    if(!InpPullbackV2Enable)
       return;
    VantagePullbackV2Snapshot r;
-   const VantageLiquidityGrabResult *lg_ptr = NULL;
+   bool lg_active = false;
    VantageLiquidityGrabResult lg_local;
+   ZeroMemory(lg_local);
    if(InpPbV2UseLiquidityGrab && InpLiqGrabEnable && g_liqgrabsnap.valid)
      {
       lg_local = g_liqgrabsnap;
-      lg_ptr = &lg_local;
+      lg_active = true;
      }
-   const VantageGoldSMCResult *gsm_ptr = NULL;
+   bool gsm_active = false;
    VantageGoldSMCResult gsm_local;
+   ZeroMemory(gsm_local);
    if((InpPbV2UseGoldSmcPoi || InpPbV2UseGoldSmcOte) && InpGoldSmcEnable && g_gsmsnap.valid)
      {
       gsm_local = g_gsmsnap;
-      gsm_ptr = &gsm_local;
+      gsm_active = true;
      }
    static datetime s_last_csv_m5 = 0;
-   if(g_pullback_v2.Evaluate(force, r, lg_ptr, gsm_ptr))
+   if(g_pullback_v2.Evaluate(force, r, lg_active, lg_local, gsm_active, gsm_local))
      {
       g_pbsnap_v2 = r;
       if(r.valid && InpPbV2CsvLogEnable && r.eval_bar_m5 != s_last_csv_m5)
         {
-         const VantagePullbackResult *v1_ptr = NULL;
+         bool v1_active = false;
          VantagePullbackResult v1_local;
+         ZeroMemory(v1_local);
          if(InpPbV2CsvLogV1Shadow && InpPullbackEnable && g_pbsnap.valid)
            {
             v1_local = g_pbsnap;
-            v1_ptr = &v1_local;
+            v1_active = true;
            }
-         if(g_pbv2_log.WriteRow(g_pbsnap_v2, v1_ptr, r.eval_bar_m5))
+         if(g_pbv2_log.WriteRow(g_pbsnap_v2, v1_active, v1_local, r.eval_bar_m5))
             s_last_csv_m5 = r.eval_bar_m5;
         }
      }
