@@ -101,6 +101,23 @@
     }
     .col .s { font-size: .72rem; color: var(--muted); margin-top: .15rem; }
     .score .v { font-size: 1.35rem; }
+    .advisory-section { margin-top: 2rem; }
+    .advisory-section .ledger-title { margin-top: 0; }
+    .advisory-note {
+      font-size: .78rem; color: var(--muted); margin: .35rem 0 1rem;
+    }
+    .card.advisory { border-color: rgba(96, 165, 250, .35); }
+    .card .badge {
+      display: inline-block; font-size: .68rem; font-weight: 650;
+      letter-spacing: .04em; text-transform: uppercase;
+      padding: .15rem .45rem; border-radius: 999px;
+      background: rgba(96, 165, 250, .15); color: #93c5fd; margin-bottom: .35rem;
+    }
+    .card .desk-link {
+      display: inline-block; margin-top: .45rem; font-size: .74rem;
+      color: #93c5fd; text-decoration: none;
+    }
+    .card .desk-link:hover { text-decoration: underline; }
     @media (max-width: 700px) {
       .card { grid-template-columns: 1fr 1fr; }
       .side-block { grid-column: 1 / -1; }
@@ -122,6 +139,11 @@
   <main>
     <div class="ledger-title">Signal history</div>
     <div id="list"><div class="empty">Loading…</div></div>
+    <section class="advisory-section">
+      <div class="ledger-title">H4→M15 FVG advisory</div>
+      <div class="advisory-note">Read-only cards when the H4→M15 desk reaches <b>ENTRY_READY</b>. Not written to the M5 signal ledger.</div>
+      <div id="advisoryList"><div class="empty">Loading…</div></div>
+    </section>
   </main>
   <script>
     function fmtPx(n) {
@@ -172,13 +194,50 @@
         </article>`;
       }).join("");
     }
+    function renderAdvisory(items) {
+      const root = document.getElementById("advisoryList");
+      if (!items.length) {
+        root.innerHTML = `<div class="empty">No H4→M15 ENTRY_READY setup on the selected symbol.<br/>Open the <a href="/h4-m15-fvg">H4→M15 desk</a> for live analysis.</div>`;
+        return;
+      }
+      root.innerHTML = items.map((s) => {
+        const cls = (s.side || "").toLowerCase() === "buy" ? "buy advisory" : "sell advisory";
+        return `<article class="card ${cls}">
+          <div class="side-block">
+            <div class="arrow">${arrow(s.side)}</div>
+            <div>
+              <div class="badge">H4→M15 FVG</div>
+              <div class="status">${s.decision || s.state || "ENTRY_READY"}</div>
+              <div class="side">${s.side || "—"}</div>
+              <div class="pair">${s.symbol || "—"} · ${s.timeframe || "H4→M15"} · ${s.grade || "—"}</div>
+              <a class="desk-link" href="${s.desk_path || "/h4-m15-fvg"}">Open H4→M15 desk →</a>
+            </div>
+          </div>
+          <div class="col score">
+            <div class="k">Setup score</div>
+            <div class="v">${s.score ?? "—"}</div>
+            <div class="s">sweep ${s.sweep_detected ? "✓" : "—"} · MSS ${s.mss_confirmed ? "✓" : "—"}</div>
+          </div>
+          <div class="col">
+            <div class="k">Entry zone</div>
+            <div class="v">${fmtEntry(s.entry_low, s.entry_high)}</div>
+          </div>
+          <div class="col">
+            <div class="k">Stop</div>
+            <div class="v">${fmtPx(s.stop)}</div>
+          </div>
+        </article>`;
+      }).join("");
+    }
     async function refresh() {
       try {
         const r = await fetch("/api/v1/signals?limit=80");
         const j = await r.json();
         render(j.items || []);
+        renderAdvisory(j.advisory_cards || []);
       } catch (e) {
         document.getElementById("list").innerHTML = `<div class="empty">Failed to load signals</div>`;
+        document.getElementById("advisoryList").innerHTML = `<div class="empty">Failed to load advisory cards</div>`;
       }
     }
     async function clearSignals(scope) {

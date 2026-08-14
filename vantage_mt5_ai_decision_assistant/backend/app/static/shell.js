@@ -37,6 +37,7 @@
     { id: "amd-ifvg", href: "/amd-ifvg", label: "AMD + iFVG", icon: "layers" },
     { id: "box-theory", href: "/box-theory", label: "Box Theory", icon: "chart" },
     { id: "ict", href: "/ict", label: "ICT Strategy", icon: "layers" },
+    { id: "h4-m15-fvg", href: "/h4-m15-fvg", label: "H4→M15 FVG", icon: "layers" },
     { id: "execution", href: "/execution", label: "Demo Execution", icon: "target" },
     { id: "radar", href: "/dashboard", label: "Opportunity Radar", icon: "radar" },
     { id: "patterns", href: "/patterns", label: "Pattern Strategy", icon: "shapes" },

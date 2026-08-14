@@ -88,7 +88,12 @@ def heartbeat(
     try:
         from app.alert_notify import process_heartbeat
 
-        process_heartbeat(req.model_dump(), accepted)
+        notify_payload = dict(req.model_dump())
+        st_after = monitor_store.status()
+        ea_blob = (st_after.get("vantage_ea") or {}).get("h4_m15_fvg")
+        if isinstance(ea_blob, dict):
+            notify_payload["h4_m15_fvg"] = ea_blob
+        process_heartbeat(notify_payload, accepted)
     except Exception as exc:
         monitor_store.add_log("WARN", "alerts", f"Heartbeat notify failed: {exc}")
     cy, cm = monitor_store.calendar_request()
@@ -852,20 +857,58 @@ def _ict_candles_from_request(candles_raw: dict) -> tuple[dict, list, list]:
 
 @router.get("/api/v1/h4-m15-fvg/status")
 def h4_m15_fvg_status() -> dict:
-    """Latest H4→M15 FVG setup snapshots from persistence."""
+    """H4→M15 FVG — Python engine blob from heartbeat or persistence fallback."""
     from app.analysis.h4_m15_fvg.store import list_setups
 
     st = monitor_store.status()
     ea = st.get("vantage_ea") or {}
+    link = st.get("link_health") or {}
     selected = str(st.get("selected_symbol") or ea.get("symbol") or "XAUUSD").upper()
-    items = list_setups(selected, limit=10)
+    blob = _ea_strategy_blob(ea, "h4_m15_fvg", selected)
+    backend_active = bool(blob and blob.get("valid"))
+
+    if not blob:
+        items = list_setups(selected, limit=10)
+        if items:
+            backend_active = True
+            primary = items[0]
+            blob = {
+                "module": "h4_m15_fvg",
+                "symbol": selected,
+                "valid": True,
+                "advisory_only": True,
+                "source": "persistence",
+                "setups": items,
+                "primary": primary,
+                "decision": primary.get("decision") or "MONITOR",
+                "active_setup_count": len(items),
+            }
+
     return {
         "module": "h4_m15_fvg",
         "advisory_only": True,
-        "symbol": selected,
-        "setups": items,
+        "caption": DESK_STRATEGY_CAPTION,
+        "ea_online": bool(link.get("ea_online") or ea.get("connected")),
+        "h4_m15_fvg_supported": bool(ea.get("h4_m15_fvg_supported")) or backend_active,
+        "backend_engine_available": True,
+        "selected_symbol": selected,
+        "symbol": str(ea.get("symbol") or selected).upper(),
+        "available_symbols": list(st.get("available_symbols") or []),
+        "symbols": list(st.get("symbols") or []),
+        "digits": int(ea.get("digits") or 5) or 5,
+        "bid": ea.get("bid"),
+        "ask": ea.get("ask"),
+        "h4_m15_fvg": blob,
+        "setups": (blob or {}).get("setups") or [],
+        "primary": (blob or {}).get("primary"),
+        "explanation_text": (blob or {}).get("explanation_text") or "",
+        "decision": (blob or {}).get("decision") or "MONITOR",
         "links": {
+            "h4_m15_fvg": "/h4-m15-fvg",
             "analyze": "/api/v1/h4-m15-fvg/analyze",
+            "ict": "/ict",
+            "liquidity_grab": "/liquidity-grab",
+            "monitor": "/monitor",
             "docs": "/docs/FVG_H4_M15_IMPLEMENTATION.md",
         },
     }
@@ -885,12 +928,19 @@ def h4_m15_fvg_analyze(body: dict) -> dict:
     by_tf = candles_from_request(candles_raw)
     cfg_kwargs = {k: v for k, v in cfg_raw.items() if hasattr(H4M15FvgConfig, k)}
     cfg = H4M15FvgConfig(**cfg_kwargs) if cfg_kwargs else None
-    return analyze_h4_m15_fvg(
+    result = analyze_h4_m15_fvg(
         symbol=symbol,
         candles_by_timeframe=by_tf,
         cfg=cfg,
         persist=bool(payload.get("persist", True)),
     )
+    try:
+        from app.h4_m15_fvg_discord_notify import maybe_h4_m15_fvg_alert
+
+        maybe_h4_m15_fvg_alert({"h4_m15_fvg": result})
+    except Exception:
+        pass
+    return result
 
 
 @router.post("/api/v1/ict/analyze")
@@ -1015,13 +1065,18 @@ def list_accepted_signals(
     symbol: str | None = Query(default=None),
 ) -> dict:
     """Accepted Signal Ledger — advisory BUY/SELL history from M5 desk."""
+    from app.analysis.h4_m15_fvg.advisory_cards import build_h4_m15_advisory_cards
     from app.signal_ledger import list_signals
 
     items = list_signals(limit=limit, symbol=(symbol.strip().upper() if symbol else None))
+    ea = monitor_store.status().get("vantage_ea") or {}
+    advisory_cards = build_h4_m15_advisory_cards(ea)
     return {
         "advisory_only": True,
         "count": len(items),
         "items": items,
+        "advisory_cards": advisory_cards,
+        "advisory_card_count": len(advisory_cards),
     }
 
 

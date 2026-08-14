@@ -217,6 +217,15 @@ def ict_page():
     return FileResponse(page)
 
 
+@app.get("/h4-m15-fvg")
+def h4_m15_fvg_page():
+    """H4→M15 FVG setup engine desk — Python canonical, advisory only."""
+    page = STATIC_DIR / "h4-m15-fvg.html"
+    if not page.exists():
+        return {"error": "h4-m15-fvg.html missing", "path": str(page)}
+    return FileResponse(page)
+
+
 @app.get("/execution")
 def execution_page():
     """Demo execution journal — VantageSwingExecutor fills (demo only)."""

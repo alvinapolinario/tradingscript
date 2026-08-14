@@ -124,7 +124,19 @@ def grade_score(score: float) -> str:
     return "LOW"
 
 
-def score_setup(setup: H4M15Setup, cfg: H4M15FvgConfig) -> tuple[float, str]:
+def _session_score_from_time(broker_time_unix: int) -> float:
+    from app.analysis.ict.session import get_session_context
+
+    sess = get_session_context(broker_time_unix, [], IctConfig())
+    return 70.0 if sess["session"] in ("LONDON", "NEW_YORK") else 40.0
+
+
+def score_setup(
+    setup: H4M15Setup,
+    cfg: H4M15FvgConfig,
+    *,
+    broker_time_unix: int | None = None,
+) -> tuple[float, str]:
     s = 0.0
     if setup.bias_alignment:
         s += cfg.weight_htf_structure
@@ -148,6 +160,10 @@ def score_setup(setup: H4M15Setup, cfg: H4M15FvgConfig) -> tuple[float, str]:
         s += cfg.weight_entry_fvg * min(1.0, setup.entry_fvg.gap_atr / 0.3)
     if setup.state == H4M15SetupState.ENTRY_READY:
         s += cfg.weight_retrace
+    ts = broker_time_unix or setup.entry_ready_time
+    if ts and ts > 0:
+        session_score = _session_score_from_time(ts)
+        s += min(cfg.weight_session, cfg.weight_session * (session_score / 100.0))
     total = round(min(100.0, s), 1)
     return total, grade_score(total)
 
@@ -449,7 +465,9 @@ class H4M15Engine:
                             setup.structural_stop = setup.sweep.sweep_price - self.cfg.sl_buffer_atr * atr_m15
                         else:
                             setup.structural_stop = setup.sweep.sweep_price + self.cfg.sl_buffer_atr * atr_m15
-                    setup.setup_score, setup.setup_grade = score_setup(setup, self.cfg)
+                    setup.setup_score, setup.setup_grade = score_setup(
+                        setup, self.cfg, broker_time_unix=candle.time
+                    )
                     setup.entry_ready_emitted = True
                     self._transition(
                         setup,

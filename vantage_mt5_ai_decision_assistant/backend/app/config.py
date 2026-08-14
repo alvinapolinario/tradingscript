@@ -75,6 +75,13 @@ class Settings(BaseSettings):
     # Comma-separated setup states; empty = LIQUIDITY_SWEPT,MSS_CONFIRMED,ENTRY_ZONE_ACTIVE,TRIGGERED,INVALIDATED,TARGET_REACHED
     discord_ict_alert_events: str = ""
 
+    # H4→M15 FVG — dedicated Discord webhook (ENTRY_READY advisory)
+    discord_h4_m15_fvg_webhook_url: str | None = None
+    discord_h4_m15_fvg_alerts_enabled: bool = False
+    discord_h4_m15_fvg_min_score: float = 50.0
+    discord_h4_m15_fvg_cooldown_sec: int = 300
+    discord_h4_m15_fvg_alert_events: str = ""
+
     # Multi-strategy confluence engine (master verdict enhancement)
     confluence_enabled: bool = False
     confluence_freshness_threshold_sec: float = 900.0

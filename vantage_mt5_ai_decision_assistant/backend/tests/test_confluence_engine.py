@@ -125,6 +125,25 @@ def test_master_verdict_ict_chip():
     assert "ICT" in names
 
 
+def test_master_verdict_h4_m15_chip():
+    mv = build_master_verdict(
+        {
+            "connected": True,
+            "h4_m15_fvg": {
+                "valid": True,
+                "decision": "ENTRY_READY",
+                "primary": {
+                    "decision": "ENTRY_READY",
+                    "state": "ENTRY_READY",
+                    "score": 78.0,
+                },
+            },
+        }
+    )
+    names = [m["name"] for m in mv["modules"]]
+    assert "H4→M15" in names
+
+
 def test_master_verdict_confluence_mode(monkeypatch):
     monkeypatch.setenv("CONFLUENCE_ENABLED", "true")
     from app.config import get_settings

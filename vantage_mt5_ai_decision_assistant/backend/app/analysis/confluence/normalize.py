@@ -218,6 +218,33 @@ def normalize_ea_signals(ea: dict[str, Any], cfg: ConfluenceConfig | None = None
             )
         )
 
+    fvg_h4_m15 = ea.get("h4_m15_fvg") if isinstance(ea.get("h4_m15_fvg"), dict) else {}
+    if fvg_h4_m15.get("valid"):
+        primary = fvg_h4_m15.get("primary") if isinstance(fvg_h4_m15.get("primary"), dict) else {}
+        if primary:
+            ts = int(primary.get("entry_ready_time") or 0)
+            state = _u(primary.get("state") or primary.get("decision"))
+            direction = _direction_from_text(primary.get("direction"))
+            conf = _f(primary.get("score"))
+            entry_ready = state == "ENTRY_READY" or _u(primary.get("decision")) == "ENTRY_READY"
+            if not entry_ready:
+                direction = "NEUTRAL" if direction in ("LONG", "SHORT") else direction
+                conf = min(conf, 55.0) if conf > 0 else 0.0
+            reasons = primary.get("reasons") if isinstance(primary.get("reasons"), list) else []
+            out.append(
+                _signal(
+                    strategy="H4_M15_FVG",
+                    direction=direction if entry_ready else "NEUTRAL",
+                    confidence=conf,
+                    status=state or "MONITOR",
+                    cfg=st,
+                    timestamp=ts,
+                    freshness_sec=_freshness(ts, now_ts, st),
+                    evidence=[str(r) for r in reasons[:6]],
+                    active=entry_ready and direction in ("LONG", "SHORT"),
+                )
+            )
+
     entry = _u(ea.get("new_entry_decision"))
     if entry:
         direction = _direction_from_text(entry)

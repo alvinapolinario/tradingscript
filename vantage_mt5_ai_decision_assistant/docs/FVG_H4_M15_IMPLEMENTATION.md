@@ -170,6 +170,9 @@ cd backend && python -m pytest tests/test_h4_m15_fvg.py -q
 | GET | `/api/v1/h4-m15-fvg/status` |
 | POST | `/api/v1/h4-m15-fvg/analyze` |
 | POST | `/api/v1/strategy/h4-m15-fvg/analyze` |
+| GET | `/h4-m15-fvg` (desk UI) |
+
+**Heartbeat:** EA sends `h4_m15_fvg_candles` on each new closed M15 bar; backend runs Python analyze and stores `h4_m15_fvg` blob in monitor store.
 
 Example body:
 
@@ -194,19 +197,69 @@ Example body:
 
 ## 20. Known Limitations
 
-- No MQL5 EA heartbeat passthrough yet
-- No static HTML desk page
-- Full bullish flow integration test requires rich synthetic candle fixtures
 - Session scoring weight reserved but not wired to session module yet
+- MQL5 exports candles only (no local state machine parity)
+- Full live validation requires EA attached with `InpH4M15FvgEnable=true`
 
 ---
 
 ## 21. Next Development Phase
 
-1. MQL5 closed-bar candle export → `/analyze` pipeline
-2. Static UI panel + monitor_store passthrough
-3. Rich backtest replay CLI from CSV
-4. Optional MQL5 parity after Python validation
+1. Optional MQL5 state-machine parity (deferred — Python remains canonical)
+2. ~~Signal Center integration~~ — Phase D advisory cards (read-only; no `signal_ledger` writes)
+3. ~~Session scoring weight wiring~~ — Phase D (`score_setup` session heuristic)
+
+---
+
+## 23. Phase D — Signal Center, Confluence & Session Scoring
+
+### Signal Center advisory cards (read-only)
+
+- `backend/app/analysis/h4_m15_fvg/advisory_cards.py` — builds cards from `ea.h4_m15_fvg.primary` when `ENTRY_READY`
+- `GET /api/v1/signals` — adds `advisory_cards` and `advisory_card_count` (does **not** write to `signal_ledger`)
+- `backend/app/static/signals.html` — second section with link to `/h4-m15-fvg`
+
+### Confluence integration
+
+- `normalize.py` — `H4_M15_FVG` strategy signal when module valid; active only on `ENTRY_READY`
+- `weights.py` — default weight `0.88`
+- `master_verdict.py` — `H4→M15` module chip on monitor
+
+### Session scoring
+
+- `engine.score_setup()` — applies `weight_session` via ICT session heuristic (70 LONDON/NY, 40 OFF_HOURS) using `entry_ready_time` or bar time
+
+### Tests
+
+- `backend/tests/test_h4_m15_fvg_phase_d.py` — advisory cards API, confluence normalize, master chip, session boost
+
+---
+
+## 22. Phase C — Replay CLI & Discord
+
+### Replay CLI
+
+```bash
+cd backend
+python -m app.analysis.h4_m15_fvg.replay --symbol EURUSD --h4-csv data/h4.csv --m15-csv data/m15.csv --incremental --out result.json
+python -m app.analysis.h4_m15_fvg.replay --candles-json fixtures/eurusd.json --no-persist
+```
+
+CSV columns: `time,open,high,low,close` (aliases: `timestamp`, `o/h/l/c`).
+
+### Discord ENTRY_READY alerts
+
+Environment variables (`.env`):
+
+```env
+DISCORD_H4_M15_FVG_ALERTS_ENABLED=true
+DISCORD_H4_M15_FVG_WEBHOOK_URL=https://discord.com/api/webhooks/...
+DISCORD_H4_M15_FVG_MIN_SCORE=50
+DISCORD_H4_M15_FVG_COOLDOWN_SEC=300
+DISCORD_H4_M15_FVG_ALERT_EVENTS=ENTRY_READY,SETUP_INVALIDATED,SETUP_EXPIRED
+```
+
+Alerts fire on state change only (`state_changed=true`). Wired on heartbeat (after Python analyze) and `/h4-m15-fvg/analyze`.
 
 ---
 

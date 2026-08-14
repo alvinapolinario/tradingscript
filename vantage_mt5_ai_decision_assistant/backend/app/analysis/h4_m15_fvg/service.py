@@ -6,7 +6,7 @@ from typing import Any
 from app.analysis.desk_symbol_validator import desk_disable_message, is_approved_desk_symbol
 from app.analysis.h4_m15_fvg.engine import H4M15Engine
 from app.analysis.h4_m15_fvg.explain import setup_to_json, setup_to_text
-from app.analysis.h4_m15_fvg.store import save_setup_snapshot
+from app.analysis.h4_m15_fvg.store import save_setup_snapshot, setup_state_changed
 from app.analysis.h4_m15_fvg.types import DEFAULT_H4_M15_CONFIG, H4M15FvgConfig, H4M15SetupState
 from app.market_structure import atr, candles_from_payload, htf_bias, validate_candles
 from app.market_structure.types import Candle
@@ -86,29 +86,45 @@ def analyze_h4_m15_fvg(
         )
 
     setups = engine.all_setups()
-    if persist:
-        for s in setups:
-            save_setup_snapshot(s)
+    setup_rows: list[dict] = []
+    for s in setups:
+        if persist:
+            changed = save_setup_snapshot(s)
+        else:
+            changed = setup_state_changed(s.setup_id, s.state.value)
+        row = setup_to_json(s)
+        row["state_changed"] = changed
+        setup_rows.append(row)
 
     active = [s for s in setups if s.state not in (
         H4M15SetupState.SETUP_INVALIDATED,
         H4M15SetupState.SETUP_EXPIRED,
     )]
-    entry_ready = [s for s in setups if s.state == H4M15SetupState.ENTRY_READY]
+    entry_ready = [r for r in setup_rows if r.get("state") == H4M15SetupState.ENTRY_READY.value]
+    primary_row = entry_ready[-1] if entry_ready else (
+        next((r for r in reversed(setup_rows) if r.get("setup_id") in {s.setup_id for s in active}), None)
+    )
+    module_state_changed = bool(primary_row and primary_row.get("state_changed"))
+
+    entry_ready_setups = [s for s in setups if s.state == H4M15SetupState.ENTRY_READY]
+    explanation = (
+        setup_to_text(entry_ready_setups[-1])
+        if entry_ready_setups
+        else (setup_to_text(active[-1]) if active else f"{sym}: No active H4→M15 FVG setup.")
+    )
 
     return {
         "module": "h4_m15_fvg",
         "symbol": sym,
         "valid": True,
         "advisory_only": True,
+        "state_changed": module_state_changed,
         "decision": "ENTRY_READY" if entry_ready else "MONITOR",
         "active_setup_count": len(active),
         "entry_ready_count": len(entry_ready),
-        "setups": [setup_to_json(s) for s in setups],
-        "primary": setup_to_json(entry_ready[-1]) if entry_ready else (setup_to_json(active[-1]) if active else None),
-        "explanation_text": setup_to_text(entry_ready[-1]) if entry_ready else (
-            setup_to_text(active[-1]) if active else f"{sym}: No active H4→M15 FVG setup."
-        ),
+        "setups": setup_rows,
+        "primary": primary_row,
+        "explanation_text": explanation,
         "config": {
             "htf_timeframe": st.htf_timeframe,
             "execution_timeframe": st.execution_timeframe,

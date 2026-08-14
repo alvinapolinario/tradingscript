@@ -155,6 +155,8 @@ class EaSnapshot:
     box_theory_supported: bool = False
     ict: dict | None = None
     ict_supported: bool = False
+    h4_m15_fvg: dict | None = None
+    h4_m15_fvg_supported: bool = False
     max_position_risk_pct: float | None = None
 
 
@@ -297,6 +299,9 @@ def _apply_heartbeat_fields(ea: EaSnapshot, payload: dict[str, Any]) -> None:
     if isinstance(payload.get("ict"), dict):
         ea.ict = payload["ict"]
         ea.ict_supported = True
+    if isinstance(payload.get("h4_m15_fvg"), dict):
+        ea.h4_m15_fvg = payload["h4_m15_fvg"]
+        ea.h4_m15_fvg_supported = True
 
 
 class MonitorStore:
@@ -412,6 +417,7 @@ class MonitorStore:
         now = _utc_now()
         raw_sym = _norm_symbol(str(payload.get("symbol", "")))
         sym = _canonical_monitor_symbol(raw_sym)
+        h4_err: str | None = None
         with self._lock:
             self._heartbeat_count += 1
             ea = self._get_or_create(sym)
@@ -420,6 +426,19 @@ class MonitorStore:
             _apply_heartbeat_fields(
                 ea, {**payload, "symbol": sym, "broker_symbol": raw_sym}
             )
+
+            if isinstance(payload.get("h4_m15_fvg_candles"), dict):
+                try:
+                    from app.analysis.h4_m15_fvg.heartbeat import process_h4_m15_fvg_heartbeat
+
+                    blob = process_h4_m15_fvg_heartbeat(
+                        {**payload, "symbol": sym, "broker_symbol": raw_sym}
+                    )
+                    if isinstance(blob, dict):
+                        ea.h4_m15_fvg = blob
+                        ea.h4_m15_fvg_supported = True
+                except Exception as exc:
+                    h4_err = str(exc)
 
             if isinstance(payload.get("pl_calendar"), dict):
                 cal = payload["pl_calendar"]
@@ -440,6 +459,9 @@ class MonitorStore:
             elif sel.last_seen_utc is None and self._selected_symbol == DEFAULT_MONITOR_PAIRS[0]:
                 # Keep XAUUSD as default until user picks; still store BTC/etc.
                 pass
+
+        if h4_err:
+            self.add_log("WARN", "h4_m15_fvg", f"Heartbeat analyze failed: {h4_err}", symbol=sym)
 
         self.add_log(
             "WARN"
@@ -638,6 +660,8 @@ class MonitorStore:
             "box_theory_supported": ea.box_theory_supported,
             "ict": ea.ict,
             "ict_supported": ea.ict_supported,
+            "h4_m15_fvg": ea.h4_m15_fvg,
+            "h4_m15_fvg_supported": ea.h4_m15_fvg_supported,
             "server_year": ea.server_year,
             "server_month": ea.server_month,
             "calendar_request": calendar_request,

@@ -31,6 +31,7 @@ def _build_module_chips(ea: dict[str, Any]) -> list[dict[str, str]]:
     amd = ea.get("amd_ifvg") if isinstance(ea.get("amd_ifvg"), dict) else {}
     box = ea.get("box_theory") if isinstance(ea.get("box_theory"), dict) else {}
     ict = ea.get("ict") if isinstance(ea.get("ict"), dict) else {}
+    h4m15 = ea.get("h4_m15_fvg") if isinstance(ea.get("h4_m15_fvg"), dict) else {}
 
     if swing.get("valid"):
         sig = str(swing.get("signal") or "—")
@@ -80,6 +81,14 @@ def _build_module_chips(ea: dict[str, Any]) -> list[dict[str, str]]:
         ist = str(ict.get("setup_state") or ict.get("status") or "—").replace("_", " ")[:24]
         tone = "ok" if dec in ("BUY", "SELL") and iconf >= 75 else ("warn" if dec == "WAIT" else "muted")
         modules.append(_module_chip("ICT", dec, f"{iconf:.0f}% · {ist}", tone))
+
+    if h4m15.get("valid"):
+        primary = h4m15.get("primary") if isinstance(h4m15.get("primary"), dict) else {}
+        dec = str(primary.get("decision") or h4m15.get("decision") or "MONITOR")
+        fconf = _f(primary.get("score"))
+        fst = str(primary.get("state") or "—").replace("_", " ")[:24]
+        tone = "ok" if dec == "ENTRY_READY" and fconf >= 65 else ("warn" if dec == "MONITOR" else "muted")
+        modules.append(_module_chip("H4→M15", dec, f"{fconf:.0f}% · {fst}", tone))
 
     try:
         from app.market_news.verdict_integration import macro_module_chip, load_macro_context

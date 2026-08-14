@@ -8,6 +8,7 @@ DEFAULT_STRATEGY_WEIGHTS: dict[str, float] = {
     "GOLD_SMC": 0.9,
     "SWING": 1.0,
     "LIQUIDITY_GRAB": 0.85,
+    "H4_M15_FVG": 0.88,
     "BREAKOUT": 0.8,
     "M30_CORE": 0.75,
     "MACRO": 0.35,

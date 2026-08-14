@@ -13,6 +13,7 @@ from app.analysis.h4_m15_fvg.types import H4M15Setup
 _lock = threading.Lock()
 _DB_PATH = Path(__file__).resolve().parents[3] / "data" / "h4_m15_fvg.db"
 _initialized = False
+_last_setup_states: dict[str, str] = {}
 
 
 def _connect() -> sqlite3.Connection:
@@ -70,9 +71,25 @@ def _ensure_schema() -> None:
             conn.close()
 
 
-def save_setup_snapshot(setup: H4M15Setup) -> None:
+def setup_state_changed(setup_id: str, state: str) -> bool:
+    """Return True when setup state changed since last seen (in-memory)."""
+    with _lock:
+        prev = _last_setup_states.get(setup_id)
+        changed = prev != state
+        _last_setup_states[setup_id] = state
+        return changed
+
+
+def reset_state_tracking() -> None:
+    with _lock:
+        _last_setup_states.clear()
+
+
+def save_setup_snapshot(setup: H4M15Setup) -> bool:
     _ensure_schema()
     payload = setup_to_json(setup)
+    state_val = setup.state.value
+    changed = setup_state_changed(setup.setup_id, state_val)
     z = setup.htf_fvg
     ef = setup.entry_fvg
     now = setup.updated_time or setup.created_time
@@ -167,6 +184,7 @@ def save_setup_snapshot(setup: H4M15Setup) -> None:
             conn.commit()
         finally:
             conn.close()
+    return changed
 
 
 def list_setups(symbol: str, limit: int = 20) -> list[dict[str, Any]]:
@@ -196,3 +214,4 @@ def clear_store() -> None:
         if _DB_PATH.exists():
             _DB_PATH.unlink()
         _initialized = False
+        _last_setup_states.clear()

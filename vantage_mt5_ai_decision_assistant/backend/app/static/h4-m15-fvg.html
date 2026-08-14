@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>H4→M15 FVG · Vantage</title>
+  <link rel="stylesheet" href="/static/shell.css" />
+  <style>
+    :root {
+      --bg: #0b0f14; --panel: #121820; --line: #2a3544; --text: #e8eef5;
+      --muted: #8a9bb0; --buy: #3dd68c; --sell: #f07575; --warn: #e8c547;
+      --accent: #6eb5ff; --mono: "Cascadia Code", "Consolas", ui-monospace, monospace;
+      --sans: "Segoe UI", system-ui, sans-serif;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; font-family: var(--sans); color: var(--text); min-height: 100vh;
+      background: radial-gradient(700px 320px at 10% 0%, #1a2433 0%, transparent 55%), var(--bg);
+    }
+    header {
+      display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap;
+      padding: .85rem 1.25rem; border-bottom: 1px solid var(--line);
+      background: rgba(11,15,20,.92); position: sticky; top: 0; z-index: 5;
+    }
+    header h1 { margin: 0; font-size: 1.05rem; }
+    header .sub { color: var(--muted); font-size: .78rem; margin-top: .15rem; }
+    .pill {
+      display: inline-flex; align-items: center; gap: .35rem;
+      border: 1px solid var(--line); border-radius: 999px;
+      padding: .35rem .7rem; font-size: .78rem; background: var(--panel);
+    }
+    main { max-width: 980px; margin: 0 auto; padding: 1rem 1.1rem 2.5rem; }
+    .card {
+      background: var(--panel); border: 1px solid var(--line); border-radius: 16px;
+      padding: 1rem 1.1rem; margin-bottom: .85rem;
+    }
+    .state { font-size: 1.15rem; font-weight: 800; color: var(--accent); }
+    .meta { color: var(--muted); font-size: .78rem; margin-top: .35rem; line-height: 1.45; white-space: pre-wrap; }
+    .empty {
+      border: 1px dashed var(--line); border-radius: 14px; padding: 1.5rem;
+      color: var(--muted); text-align: center; line-height: 1.5;
+    }
+    .warn-box {
+      border: 1px solid rgba(232,197,71,.45); background: rgba(232,197,71,.08);
+      border-radius: 14px; padding: 1rem 1.1rem; color: var(--warn); line-height: 1.5;
+    }
+    .k { font-size: .68rem; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+    .v { font-family: var(--mono); font-size: .95rem; font-weight: 650; margin-top: .2rem; }
+    .grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: .55rem; margin-top: .75rem; }
+    .score { font-size: 2rem; font-weight: 800; color: var(--accent); }
+    .steps { margin: .75rem 0 0; padding: 0; list-style: none; }
+    .steps li {
+      font-size: .82rem; padding: .35rem 0; border-bottom: 1px solid rgba(42,53,68,.6);
+      color: var(--muted);
+    }
+    .steps li.done { color: var(--buy); }
+    @media (max-width: 700px) { .grid { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body data-nav="h4-m15-fvg">
+  <header>
+    <div>
+      <h1>H4 → M15 FVG Engine</h1>
+      <div class="sub">Python canonical · closed-bar only · ENTRY_READY advisory · no auto trades</div>
+    </div>
+    <span class="pill" id="statusPill">—</span>
+  </header>
+  <main id="main"><div class="empty">Loading…</div></main>
+  <script src="/static/shell.js"></script>
+  <script>
+    function fmtPx(v, d) {
+      if (v == null || v === 0) return "—";
+      return Number(v).toFixed(d ?? 5);
+    }
+
+    function stepDone(state, target) {
+      const order = [
+        "HTF_FVG_FOUND", "WAITING_FOR_HTF_MITIGATION", "HTF_FVG_TOUCHED",
+        "LIQUIDITY_SWEPT", "DISPLACEMENT_CONFIRMED", "MSS_CONFIRMED",
+        "LTF_FVG_CREATED", "WAITING_FOR_RETRACE", "ENTRY_READY"
+      ];
+      const si = order.indexOf(state);
+      const ti = order.indexOf(target);
+      if (state === "ENTRY_READY") return true;
+      if (state === "SETUP_INVALIDATED" || state === "SETUP_EXPIRED") return false;
+      return si >= 0 && ti >= 0 && si >= ti;
+    }
+
+    function render(payload) {
+      const root = document.getElementById("main");
+      const mod = payload.h4_m15_fvg;
+      const dig = payload.digits || 5;
+      const pill = document.getElementById("statusPill");
+
+      if (!payload.ea_online && !payload.h4_m15_fvg_supported) {
+        pill.textContent = "offline";
+        root.innerHTML = `<div class="empty">EA offline. Attach the Vantage EA and enable <b>BA. H4→M15 FVG</b> inputs.<br/>
+          Backend runs Python analysis when closed H4/M15 candles arrive on heartbeat.</div>`;
+        return;
+      }
+
+      if (!payload.h4_m15_fvg_supported || !mod) {
+        pill.textContent = "waiting";
+        root.innerHTML = `<div class="empty">No H4→M15 analysis yet.<br/>
+          Enable <code>InpH4M15FvgEnable</code> and wait for a new closed M15 bar.</div>`;
+        return;
+      }
+
+      if (!mod.valid) {
+        pill.textContent = "no data";
+        root.innerHTML = `<div class="warn-box">${mod.reason || "Insufficient candle history or unsupported symbol."}</div>`;
+        return;
+      }
+
+      const primary = mod.primary || (mod.setups && mod.setups[0]) || null;
+      const state = primary ? primary.state : (mod.decision || "MONITOR");
+      pill.textContent = state.replace(/_/g, " ");
+
+      if (!primary) {
+        root.innerHTML = `<div class="card"><div class="state">No active setup</div>
+          <div class="meta">${mod.explanation_text || "Monitoring H4 FVG locations."}</div></div>`;
+        return;
+      }
+
+      const htf = primary.htf_location || {};
+      const liq = primary.liquidity || {};
+      const disp = primary.displacement || {};
+      const struct = primary.structure || {};
+      const ef = primary.entry_fvg || {};
+
+      root.innerHTML = `
+        <div class="card">
+          <div class="k">Setup</div>
+          <div class="state">${primary.direction || "—"} · ${state.replace(/_/g, " ")}</div>
+          <div class="meta">${mod.explanation_text || ""}</div>
+          <div class="grid">
+            <div><div class="k">Decision</div><div class="v">${primary.decision || mod.decision || "MONITOR"}</div></div>
+            <div><div class="k">Score</div><div class="score">${Math.round(primary.score || 0)}</div></div>
+            <div><div class="k">Grade</div><div class="v">${primary.grade || "—"}</div></div>
+            <div><div class="k">Symbol</div><div class="v">${primary.symbol || payload.symbol}</div></div>
+            <div><div class="k">H4 FVG</div><div class="v">${fmtPx(htf.lower, dig)} – ${fmtPx(htf.upper, dig)}</div></div>
+            <div><div class="k">Mitigation</div><div class="v">${htf.mitigation_percent ?? 0}% · ${htf.pd_location || "—"}</div></div>
+            <div><div class="k">Liquidity sweep</div><div class="v">${liq.sweep_detected ? liq.type + " @ " + fmtPx(liq.price, dig) : "Pending"}</div></div>
+            <div><div class="k">Displacement</div><div class="v">${disp.confirmed ? "Yes · " + Math.round(disp.score || 0) : "Pending"}</div></div>
+            <div><div class="k">MSS</div><div class="v">${struct.mss_confirmed ? fmtPx(struct.broken_level, dig) : "Pending"}</div></div>
+            <div><div class="k">Execution FVG</div><div class="v">${ef.lower ? fmtPx(ef.lower, dig) + " – " + fmtPx(ef.upper, dig) : "Pending"}</div></div>
+          </div>
+          <ul class="steps">
+            <li class="${stepDone(state, "HTF_FVG_TOUCHED") ? "done" : ""}">H4 FVG touch</li>
+            <li class="${stepDone(state, "LIQUIDITY_SWEPT") ? "done" : ""}">M15 liquidity sweep</li>
+            <li class="${stepDone(state, "DISPLACEMENT_CONFIRMED") ? "done" : ""}">Displacement</li>
+            <li class="${stepDone(state, "MSS_CONFIRMED") ? "done" : ""}">MSS / BOS</li>
+            <li class="${stepDone(state, "LTF_FVG_CREATED") ? "done" : ""}">M15 execution FVG</li>
+            <li class="${stepDone(state, "ENTRY_READY") ? "done" : ""}">Retrace → ENTRY_READY</li>
+          </ul>
+          <div class="meta" style="margin-top:1rem">Advisory only — no orders placed by this module.</div>
+        </div>`;
+    }
+
+    async function tick() {
+      try {
+        const r = await fetch("/api/v1/h4-m15-fvg/status");
+        render(await r.json());
+      } catch (e) {
+        document.getElementById("main").innerHTML = `<div class="empty">Failed to load H4→M15 FVG status</div>`;
+      }
+    }
+    tick();
+    setInterval(tick, 5000);
+  </script>
+</body>
+</html>

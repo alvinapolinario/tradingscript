@@ -359,6 +359,12 @@ def process_heartbeat(payload: dict[str, Any], accepted: dict[str, Any] | None =
     except Exception:
         pass
     try:
+        from app.h4_m15_fvg_discord_notify import maybe_h4_m15_fvg_alert
+
+        maybe_h4_m15_fvg_alert(payload)
+    except Exception:
+        pass
+    try:
         from app.macro_discord_notify import maybe_macro_alert
 
         maybe_macro_alert(payload)
