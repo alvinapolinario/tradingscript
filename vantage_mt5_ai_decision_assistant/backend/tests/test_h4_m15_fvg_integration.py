@@ -85,6 +85,7 @@ def test_bullish_flow_entry_ready_integration():
         assert primary["liquidity"]["sweep_detected"] is True
         assert primary["structure"]["mss_confirmed"] is True
         assert primary["entry_fvg"]["lower"] > 0
+        assert primary.get("rejections") in (None, [])
 
 
 def test_heartbeat_candles_populate_monitor_store():

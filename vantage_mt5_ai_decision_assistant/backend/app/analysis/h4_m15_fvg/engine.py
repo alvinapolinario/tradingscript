@@ -26,6 +26,17 @@ TERMINAL = {
     H4M15SetupState.ENTRY_READY,
 }
 
+_EXEC_FVG_DIRECTION_MISMATCH = (
+    "Execution FVG direction and structure confirmation do not match active HTF setup."
+)
+
+
+def _clear_stale_exec_fvg_rejection(setup: H4M15Setup) -> None:
+    """Remove transient mismatch note once a valid execution FVG is linked."""
+    if not setup.rejections:
+        return
+    setup.rejections = [r for r in setup.rejections if r != _EXEC_FVG_DIRECTION_MISMATCH]
+
 
 def make_setup_id(symbol: str, htf_fvg: FvgZone) -> str:
     d = "B" if htf_fvg.direction == "BULLISH" else "S"
@@ -421,6 +432,7 @@ class H4M15Engine:
                     entry = copy.deepcopy(entry)
                     entry.parent_fvg_id = setup.htf_fvg.fvg_id
                     setup.entry_fvg = entry
+                    _clear_stale_exec_fvg_rejection(setup)
                     setup.m15_bars_since_ltf_fvg = 0
                     self._transition(
                         setup,
@@ -437,10 +449,8 @@ class H4M15Engine:
                     )
                 elif setup.state == H4M15SetupState.WAITING_FOR_LTF_FVG:
                     wrong = [f for f in fvgs if f.created_time >= setup.htf_first_touch_time and f.direction != setup.direction]
-                    if wrong and not setup.rejections:
-                        setup.rejections.append(
-                            "Execution FVG direction and structure confirmation do not match active HTF setup."
-                        )
+                    if wrong and _EXEC_FVG_DIRECTION_MISMATCH not in setup.rejections:
+                        setup.rejections.append(_EXEC_FVG_DIRECTION_MISMATCH)
 
             if setup.state == H4M15SetupState.WAITING_FOR_RETRACE and setup.entry_fvg:
                 setup.m15_bars_since_ltf_fvg += 1

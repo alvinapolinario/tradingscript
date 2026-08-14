@@ -5,6 +5,8 @@ import copy
 
 from app.analysis.h4_m15_fvg.engine import (
     H4M15Engine,
+    _clear_stale_exec_fvg_rejection,
+    _EXEC_FVG_DIRECTION_MISMATCH,
     displacement_ok,
     htf_touch_detected,
     select_execution_fvg,
@@ -253,3 +255,26 @@ def test_analyze_service_shape():
     assert out["valid"] is True
     assert "setups" in out
     assert out["advisory_only"] is True
+
+
+def test_clear_stale_exec_fvg_rejection():
+    setup = H4M15Setup(
+        setup_id="S1",
+        symbol="XAUUSD",
+        direction="BULLISH",
+        state=H4M15SetupState.WAITING_FOR_RETRACE,
+        htf_fvg=FvgZone(
+            fvg_id="H4-1",
+            direction="BULLISH",
+            timeframe="H4",
+            created_time=100,
+            lower=100.0,
+            upper=102.0,
+            gap_size=2.0,
+            gap_atr=0.5,
+            displacement_score=50.0,
+        ),
+    )
+    setup.rejections = [_EXEC_FVG_DIRECTION_MISMATCH, "Other note"]
+    _clear_stale_exec_fvg_rejection(setup)
+    assert setup.rejections == ["Other note"]
