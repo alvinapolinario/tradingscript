@@ -1,8 +1,37 @@
 /**
  * Shared left navigation for Vantage advisory UIs.
  * Usage: <body data-nav="analyzer"> … <script src="/static/shell.js"></script>
+ *
+ * Preferences (localStorage):
+ *   vantage-shell-theme   — "dark" | "light"
+ *   vantage-shell-sidebar — "1" when desktop sidebar hidden
  */
 (function () {
+  const STORAGE_THEME = "vantage-shell-theme";
+  const STORAGE_SIDEBAR = "vantage-shell-sidebar-collapsed";
+
+  const LIGHT_PAGE_VARS = `
+html[data-theme="light"] {
+  --bg: #f3f7f5;
+  --panel: #ffffff;
+  --panel2: #eef3f0;
+  --line: #d4ded8;
+  --text: #15201b;
+  --muted: #5f736b;
+  --ok: #0d9f6e;
+  --good: #0d9f6e;
+  --buy: #0d9f6e;
+  --warn: #b8860b;
+  --bad: #c0392b;
+  --sell: #c0392b;
+  --fail: #c0392b;
+  --accent: #0a7a52;
+  --monitor: #2563eb;
+  --wait: #b8860b;
+  --pot: #b8860b;
+  --inactive: #8a9a93;
+}`;
+
   const ICONS = {
     grid: '<svg class="sb-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>',
     target: '<svg class="sb-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="4"/><circle cx="12" cy="12" r="1.2" fill="currentColor"/></svg>',
@@ -21,6 +50,11 @@
     book: '<svg class="sb-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v16H6.5A2.5 2.5 0 0 0 4 21.5V5.5Z"/><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/></svg>',
     gear: '<svg class="sb-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M12 3.5v2.2M12 18.3v2.2M4.9 7.1l1.6 1.5M17.5 15.4l1.6 1.5M3.5 12h2.2M18.3 12h2.2M4.9 16.9l1.6-1.5M17.5 8.6l1.6-1.5"/></svg>',
   };
+
+  const SUN_ICON =
+    '<svg class="shell-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>';
+  const MOON_ICON =
+    '<svg class="shell-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M20 14.5A8.5 8.5 0 0 1 9.5 4 7 7 0 1 0 20 14.5Z"/></svg>';
 
   const WORKSPACE = [
     { id: "monitor", href: "/monitor", label: "Market Overview", icon: "grid" },
@@ -52,6 +86,42 @@
     { id: "settings", href: "/coming-soon?t=Data%20%26%20Settings", label: "Data & Settings", icon: "gear" },
   ];
 
+  function injectThemeStyles() {
+    if (document.getElementById("shell-theme-overrides")) return;
+    const el = document.createElement("style");
+    el.id = "shell-theme-overrides";
+    el.textContent = LIGHT_PAGE_VARS;
+    document.head.appendChild(el);
+  }
+
+  function getTheme() {
+    const saved = localStorage.getItem(STORAGE_THEME);
+    return saved === "light" ? "light" : "dark";
+  }
+
+  function applyTheme(theme) {
+    const next = theme === "light" ? "light" : "dark";
+    document.documentElement.setAttribute("data-theme", next);
+    localStorage.setItem(STORAGE_THEME, next);
+    const btn = document.getElementById("shellThemeBtn");
+    if (btn) {
+      btn.innerHTML = next === "light" ? MOON_ICON : SUN_ICON;
+      btn.setAttribute("aria-label", next === "light" ? "Switch to dark mode" : "Switch to light mode");
+      btn.title = next === "light" ? "Dark mode" : "Light mode";
+    }
+  }
+
+  function isDesktop() {
+    return window.matchMedia("(min-width: 961px)").matches;
+  }
+
+  function applySidebarCollapsed(collapsed) {
+    document.body.classList.toggle("app-shell-collapsed", collapsed);
+    localStorage.setItem(STORAGE_SIDEBAR, collapsed ? "1" : "0");
+    const reopen = document.getElementById("shellSidebarReopen");
+    if (reopen) reopen.hidden = !collapsed || !isDesktop();
+  }
+
   function itemHtml(item, activeId) {
     let isActive = item.id === activeId;
     if (activeId === "dashboard" && item.id === "radar") isActive = true;
@@ -73,11 +143,18 @@
     </div>`;
   }
 
+  injectThemeStyles();
+  applyTheme(getTheme());
+
   const activeId = (document.body.getAttribute("data-nav") || "").toLowerCase();
   const view = new URLSearchParams(location.search).get("view");
   const resolvedActive =
     activeId === "dashboard" && view === "lab" ? "lab" : activeId;
   document.body.classList.add("has-app-shell");
+
+  if (localStorage.getItem(STORAGE_SIDEBAR) === "1") {
+    document.body.classList.add("app-shell-collapsed");
+  }
 
   const aside = document.createElement("aside");
   aside.className = "app-sidebar";
@@ -86,6 +163,7 @@
     <div class="sb-brand">
       <div class="sb-mark" aria-hidden="true"></div>
       <div class="sb-brand-text">Vantage Desk<span>Advisory only</span></div>
+      <button type="button" class="sb-collapse-btn" id="shellSidebarCollapse" aria-label="Hide sidebar" title="Hide sidebar">‹</button>
     </div>
     ${section("Workspace", WORKSPACE, resolvedActive)}
     ${section("Tools", TOOLS, resolvedActive)}
@@ -103,9 +181,62 @@
   toggle.textContent = "☰";
   toggle.addEventListener("click", () => document.body.classList.toggle("app-shell-open"));
 
+  const chrome = document.createElement("div");
+  chrome.className = "app-shell-chrome";
+  chrome.innerHTML = `
+    <button type="button" class="app-shell-chrome-btn" id="shellThemeBtn" aria-label="Toggle theme"></button>
+    <button type="button" class="app-shell-chrome-btn" id="shellSidebarToggle" aria-label="Toggle sidebar" title="Show or hide sidebar">☰</button>
+  `;
+
+  const reopen = document.createElement("button");
+  reopen.type = "button";
+  reopen.className = "app-shell-sidebar-reopen";
+  reopen.id = "shellSidebarReopen";
+  reopen.setAttribute("aria-label", "Show sidebar");
+  reopen.title = "Show sidebar";
+  reopen.textContent = "›";
+  reopen.hidden = !document.body.classList.contains("app-shell-collapsed") || !isDesktop();
+
+  document.body.prepend(reopen);
+  document.body.prepend(chrome);
   document.body.prepend(backdrop);
   document.body.prepend(aside);
   document.body.prepend(toggle);
+
+  applyTheme(getTheme());
+
+  document.getElementById("shellThemeBtn").addEventListener("click", () => {
+    applyTheme(getTheme() === "light" ? "dark" : "light");
+  });
+
+  function setSidebarCollapsed(collapsed) {
+    applySidebarCollapsed(collapsed);
+    document.body.classList.remove("app-shell-open");
+  }
+
+  document.getElementById("shellSidebarCollapse").addEventListener("click", () => {
+    if (isDesktop()) setSidebarCollapsed(true);
+  });
+
+  document.getElementById("shellSidebarToggle").addEventListener("click", () => {
+    if (isDesktop()) {
+      setSidebarCollapsed(!document.body.classList.contains("app-shell-collapsed"));
+      return;
+    }
+    document.body.classList.toggle("app-shell-open");
+  });
+
+  reopen.addEventListener("click", () => setSidebarCollapsed(false));
+
+  window.matchMedia("(min-width: 961px)").addEventListener("change", (ev) => {
+    document.body.classList.remove("app-shell-open");
+    if (ev.matches) {
+      applySidebarCollapsed(localStorage.getItem(STORAGE_SIDEBAR) === "1");
+    } else {
+      document.body.classList.remove("app-shell-collapsed");
+      reopen.hidden = true;
+    }
+  });
 
   // Opportunity Radar badge = pending accepted signals awaiting decision
   fetch("/api/v1/signals?limit=50")
