@@ -125,6 +125,9 @@ private:
       double best_q = -1.0;
       bool found = false;
       double tol = m_cfg.touch_tolerance_atr * atr_v;
+      double best_hi = 0.0, best_lo = 0.0, best_inside = 0.0, best_qual = 0.0;
+      int best_upper = 0, best_lower = 0, best_span = 0;
+      datetime best_start = 0, best_end = 0;
 
       for(span = m_cfg.min_box_candles; span <= max_span; span++)
         {
@@ -157,12 +160,29 @@ private:
          if(quality > best_q)
            {
             best_q = quality;
-            start_t = rates[span - 1].time;
-            end_t = rates[0].time;
+            best_hi = hi;
+            best_lo = lo;
+            best_upper = upper;
+            best_lower = lower;
+            best_span = span;
+            best_inside = inside_ratio;
+            best_qual = quality;
+            best_start = rates[span - 1].time;
+            best_end = rates[0].time;
             found = true;
            }
         }
-      return found;
+      if(!found) return false;
+      hi = best_hi;
+      lo = best_lo;
+      upper = best_upper;
+      lower = best_lower;
+      span = best_span;
+      inside_ratio = best_inside;
+      quality = best_qual;
+      start_t = best_start;
+      end_t = best_end;
+      return true;
      }
 
    bool DetectBreakout(const double box_hi, const double box_lo, const MqlRates &rates[], const int n,
@@ -436,6 +456,7 @@ public:
          !CopyClosed(m_cfg.tf_structure, 30, struct_rates))
         {
          out.reasons = "Insufficient history";
+         out.analysis_active = false;
          out.valid = true;
          return true;
         }

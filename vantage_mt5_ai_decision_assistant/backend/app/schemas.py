@@ -355,6 +355,9 @@ class HeartbeatRequest(BaseModel):
     amd_ifvg: Optional[dict[str, Any]] = None
     box_theory: Optional[dict[str, Any]] = None
     ict: Optional[dict[str, Any]] = None
+    # Closed multi-TF candles for Python canonical engines (optional)
+    ict_candles: Optional[dict[str, Any]] = None
+    box_candles: Optional[dict[str, Any]] = None
     # H4→M15 FVG — closed H4/M15 candles for Python engine (optional)
     h4_m15_fvg_candles: Optional[dict[str, Any]] = None
     # Pre-computed H4→M15 blob (optional passthrough)

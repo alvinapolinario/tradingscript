@@ -678,6 +678,7 @@ def box_theory_status() -> dict:
         "caption": DESK_STRATEGY_CAPTION,
         "ea_online": bool(link.get("ea_online") or ea.get("connected")),
         "box_theory_supported": bool(ea.get("box_theory_supported")),
+        "box_python_engine": bool(ea.get("box_python_engine")),
         "selected_symbol": selected,
         "symbol": str(ea.get("symbol") or selected).upper(),
         "available_symbols": list(st.get("available_symbols") or []),
@@ -689,6 +690,7 @@ def box_theory_status() -> dict:
             "liquidity_grab": bool(ea.get("liquidity_grab_supported")),
             "swing_strategy": bool(ea.get("swing_strategy_supported")),
             "box_theory": bool(ea.get("box_theory_supported")),
+            "box_python_engine": bool(ea.get("box_python_engine")),
         },
         "box_theory": blob,
         "links": {

@@ -52,6 +52,7 @@
 #include <VantageAI/VantageIct.mqh>
 #include <VantageAI/VantageH4M15FvgFeed.mqh>
 #include <VantageAI/VantageIctFeed.mqh>
+#include <VantageAI/VantageBoxFeed.mqh>
 
 //--- Explicit compile-time advisory guard (do not import Trade.mqh / CTrade)
 #ifdef __MQL5__
@@ -576,6 +577,13 @@ input bool   InpBoxTheoryShowDash   = true;
 input bool   InpBoxTheoryChartObj   = true;
 input bool   InpBoxTheoryDebug      = false;
 
+input group "AW2. Box Theory — Python Feed"
+input bool   InpBoxFeedEnable       = true;   // Export closed H1/M15/M5 for Python Box engine
+input bool   InpBoxLegacyHeartbeat  = false;  // Include MQL5 box_theory blob when Python feed active
+input int    InpBoxFeedH1Bars       = 40;
+input int    InpBoxFeedM15Bars      = 60;
+input int    InpBoxFeedM5Bars       = 100;
+
 input group "AX. ICT Strategy — Core"
 input bool   InpIctEnable           = true;
 input bool   InpIctGoldOnly         = true;
@@ -651,6 +659,8 @@ CVantageH4M15FvgFeed g_h4m15;
 string g_h4m15_candles_json = "";
 CVantageIctFeed g_ictfeed;
 string g_ict_candles_json = "";
+CVantageBoxFeed g_boxfeed;
+string g_box_candles_json = "";
 
 datetime g_last_closed_candle = 0;
 datetime g_last_request_candle = 0;
@@ -1167,7 +1177,7 @@ string BuildHeartbeatPayload(void)
       j += ",\"swing_strategy\":" + g_swingstrat.ToJson(g_swingsnap);
    if(g_amdifvgsnap.valid)
       j += ",\"amd_ifvg\":" + g_amdifvg.ToJson(g_amdifvgsnap);
-   if(InpBoxTheoryEnable)
+   if(InpBoxTheoryEnable && (InpBoxLegacyHeartbeat || !InpBoxFeedEnable || g_box_candles_json == ""))
       j += ",\"box_theory\":" + g_boxtheory.ToJson(g_boxtheorysnap);
    if(InpIctEnable && (InpIctLegacyHeartbeat || !InpIctFeedEnable || g_ict_candles_json == ""))
       j += ",\"ict\":" + g_ict.ToJson(g_ictsnap);
@@ -1175,6 +1185,8 @@ string BuildHeartbeatPayload(void)
       j += ",\"h4_m15_fvg_candles\":" + g_h4m15_candles_json;
    if(InpIctFeedEnable && InpIctEnable && g_ict_candles_json != "")
       j += ",\"ict_candles\":" + g_ict_candles_json;
+   if(InpBoxFeedEnable && InpBoxTheoryEnable && g_box_candles_json != "")
+      j += ",\"box_candles\":" + g_box_candles_json;
    j += "}";
    return j;
   }
@@ -1789,6 +1801,23 @@ void MaybeEvalIct(const bool force)
      }
   }
 
+void MaybeRefreshBoxCandles(const bool force)
+  {
+   if(!InpBoxFeedEnable || !InpBoxTheoryEnable)
+     {
+      g_box_candles_json = "";
+      return;
+     }
+   static datetime s_last_m5 = 0;
+   datetime bt[];
+   if(CopyTime(_Symbol, PERIOD_M5, 1, 1, bt) != 1)
+      return;
+   if(!force && bt[0] == s_last_m5)
+      return;
+   s_last_m5 = bt[0];
+   g_box_candles_json = g_boxfeed.BuildCandlesJson(g_spec.digits);
+  }
+
 void MaybeRefreshIctCandles(const bool force)
   {
    if(!InpIctFeedEnable || !InpIctEnable)
@@ -1886,6 +1915,7 @@ void MaybeSendHeartbeat(void)
    MaybeEvalIct(false);
    MaybeRefreshH4M15FvgCandles(false);
    MaybeRefreshIctCandles(false);
+   MaybeRefreshBoxCandles(false);
 
    static int s_last_pending_logged = -1;
    if(g_pending.count != s_last_pending_logged)
@@ -2407,6 +2437,13 @@ int OnInit()
          MaybeEvalBoxTheory(true);
          Print("[VantageAI] Box Theory Strategy enabled — heartbeat key box_theory active.");
         }
+     }
+
+   if(InpBoxFeedEnable && InpBoxTheoryEnable)
+     {
+      g_boxfeed.Configure(_Symbol, InpBoxFeedH1Bars, InpBoxFeedM15Bars, InpBoxFeedM5Bars);
+      MaybeRefreshBoxCandles(true);
+      Print("[VantageAI] Box Theory Python feed enabled — heartbeat key box_candles active.");
      }
 
    if(InpIctEnable)

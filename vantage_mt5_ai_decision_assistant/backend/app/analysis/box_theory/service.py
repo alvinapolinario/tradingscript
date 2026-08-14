@@ -215,11 +215,12 @@ def analyze_box_strategy(
 
     return {
         "module": "box_theory",
-        "version": "1.0",
+        "version": "1.1",
         "strategy": "BOX_THEORY",
         "valid": True,
         "gold_symbol_valid": True,
         "engine_enabled": st.enabled,
+        "engine_source": "PYTHON_CANONICAL",
         "analysis_active": True,
         "symbol": sym,
         "base_symbol": base or "XAUUSD",
@@ -349,11 +350,12 @@ def _result(
         quality = "MODERATE"
     payload: dict[str, Any] = {
         "module": "box_theory",
-        "version": "1.0",
+        "version": "1.1",
         "strategy": "BOX_THEORY",
         "valid": True,
         "gold_symbol_valid": True,
         "engine_enabled": st.enabled,
+        "engine_source": "PYTHON_CANONICAL",
         "analysis_active": True,
         "symbol": sym,
         "timeframe": st.box_timeframe,

@@ -153,6 +153,7 @@ class EaSnapshot:
     amd_ifvg_supported: bool = False
     box_theory: dict | None = None
     box_theory_supported: bool = False
+    box_python_engine: bool = False
     ict: dict | None = None
     ict_supported: bool = False
     ict_python_engine: bool = False
@@ -419,6 +420,8 @@ class MonitorStore:
         raw_sym = _norm_symbol(str(payload.get("symbol", "")))
         sym = _canonical_monitor_symbol(raw_sym)
         hp = {**payload, "symbol": sym, "broker_symbol": raw_sym}
+        box_err: str | None = None
+        box_blob: dict[str, Any] | None = None
         h4_err: str | None = None
         ict_err: str | None = None
         h4_blob: dict[str, Any] | None = None
@@ -445,6 +448,16 @@ class MonitorStore:
             except Exception as exc:
                 ict_err = str(exc)
 
+        if isinstance(payload.get("box_candles"), dict):
+            try:
+                from app.analysis.box_theory.heartbeat import process_box_heartbeat
+
+                result = process_box_heartbeat(hp)
+                if isinstance(result, dict):
+                    box_blob = result
+            except Exception as exc:
+                box_err = str(exc)
+
         with self._lock:
             self._heartbeat_count += 1
             ea = self._get_or_create(sym)
@@ -459,6 +472,10 @@ class MonitorStore:
                 ea.ict = ict_blob
                 ea.ict_supported = True
                 ea.ict_python_engine = True
+            if box_blob is not None:
+                ea.box_theory = box_blob
+                ea.box_theory_supported = True
+                ea.box_python_engine = True
 
             if isinstance(payload.get("pl_calendar"), dict):
                 cal = payload["pl_calendar"]
@@ -484,6 +501,8 @@ class MonitorStore:
             self.add_log("WARN", "h4_m15_fvg", f"Heartbeat analyze failed: {h4_err}", symbol=sym)
         if ict_err:
             self.add_log("WARN", "ict", f"Heartbeat analyze failed: {ict_err}", symbol=sym)
+        if box_err:
+            self.add_log("WARN", "box_theory", f"Heartbeat analyze failed: {box_err}", symbol=sym)
 
         self.add_log(
             "WARN"
@@ -680,6 +699,7 @@ class MonitorStore:
             "amd_ifvg_supported": ea.amd_ifvg_supported,
             "box_theory": ea.box_theory,
             "box_theory_supported": ea.box_theory_supported,
+            "box_python_engine": ea.box_python_engine,
             "ict": ea.ict,
             "ict_supported": ea.ict_supported,
             "ict_python_engine": ea.ict_python_engine,
