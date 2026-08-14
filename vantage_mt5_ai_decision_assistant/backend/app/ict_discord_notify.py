@@ -18,8 +18,12 @@ _last_sent_at: dict[str, float] = {}
 DEFAULT_ICT_DISCORD_EVENTS = frozenset(
     {
         "LIQUIDITY_SWEPT",
+        "DISPLACEMENT_CONFIRMED",
         "MSS_CONFIRMED",
+        "EXECUTION_FVG_FOUND",
+        "FVG_TOUCHED",
         "ENTRY_ZONE_ACTIVE",
+        "ENTRY_READY",
         "TRIGGERED",
         "INVALIDATED",
         "TARGET_REACHED",
@@ -120,12 +124,16 @@ def _state_color(state: str, decision: str) -> int:
         return 3066993
     if state == "INVALIDATED" or state == "EXPIRED":
         return 15105570
-    if state == "TRIGGERED":
+    if state == "TRIGGERED" or state == "ENTRY_READY":
         if decision == "BUY":
             return 3066993
         if decision == "SELL":
             return 15158332
         return 15844367
+    if state == "FVG_TOUCHED":
+        return 15844367
+    if state == "EXECUTION_FVG_FOUND":
+        return 10181046
     if state == "ENTRY_ZONE_ACTIVE":
         return 3447003
     if state == "MSS_CONFIRMED":
@@ -137,7 +145,7 @@ def _state_color(state: str, decision: str) -> int:
 
 def _fmt_ict_alert(blob: dict[str, Any]) -> tuple[str, str, list[dict[str, Any]], int]:
     sym = str(blob.get("symbol") or "XAUUSD").upper()
-    state = str(blob.get("setup_state") or blob.get("status") or "—").upper()
+    state = str(blob.get("state") or blob.get("setup_state") or blob.get("status") or "—").upper()
     decision = str(blob.get("decision") or "—").upper()
     conf = float(blob.get("confidence_score") or blob.get("confidence") or 0)
     quality = str(blob.get("signal_quality") or "—")
@@ -154,8 +162,12 @@ def _fmt_ict_alert(blob: dict[str, Any]) -> tuple[str, str, list[dict[str, Any]]
 
     emoji_map = {
         "LIQUIDITY_SWEPT": "💧",
+        "DISPLACEMENT_CONFIRMED": "📈",
         "MSS_CONFIRMED": "📐",
+        "EXECUTION_FVG_FOUND": "🟦",
+        "FVG_TOUCHED": "👆",
         "ENTRY_ZONE_ACTIVE": "🎯",
+        "ENTRY_READY": "✅",
         "TRIGGERED": "⚡",
         "INVALIDATED": "⛔",
         "TARGET_REACHED": "🏁",
@@ -163,7 +175,7 @@ def _fmt_ict_alert(blob: dict[str, Any]) -> tuple[str, str, list[dict[str, Any]]
     }
     emoji = emoji_map.get(state, "📊")
     title = f"{emoji} ICT — {state.replace('_', ' ')}"
-    if decision in ("BUY", "SELL") and state in ("TRIGGERED", "ENTRY_ZONE_ACTIVE"):
+    if decision in ("BUY", "SELL") and state in ("TRIGGERED", "ENTRY_READY", "ENTRY_ZONE_ACTIVE"):
         title = f"{emoji} ICT — {decision} · {state.replace('_', ' ')}"
 
     desc_lines = [
@@ -179,6 +191,7 @@ def _fmt_ict_alert(blob: dict[str, Any]) -> tuple[str, str, list[dict[str, Any]]
     tp2 = targets[1].get("price") if len(targets) > 1 else "—"
 
     fields = [
+        {"name": "Engine", "value": blob.get("engine_source") or "—"},
         {"name": "Decision", "value": decision},
         {"name": "Confidence", "value": f"{conf:.0f}/100 — {quality}"},
         {"name": "HTF Bias", "value": htf.get("direction") or "—"},
@@ -211,10 +224,12 @@ def maybe_ict_alert(payload: dict[str, Any]) -> None:
     blob = payload.get("ict")
     if not isinstance(blob, dict) or not (blob.get("valid") or blob.get("analysis_active")):
         return
+    if str(blob.get("engine_source") or "").upper() == "MQL5_LEGACY":
+        return
     if blob.get("gold_symbol_valid") is False:
         return
 
-    state = str(blob.get("setup_state") or blob.get("status") or "").upper()
+    state = str(blob.get("state") or blob.get("setup_state") or blob.get("status") or "").upper()
     if not state or state not in _allowed_events(st):
         return
 
@@ -226,11 +241,14 @@ def maybe_ict_alert(payload: dict[str, Any]) -> None:
         return
 
     setup_id = str(blob.get("setup_id") or "")
-    if not setup_id:
+    entry_event_id = str(blob.get("entry_event_id") or "")
+    if state == "ENTRY_READY" and entry_event_id:
+        signal_id = entry_event_id
+    elif setup_id:
+        signal_id = f"{setup_id}|{state}"
+    else:
         sym = str(blob.get("symbol") or "XAUUSD").upper()
-        setup_id = f"{sym}|{state}|{blob.get('eval_bar_time') or blob.get('timestamp') or ''}"
-
-    signal_id = f"{setup_id}|{state}"
+        signal_id = f"{sym}|{state}|{blob.get('eval_bar_time') or blob.get('timestamp') or ''}"
     title, desc, fields, color = _fmt_ict_alert(blob)
     _dedupe_send(signal_id, title=title, description=desc, fields=fields, color=color)
 

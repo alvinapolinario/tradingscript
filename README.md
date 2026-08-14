@@ -6,11 +6,13 @@ The earlier `.pine` file is TradingView-only. MetaEditor cannot compile Pine Scr
 
 ## Files
 
-| File | Purpose |
-|------|---------|
-| `XAUUSD_M30_Alert_System.mq5` | Main MT5 indicator (recommended) |
-| `m30gold.mq5` | Same code (alternate filename) |
+
+| File                                            | Purpose                                   |
+| ----------------------------------------------- | ----------------------------------------- |
+| `XAUUSD_M30_Alert_System.mq5`                   | Main MT5 indicator (recommended)          |
+| `m30gold.mq5`                                   | Same code (alternate filename)            |
 | `xauusd_m30_market_structure_alert_system.pine` | TradingView version only (ignore for MT5) |
+
 
 ---
 
@@ -27,6 +29,8 @@ The earlier `.pine` file is TradingView-only. MetaEditor cannot compile Pine Scr
 
 ---
 
+
+
 ## Enable alerts (MT5)
 
 In indicator inputs (**A. General Settings**):
@@ -41,6 +45,8 @@ Alerts use `Alert()`, optional `SendNotification()`, `SendMail()`, and `PlaySoun
 
 ---
 
+
+
 ## What you get
 
 - MA + Bollinger Bands plots  
@@ -50,32 +56,31 @@ Alerts use `Alert()`, optional `SendNotification()`, `SendMail()`, and `PlaySoun
 - All 15 alert logics from the original design  
 - Pivot retest state machine  
 - Cooldown + alert priority  
-- Session / day-of-week / ATR / oversized-candle filters  
+- Session / day-of-week / ATR / oversized-candle filters
 
 ---
+
+
 
 ## Recommended defaults (XAUUSD M30)
 
-| Setting | Value |
-|---------|--------|
-| Confirm at candle close | true |
-| Intrabar mode | false |
-| MA | EMA 20 |
-| Bollinger | 20, 2.0 |
-| RSI | 14 |
-| Volume confirm | true, mult 1.20 |
-| Cooldown | 3 bars |
-| Suppress oversized | true, 2× ATR |
-| Levels | Update every session |
+
+| Setting                 | Value                |
+| ----------------------- | -------------------- |
+| Confirm at candle close | true                 |
+| Intrabar mode           | false                |
+| MA                      | EMA 20               |
+| Bollinger               | 20, 2.0              |
+| RSI                     | 14                   |
+| Volume confirm          | true, mult 1.20      |
+| Cooldown                | 3 bars               |
+| Suppress oversized      | true, 2× ATR         |
+| Levels                  | Update every session |
+
 
 ---
 
-## Why MetaEditor showed errors before
 
-You pasted **Pine Script** (`indicator(...)`, `input.bool`, `@version=6`) into an **`.mq5`** file.  
-MQL5 and Pine Script are different languages. The new `.mq5` file is native MQL5 and should compile cleanly.
-
----
 
 ## Disclaimer
 

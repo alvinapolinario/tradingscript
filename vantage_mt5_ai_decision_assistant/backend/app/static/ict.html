@@ -248,13 +248,23 @@
 
       const htfEvidence = Array.isArray(htf.evidence) ? htf.evidence : [];
 
+      const engineSrc = String(i.engine_source || (p.ict_python_engine ? "PYTHON_CANONICAL" : "") || "MQL5_LEGACY").toUpperCase();
+      const engineBadge = engineSrc === "PYTHON_CANONICAL"
+        ? `<span class="pill buy" style="font-size:.68rem;margin-left:.5rem">Python canonical</span>`
+        : `<span class="pill muted" style="font-size:.68rem;margin-left:.5rem">MQL5 legacy</span>`;
+      const mql5Legacy = i.mql5_legacy;
+      const legacyNote = (engineSrc === "PYTHON_CANONICAL" && mql5Legacy)
+        ? `<div class="info-box" style="margin-top:.5rem">MQL5 legacy snapshot: ${mql5Legacy.setup_state || "—"} / ${mql5Legacy.decision || "—"} (not used for desk decision).</div>`
+        : "";
+
       root.innerHTML = `
         ${backendNote}
         ${warnHtml}
         <div class="grid">
           <div class="card hero span2">
-            <div class="k">ICT · ${i.symbol || p.symbol || "—"} · ${i.timeframe || "M15"} · ${setupState}</div>
+            <div class="k">ICT · ${i.symbol || p.symbol || "—"} · ${i.timeframe || "M15"} · ${setupState}${engineBadge}</div>
             <div class="sig">${dec}</div>
+            ${legacyNote}
             <p class="explain">${i.action_guidance || i.technical_narrative || "Monitoring ICT sequence on closed bars."}</p>
             <div class="row" style="margin-top:.65rem">
               <div><div class="k">Confidence</div><div class="score">${conf}%</div></div>
@@ -310,6 +320,8 @@
             ${tpHtml}
             <div class="row"><span class="k">Risk / reward</span><span class="v">1:${fmt(i.risk_reward, 1)}</span></div>
             <div class="row"><span class="k">Premium / discount</span><span class="v">${i.premium_discount_zone || "—"}</span></div>
+            <div class="row"><span class="k">OTE band</span><span class="v">${(i.ote && i.ote.valid) ? fmt(i.ote.ote_low, dig) + " – " + fmt(i.ote.ote_high, dig) + (i.ote.price_in_ote ? " · IN" : "") + (i.ote.fvg_overlaps_ote ? " · FVG∩OTE" : "") : "—"}</span></div>
+            <div class="row"><span class="k">Order block</span><span class="v">${i.order_block && i.order_block.block_id ? (i.order_block.is_breaker ? "Breaker" : "OB") + " " + fmt(i.order_block.lower, dig) + " – " + fmt(i.order_block.upper, dig) + " · " + (i.order_block.status || "—") : "—"}</span></div>
           </div>
 
           <div class="card">

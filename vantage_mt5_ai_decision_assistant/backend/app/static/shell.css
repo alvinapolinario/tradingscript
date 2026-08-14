@@ -214,8 +214,8 @@ body.has-app-shell.app-shell-collapsed {
 
 .app-shell-chrome {
   position: fixed;
-  top: .65rem;
-  right: .65rem;
+  right: max(.65rem, env(safe-area-inset-right));
+  bottom: max(.65rem, env(safe-area-inset-bottom));
   z-index: 120;
   display: flex;
   gap: .4rem;

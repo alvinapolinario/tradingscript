@@ -18,6 +18,11 @@ def build_explanation(ctx: IctSetupContext, decision: IctDecision, score: float,
         lines.append(f"MSS = {ctx.mss.get('direction', '—')}")
     if ctx.fvg:
         lines.append(f"FVG = {ctx.fvg.lower:.2f}–{ctx.fvg.upper:.2f}")
+    if ctx.ote_valid:
+        lines.append(f"OTE = {ctx.ote_low:.2f}–{ctx.ote_high:.2f} (in band: {ctx.price_in_ote})")
+    if ctx.order_block:
+        ob = ctx.order_block
+        lines.append(f"{'Breaker' if ob.is_breaker else 'OB'} = {ob.lower:.2f}–{ob.upper:.2f}")
     lines.append(f"Premium/Discount = {ctx.premium_discount_zone}")
     lines.append(f"R:R = {rr:.1f}")
     lines.append(f"Score = {score:.0f}")

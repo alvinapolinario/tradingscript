@@ -66,6 +66,9 @@ def _ict_cfg() -> IctConfig:
     return IctConfig(
         min_candles=40,
         displacement_min_score=35.0,
+        displacement_min_body_atr=0.4,
+        displacement_min_range_atr=0.4,
+        displacement_min_body_ratio=0.45,
         min_confidence=50.0,
         minimum_rr=1.0,
         fvg_min_gap_atr=0.01,
@@ -76,10 +79,11 @@ def _mt5_multi_tf_payload(setup: list[Candle], execution: list[Candle]) -> dict:
     """MT5-style multi-TF candle blob for POST /api/v1/ict/analyze."""
     h1 = setup[::4][:30] or setup[:30]
     cfg = _ict_cfg()
+    retrace_bid = execution[-1].close if execution else setup[-1].close
     return {
         "symbol": "XAUUSD",
         "timeframe": "M15",
-        "market": {"bid": setup[-1].close, "spread_points": 25},
+        "market": {"bid": retrace_bid, "spread_points": 25},
         "config": {
             "min_confidence": cfg.min_confidence,
             "minimum_rr": cfg.minimum_rr,
@@ -100,7 +104,7 @@ def _run_ict(setup: list[Candle], execution: list[Candle]) -> dict:
         symbol="XAUUSD",
         candles_setup=setup,
         candles_execution=execution,
-        bid=setup[-1].close,
+        bid=execution[-1].close if execution else setup[-1].close,
         cfg=_ict_cfg(),
     )
 
@@ -231,6 +235,7 @@ def test_ict_discord_on_analyze_state_change(monkeypatch):
     # Discord fires only on whitelisted states — merge engine result with alertable state
     alert_blob = {
         **ict,
+        "state": "MSS_CONFIRMED",
         "setup_state": "MSS_CONFIRMED",
         "status": "MSS_CONFIRMED",
         "confidence_score": max(float(ict.get("confidence_score") or 0), 82),

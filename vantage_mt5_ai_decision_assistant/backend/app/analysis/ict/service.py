@@ -23,6 +23,9 @@ from app.analysis.ict.state_machine import (
     merge_state,
 )
 from app.analysis.ict.state_store import get_active_setup, save_setup, state_changed
+from app.analysis.ict.rehydrate import rehydrate_context_from_payload
+from app.analysis.ict.poi import order_block_to_dict
+from app.analysis.ict.store import get_persisted_setup
 from app.analysis.ict.history import record_ict_result
 from app.analysis.ict.sweep import detect_liquidity_sweep
 from app.analysis.ict.targets import build_targets
@@ -104,11 +107,21 @@ def analyze_ict_strategy(
         tf_map = {st.primary_setup_timeframe: setup, st.primary_execution_timeframe: execution}
     htf, htf_conf, htf_evidence = compute_htf_bias(tf_map, st)
 
-    # Liquidity map on setup TF
-    bsl, ssl = build_liquidity_levels(setup, atr_setup, st)
+    # Liquidity map on setup TF (true PDH/PDL when D1 or session partition available)
+    d1_candles = tf_map.get("D1") or []
+    bsl, ssl, pd_meta = build_liquidity_levels(
+        setup,
+        atr_setup,
+        st,
+        d1_candles=d1_candles or None,
+        eval_time=setup[-1].time,
+    )
     ctx = IctSetupContext(trade_bias="NEUTRAL", state=IctSetupState.WAITING_FOR_LIQUIDITY)
     ctx.bsl_levels = bsl
     ctx.ssl_levels = ssl
+    ctx.pdh = float(pd_meta.get("pdh") or 0)
+    ctx.pdl = float(pd_meta.get("pdl") or 0)
+    ctx.pdh_pdl_source = str(pd_meta.get("pdh_pdl_source") or "")
     ctx.htf_bias = htf
     ctx.htf_evidence = htf_evidence
 
@@ -147,21 +160,47 @@ def analyze_ict_strategy(
     lookback = setup[-48:] if len(setup) >= 48 else setup
     ctx.dealing_high = max(c.high for c in lookback)
     ctx.dealing_low = min(c.low for c in lookback)
+    ctx.equilibrium = (ctx.dealing_high + ctx.dealing_low) / 2.0
     ctx.premium_discount_zone = premium_discount(ctx.dealing_high, ctx.dealing_low, price)
+    if ctx.premium_discount_zone.startswith("PREMIUM"):
+        ctx.range_position = "PREMIUM"
+    elif ctx.premium_discount_zone.startswith("DISCOUNT"):
+        ctx.range_position = "DISCOUNT"
+    elif "DEEP" in ctx.premium_discount_zone:
+        ctx.range_position = ctx.premium_discount_zone
+    else:
+        ctx.range_position = "EQUILIBRIUM"
 
-    # Directional sequence
-    if ctx.trade_bias == "BEARISH":
-        ctx = evaluate_bearish_sequence(ctx, setup, execution, atr_setup, atr_exec, st, price)
-    elif ctx.trade_bias == "BULLISH":
-        ctx = evaluate_bullish_sequence(ctx, setup, execution, atr_setup, atr_exec, st, price)
-
-    # Merge with persisted state (same sweep setup — do not regress)
-    active = get_active_setup(sym, st.primary_setup_timeframe)
+    # Directional sequence (causal engine)
     setup_id = make_setup_id(sym, st.primary_setup_timeframe, ctx.sweep, ctx.trade_bias)
     ctx.setup_id = setup_id
+    prior_state: IctSetupState | None = None
+    active = get_active_setup(sym, st.primary_setup_timeframe)
+
+    persisted = get_persisted_setup(setup_id)
+    if persisted:
+        rehydrate_context_from_payload(ctx, persisted)
+
+    if active and active.setup_id == setup_id:
+        prior_state = active.state
+        if active.state in (IctSetupState.ENTRY_READY, IctSetupState.TRIGGERED):
+            ctx.entry_ready_emitted = True
+
+    if ctx.trade_bias == "BEARISH":
+        ctx = evaluate_bearish_sequence(
+            ctx, setup, execution, atr_setup, atr_exec, st, price,
+            symbol=sym, prior_state=prior_state,
+        )
+    elif ctx.trade_bias == "BULLISH":
+        ctx = evaluate_bullish_sequence(
+            ctx, setup, execution, atr_setup, atr_exec, st, price,
+            symbol=sym, prior_state=prior_state,
+        )
+
+    # Merge with persisted state (same sweep setup — do not regress)
     if active and active.setup_id == setup_id:
         ctx.state = merge_state(active.state, ctx.state)
-        if active.state in (IctSetupState.TRIGGERED, IctSetupState.ENTRY_ZONE_ACTIVE):
+        if active.state in (IctSetupState.TRIGGERED, IctSetupState.ENTRY_READY, IctSetupState.ENTRY_ZONE_ACTIVE):
             ctx.reasons.append(f"Resuming setup {setup_id} at {ctx.state.value}.")
 
     return _finalize(sym, st, ctx, price, htf_conf, session_score, warnings, setup, execution)
@@ -225,6 +264,7 @@ def _finalize(
         htf_aligned=htf_aligned,
         trade_bias=ctx.trade_bias,
         cfg=st,
+        causality_valid=ctx.causality_valid,
     )
 
     if risk_plan.get("invalidation") and f"{st.primary_setup_timeframe} close" not in " ".join(ctx.invalidations):
@@ -259,11 +299,12 @@ def _finalize(
 
     payload = {
         "module": "ict",
-        "version": "1.0",
+        "version": "2.1",
         "strategy": "ICT",
         "valid": True,
         "gold_symbol_valid": True,
         "engine_enabled": st.enabled,
+        "engine_source": "PYTHON_CANONICAL",
         "analysis_active": True,
         "symbol": sym,
         "timeframe": st.primary_setup_timeframe,
@@ -330,6 +371,20 @@ def _finalize(
         "targets": targets,
         "risk_reward": round(rr, 2),
         "premium_discount_zone": ctx.premium_discount_zone,
+        "premium_discount": {
+            "range_high": ctx.dealing_high,
+            "range_low": ctx.dealing_low,
+            "equilibrium": ctx.equilibrium,
+            "current_position": ctx.range_position,
+            "classification": ctx.premium_discount_zone,
+            "note": "Rolling lookback range — not institutional dealing range unless labeled otherwise.",
+        },
+        "pdh_pdl": {
+            "pdh": ctx.pdh,
+            "pdl": ctx.pdl,
+            "source": ctx.pdh_pdl_source,
+        },
+        "mss_target": _mss_target_dict(ctx),
         "session": ctx.session_name,
         "reasons": ctx.reasons or ["Scanning for ICT setup on closed bars."],
         "invalidations": ctx.invalidations,
@@ -338,11 +393,160 @@ def _finalize(
         "technical_narrative": narrative,
         "action_guidance": _action_guidance(decision, ctx.state),
         "setup_id": setup_id,
+        "state": ctx.state.value,
+        "state_reason": ctx.state_reason,
+        "causality_valid": ctx.causality_valid,
+        "causality_errors": list(ctx.causality_errors),
+        "entry_ready": ctx.state in (IctSetupState.ENTRY_READY, IctSetupState.TRIGGERED),
+        "entry_event_id": ctx.entry_event_id,
+        "entry_trigger_mode": st.entry_trigger_mode.value
+        if hasattr(st.entry_trigger_mode, "value")
+        else str(st.entry_trigger_mode),
+        "ote": {
+            "valid": ctx.ote_valid,
+            "ote_low": ctx.ote_low,
+            "ote_mid": ctx.ote_mid,
+            "ote_high": ctx.ote_high,
+            "price_in_ote": ctx.price_in_ote,
+            "fvg_overlaps_ote": ctx.fvg_overlaps_ote,
+            "poi_overlaps_ote": ctx.poi_overlaps_ote,
+            "note": "Confluence only — OTE alone does not create a setup.",
+        },
+        "order_block": order_block_to_dict(ctx.order_block),
+        "poi_confluence": {
+            "fvg_overlaps_ob": ctx.fvg_overlaps_ob,
+            "fvg_overlaps_ote": ctx.fvg_overlaps_ote,
+            "poi_overlaps_ote": ctx.poi_overlaps_ote,
+        },
+        "liquidity_event": _liquidity_event_dict(ctx),
+        "displacement_event": _displacement_event_dict(ctx),
+        "mss_event": _mss_event_dict(ctx),
+        "execution_fvg": _execution_fvg_dict(ctx),
+        "event_timeline": _event_timeline(ctx),
         "current_price": price,
         "eval_bar_time": setup[-1].time,
     }
+    try:
+        from app.analysis.ict.store import persist_setup_payload
+
+        persist_setup_payload(payload)
+    except Exception:
+        pass
     record_ict_result(sym, payload)
     return payload
+
+
+def _mss_target_dict(ctx: IctSetupContext) -> dict:
+    t = ctx.mss_target
+    if not t:
+        return {}
+    return {
+        "swing_id": t.swing_id,
+        "swing_type": t.swing_type,
+        "price": t.price,
+        "time": t.time,
+    }
+
+
+def _liquidity_event_dict(ctx: IctSetupContext) -> dict:
+    s = ctx.sweep
+    if not s or not s.detected:
+        return {}
+    return {
+        "event_id": s.event_id,
+        "type": s.sweep_type,
+        "level": s.level,
+        "sweep_price": s.sweep_price,
+        "reclaim": s.reclaim_confirmed or s.closed_back_inside,
+        "time": s.sweep_time,
+        "penetration_atr": round(s.penetration_atr, 3),
+        "quality_score": s.quality_score,
+    }
+
+
+def _displacement_event_dict(ctx: IctSetupContext) -> dict:
+    d = ctx.displacement_event
+    if not d:
+        return {}
+    return {
+        "event_id": d.event_id,
+        "direction": d.direction,
+        "start_time": d.start_time,
+        "end_time": d.end_time,
+        "body_atr": round(d.body_atr_ratio, 3),
+        "range_atr": round(d.range_atr_ratio, 3),
+        "quality": d.quality_score,
+    }
+
+
+def _mss_event_dict(ctx: IctSetupContext) -> dict:
+    m = ctx.mss_event
+    if not m:
+        return {"confirmed": bool(ctx.mss and ctx.mss.get("shift_detected"))}
+    return {
+        "event_id": m.event_id,
+        "confirmed": True,
+        "broken_level": m.broken_level,
+        "broken_swing_time": m.broken_swing_time,
+        "confirmation_time": m.confirmation_time,
+        "confirmation_type": m.confirmation_type,
+        "source_displacement_event_id": m.source_displacement_event_id,
+        "quality_score": m.quality_score,
+    }
+
+
+def _execution_fvg_dict(ctx: IctSetupContext) -> dict:
+    f = ctx.fvg
+    if not f:
+        return {}
+    return {
+        "fvg_id": f.fvg_id,
+        "direction": f.direction,
+        "lower": f.lower,
+        "upper": f.upper,
+        "midpoint": f.midpoint,
+        "created_time": f.created_time,
+        "mitigation_pct": f.mitigation_pct,
+        "displacement_event_id": f.displacement_event_id,
+        "mss_event_id": f.mss_event_id,
+    }
+
+
+def _event_timeline(ctx: IctSetupContext) -> list[dict]:
+    events: list[dict] = []
+    if ctx.sweep and ctx.sweep.detected:
+        events.append({"time": ctx.sweep.sweep_time, "event": "SWEEP", "detail": ctx.sweep.sweep_type})
+    if ctx.displacement_event:
+        d = ctx.displacement_event
+        events.append({"time": d.start_time, "event": "DISPLACEMENT_START", "detail": d.direction})
+        events.append({"time": d.end_time, "event": "DISPLACEMENT_END", "detail": f"quality={d.quality_score:.0f}"})
+    if ctx.mss_event:
+        m = ctx.mss_event
+        events.append({"time": m.confirmation_time, "event": "MSS", "detail": f"broke {m.broken_level:.2f}"})
+    if ctx.fvg:
+        events.append({"time": ctx.fvg.created_time, "event": "EXECUTION_FVG", "detail": ctx.fvg.fvg_id})
+    if ctx.fvg_touch_time:
+        events.append({"time": ctx.fvg_touch_time, "event": "FVG_TOUCHED", "detail": ""})
+    if ctx.order_block:
+        ob = ctx.order_block
+        events.append(
+            {
+                "time": ob.created_time,
+                "event": "BREAKER" if ob.is_breaker else "ORDER_BLOCK",
+                "detail": f"{ob.direction} {ob.lower:.2f}–{ob.upper:.2f}",
+            }
+        )
+    if ctx.ote_valid:
+        events.append(
+            {
+                "time": ctx.displacement_event.end_time if ctx.displacement_event else 0,
+                "event": "OTE_BAND",
+                "detail": f"{ctx.ote_low:.2f}–{ctx.ote_high:.2f}",
+            }
+        )
+    if ctx.entry_ready_time:
+        events.append({"time": ctx.entry_ready_time, "event": "ENTRY_READY", "detail": ctx.entry_event_id})
+    return events
 
 
 def _action_guidance(decision: IctDecision, state: IctSetupState) -> str:
@@ -350,6 +554,10 @@ def _action_guidance(decision: IctDecision, state: IctSetupState) -> str:
         return "Bullish ICT setup validated — analysis only, no auto-trade."
     if decision == IctDecision.SELL:
         return "Bearish ICT setup validated — analysis only, no auto-trade."
+    if state in (IctSetupState.ENTRY_READY, IctSetupState.TRIGGERED):
+        return "ENTRY_READY — advisory only, no auto-trade."
+    if state == IctSetupState.FVG_TOUCHED:
+        return "FVG touched — awaiting ENTRY_READY confirmation pass."
     if state == IctSetupState.WAITING_FOR_RETRACE:
         return "Waiting for retrace into FVG entry zone."
     if state == IctSetupState.ENTRY_ZONE_ACTIVE:

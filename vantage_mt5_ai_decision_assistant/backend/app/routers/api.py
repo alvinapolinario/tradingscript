@@ -783,7 +783,8 @@ def ict_status() -> dict:
     link = st.get("link_health") or {}
     selected = str(st.get("selected_symbol") or ea.get("symbol") or "").upper()
     blob = ea.get("ict") if isinstance(ea.get("ict"), dict) else None
-    backend_active = False
+    backend_active = bool(blob and blob.get("engine_source") == "PYTHON_CANONICAL")
+    python_heartbeat = bool(ea.get("ict_python_engine"))
 
     if not blob and selected:
         active = get_active_setup(selected, "M15")
@@ -800,12 +801,18 @@ def ict_status() -> dict:
 
     sym = str(ea.get("symbol") or selected).upper()
     blob = normalize_strategy_symbol_blob(blob, sym)
+    if blob and isinstance(blob, dict) and "engine_source" not in blob:
+        blob = {
+            **blob,
+            "engine_source": "MQL5_LEGACY" if not (python_heartbeat or backend_active) else "PYTHON_CANONICAL",
+        }
 
     return {
         "advisory_only": True,
         "caption": DESK_STRATEGY_CAPTION,
         "ea_online": bool(link.get("ea_online") or ea.get("connected")),
         "ict_supported": bool(ea.get("ict_supported")) or backend_active,
+        "ict_python_engine": python_heartbeat or backend_active,
         "backend_engine_available": True,
         "selected_symbol": selected,
         "symbol": str(ea.get("symbol") or selected).upper(),
@@ -986,6 +993,39 @@ def ict_analyze(body: dict) -> dict:
     return result
 
 
+@router.post("/api/v1/ict/replay")
+def ict_replay(body: dict) -> dict:
+    """Chronological ICT replay — one closed bar at a time (backtest-safe)."""
+    from app.analysis.ict.replay import replay_ict_sequence
+    from app.analysis.ict.types import IctConfig
+    from app.market_structure import candles_from_payload
+
+    payload = body or {}
+    symbol = str(payload.get("symbol") or "XAUUSD").upper()
+    candles_raw = payload.get("candles") if isinstance(payload.get("candles"), dict) else {}
+    cfg_raw = payload.get("config") if isinstance(payload.get("config"), dict) else {}
+
+    setup = candles_from_payload(candles_raw.get("M15") or candles_raw.get("SETUP") or [])
+    execution = candles_from_payload(candles_raw.get("M5") or candles_raw.get("ENTRY") or setup)
+    cfg_kwargs = {k: v for k, v in cfg_raw.items() if hasattr(IctConfig, k)}
+    cfg = IctConfig(**cfg_kwargs) if cfg_kwargs else None
+
+    steps = replay_ict_sequence(
+        symbol=symbol,
+        setup_candles=setup,
+        execution_candles=execution,
+        cfg=cfg,
+    )
+    return {
+        "module": "ict",
+        "symbol": symbol,
+        "valid": True,
+        "step_count": len(steps),
+        "steps": steps,
+        "final": steps[-1] if steps else None,
+    }
+
+
 @router.get("/api/v1/strategies/ict/{symbol}")
 def ict_strategy_summary(symbol: str) -> dict:
     """Compact ICT status for a symbol."""
@@ -1066,11 +1106,12 @@ def list_accepted_signals(
 ) -> dict:
     """Accepted Signal Ledger — advisory BUY/SELL history from M5 desk."""
     from app.analysis.h4_m15_fvg.advisory_cards import build_h4_m15_advisory_cards
+    from app.analysis.ict.advisory_cards import build_ict_advisory_cards
     from app.signal_ledger import list_signals
 
     items = list_signals(limit=limit, symbol=(symbol.strip().upper() if symbol else None))
     ea = monitor_store.status().get("vantage_ea") or {}
-    advisory_cards = build_h4_m15_advisory_cards(ea)
+    advisory_cards = build_h4_m15_advisory_cards(ea) + build_ict_advisory_cards(ea)
     return {
         "advisory_only": True,
         "count": len(items),

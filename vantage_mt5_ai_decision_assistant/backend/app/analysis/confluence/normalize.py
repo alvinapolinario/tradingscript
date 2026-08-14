@@ -78,27 +78,42 @@ def normalize_ea_signals(ea: dict[str, Any], cfg: ConfluenceConfig | None = None
     out: list[StrategySignal] = []
 
     ict = ea.get("ict") if isinstance(ea.get("ict"), dict) else {}
-    if ict.get("valid") or ict.get("analysis_active"):
-        ts = int(ict.get("eval_bar_time") or ict.get("timestamp") or 0)
-        htf = ict.get("htf_bias") if isinstance(ict.get("htf_bias"), dict) else {}
-        direction = _direction_from_text(ict.get("decision"), ict.get("direction"), htf.get("direction"))
-        conf = _f(ict.get("confidence_score") or ict.get("confidence"))
-        status = _u(ict.get("setup_state") or ict.get("status") or "—")
-        reasons = ict.get("reasons") if isinstance(ict.get("reasons"), list) else []
-        inv = ict.get("invalidations") if isinstance(ict.get("invalidations"), list) else []
-        out.append(
-            _signal(
-                strategy="ICT",
-                direction=direction,
-                confidence=conf,
-                status=status,
-                cfg=st,
-                timestamp=ts,
-                freshness_sec=_freshness(ts, now_ts, st),
-                evidence=[str(r) for r in reasons[:6]],
-                invalidation=[str(x) for x in inv[:4]],
+    python_active = bool(ea.get("ict_python_engine"))
+    ict_engine = _u(ict.get("engine_source"))
+    if ict and not (ict_engine == "MQL5_LEGACY" and python_active):
+        if ict.get("valid") or ict.get("analysis_active"):
+            ts = int(ict.get("eval_bar_time") or ict.get("timestamp") or 0)
+            htf = ict.get("htf_bias") if isinstance(ict.get("htf_bias"), dict) else {}
+            state = _u(ict.get("state") or ict.get("setup_state") or ict.get("status") or "—")
+            entry_ready = bool(ict.get("entry_ready")) or state in ("ENTRY_READY", "TRIGGERED")
+            decision = _u(ict.get("decision"))
+            direction = _direction_from_text(decision, ict.get("direction"), htf.get("direction"))
+            conf = _f(ict.get("confidence_score") or ict.get("confidence"))
+            if entry_ready and ict.get("causality_valid", True):
+                if decision in ("BUY", "SELL"):
+                    direction = "LONG" if decision == "BUY" else "SHORT"
+                conf = max(conf, 65.0)
+            elif state in ("MSS_CONFIRMED", "EXECUTION_FVG_FOUND", "WAITING_FOR_RETRACE"):
+                direction = "NEUTRAL" if direction in ("LONG", "SHORT") else direction
+                conf = min(conf, 60.0) if conf else 0.0
+            reasons = ict.get("reasons") if isinstance(ict.get("reasons"), list) else []
+            inv = ict.get("invalidations") if isinstance(ict.get("invalidations"), list) else []
+            out.append(
+                _signal(
+                    strategy="ICT",
+                    direction=direction,
+                    confidence=conf,
+                    status=state,
+                    cfg=st,
+                    timestamp=ts,
+                    freshness_sec=_freshness(ts, now_ts, st),
+                    evidence=[str(r) for r in reasons[:6]],
+                    invalidation=[str(x) for x in inv[:4]],
+                    active=entry_ready
+                    and ict.get("causality_valid", True) is not False
+                    and direction in ("LONG", "SHORT"),
+                )
             )
-        )
 
     amd = ea.get("amd_ifvg") if isinstance(ea.get("amd_ifvg"), dict) else {}
     if amd.get("valid") or amd.get("analysis_active"):

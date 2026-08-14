@@ -333,7 +333,7 @@ class H4M15Engine:
                 H4M15SetupState.WAITING_FOR_LIQUIDITY_SWEEP,
                 H4M15SetupState.HTF_FVG_TOUCHED,
             ):
-                bsl, ssl = build_liquidity_levels(m15_history, atr_m15, ict_cfg)
+                bsl, ssl, _pd = build_liquidity_levels(m15_history, atr_m15, ict_cfg)
                 sweep = detect_liquidity_sweep(
                     m15_history,
                     bsl_levels=bsl,

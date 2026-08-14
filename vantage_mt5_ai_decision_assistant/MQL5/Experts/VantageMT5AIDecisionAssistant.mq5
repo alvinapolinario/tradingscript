@@ -51,6 +51,7 @@
 #include <VantageAI/VantageBoxTheory.mqh>
 #include <VantageAI/VantageIct.mqh>
 #include <VantageAI/VantageH4M15FvgFeed.mqh>
+#include <VantageAI/VantageIctFeed.mqh>
 
 //--- Explicit compile-time advisory guard (do not import Trade.mqh / CTrade)
 #ifdef __MQL5__
@@ -605,6 +606,15 @@ input bool   InpH4M15FvgEnable     = true;   // Export closed H4/M15 candles on 
 input int    InpH4M15FvgH4Bars      = 80;     // Closed H4 bars sent to backend
 input int    InpH4M15FvgM15Bars     = 120;    // Closed M15 bars sent to backend
 
+input group "BA. ICT Strategy — Python Feed"
+input bool   InpIctFeedEnable       = true;   // Export closed D1/H4/H1/M15/M5 for Python ICT engine
+input int    InpIctFeedD1Bars       = 30;
+input int    InpIctFeedH4Bars       = 60;
+input int    InpIctFeedH1Bars       = 80;
+input int    InpIctFeedM15Bars      = 120;
+input int    InpIctFeedM5Bars       = 150;
+input bool   InpIctLegacyHeartbeat  = false;  // Include MQL5 ict blob on heartbeat (off when Python feed active)
+
 //+------------------------------------------------------------------+
 //| Globals                                                          |
 //+------------------------------------------------------------------+
@@ -639,6 +649,8 @@ CVantageIct g_ict;
 VantageIctResult g_ictsnap;
 CVantageH4M15FvgFeed g_h4m15;
 string g_h4m15_candles_json = "";
+CVantageIctFeed g_ictfeed;
+string g_ict_candles_json = "";
 
 datetime g_last_closed_candle = 0;
 datetime g_last_request_candle = 0;
@@ -1157,10 +1169,12 @@ string BuildHeartbeatPayload(void)
       j += ",\"amd_ifvg\":" + g_amdifvg.ToJson(g_amdifvgsnap);
    if(InpBoxTheoryEnable)
       j += ",\"box_theory\":" + g_boxtheory.ToJson(g_boxtheorysnap);
-   if(InpIctEnable)
+   if(InpIctEnable && (InpIctLegacyHeartbeat || !InpIctFeedEnable || g_ict_candles_json == ""))
       j += ",\"ict\":" + g_ict.ToJson(g_ictsnap);
    if(InpH4M15FvgEnable && g_h4m15_candles_json != "")
       j += ",\"h4_m15_fvg_candles\":" + g_h4m15_candles_json;
+   if(InpIctFeedEnable && InpIctEnable && g_ict_candles_json != "")
+      j += ",\"ict_candles\":" + g_ict_candles_json;
    j += "}";
    return j;
   }
@@ -1775,6 +1789,23 @@ void MaybeEvalIct(const bool force)
      }
   }
 
+void MaybeRefreshIctCandles(const bool force)
+  {
+   if(!InpIctFeedEnable || !InpIctEnable)
+     {
+      g_ict_candles_json = "";
+      return;
+     }
+   static datetime s_last_m15 = 0;
+   datetime bt[];
+   if(CopyTime(_Symbol, PERIOD_M15, 1, 1, bt) != 1)
+      return;
+   if(!force && bt[0] == s_last_m15)
+      return;
+   s_last_m15 = bt[0];
+   g_ict_candles_json = g_ictfeed.BuildCandlesJson(g_spec.digits);
+  }
+
 void MaybeRefreshH4M15FvgCandles(const bool force)
   {
    if(!InpH4M15FvgEnable)
@@ -1854,6 +1885,7 @@ void MaybeSendHeartbeat(void)
    MaybeEvalBoxTheory(false);
    MaybeEvalIct(false);
    MaybeRefreshH4M15FvgCandles(false);
+   MaybeRefreshIctCandles(false);
 
    static int s_last_pending_logged = -1;
    if(g_pending.count != s_last_pending_logged)
@@ -2395,6 +2427,14 @@ int OnInit()
       g_h4m15.Configure(_Symbol, InpH4M15FvgH4Bars, InpH4M15FvgM15Bars);
       MaybeRefreshH4M15FvgCandles(true);
       Print("[VantageAI] H4→M15 FVG feed enabled — closed H4/M15 candles sent on new M15 bar.");
+     }
+
+   if(InpIctFeedEnable && InpIctEnable)
+     {
+      g_ictfeed.Configure(_Symbol, InpIctFeedD1Bars, InpIctFeedH4Bars, InpIctFeedH1Bars,
+                          InpIctFeedM15Bars, InpIctFeedM5Bars);
+      MaybeRefreshIctCandles(true);
+      Print("[VantageAI] ICT Python feed enabled — ict_candles on heartbeat.");
      }
 
    // Build chart-relative levels for BTC/etc. (AUTO) or gold manual map

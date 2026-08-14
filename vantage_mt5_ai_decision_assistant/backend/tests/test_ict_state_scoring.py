@@ -69,8 +69,8 @@ def setup_function():
 
 def test_merge_state_never_regresses():
     assert merge_state(IctSetupState.MSS_CONFIRMED, IctSetupState.WAITING_FOR_DISPLACEMENT) == IctSetupState.MSS_CONFIRMED
-    assert merge_state(IctSetupState.LIQUIDITY_SWEPT, IctSetupState.TRIGGERED) == IctSetupState.TRIGGERED
-    assert merge_state(IctSetupState.TRIGGERED, IctSetupState.INVALIDATED) == IctSetupState.INVALIDATED
+    assert merge_state(IctSetupState.LIQUIDITY_SWEPT, IctSetupState.ENTRY_READY) == IctSetupState.ENTRY_READY
+    assert merge_state(IctSetupState.ENTRY_READY, IctSetupState.INVALIDATED) == IctSetupState.INVALIDATED
     # Forward progression allowed
     assert merge_state(IctSetupState.MSS_CONFIRMED, IctSetupState.WAITING_FOR_RETRACE) == IctSetupState.WAITING_FOR_RETRACE
 
@@ -119,8 +119,23 @@ def test_scoring_gates_and_penalties():
     assert any("countertrend" in p.lower() or "Missing required" in p for p in penalties)
 
 
-def test_decide_from_score_triggered():
-    gates = {"liquidity_sweep": True, "displacement": True, "mss": True, "fvg": True}
+def test_decide_from_score_entry_ready():
+    gates = {"liquidity_sweep": True, "displacement": True, "mss": True, "fvg": True, "causality": True}
+    d = decide_from_score(
+        state=IctSetupState.ENTRY_READY,
+        score=80.0,
+        risk_reward=2.5,
+        gates=gates,
+        htf_aligned=True,
+        trade_bias="BEARISH",
+        cfg=DEFAULT_ICT_CONFIG,
+        causality_valid=True,
+    )
+    assert d == IctDecision.SELL
+
+
+def test_decide_from_score_triggered_legacy():
+    gates = {"liquidity_sweep": True, "displacement": True, "mss": True, "fvg": True, "causality": True}
     d = decide_from_score(
         state=IctSetupState.TRIGGERED,
         score=80.0,
@@ -129,6 +144,7 @@ def test_decide_from_score_triggered():
         htf_aligned=True,
         trade_bias="BEARISH",
         cfg=DEFAULT_ICT_CONFIG,
+        causality_valid=True,
     )
     assert d == IctDecision.SELL
 
@@ -142,14 +158,19 @@ def test_quality_bands():
 
 def test_state_persistence_across_analyze_calls():
     setup, exec_c = _mini_bearish_series()
-    cfg = IctConfig(min_candles=40, displacement_min_score=35.0, fvg_min_gap_atr=0.01)
-    r1 = analyze_ict_strategy(symbol="XAUUSD", candles_setup=setup, candles_execution=exec_c, cfg=cfg)
+    cfg = IctConfig(min_candles=40, displacement_min_score=35.0, displacement_min_body_atr=0.4, displacement_min_range_atr=0.4, fvg_min_gap_atr=0.01)
+    retrace_bid = exec_c[-1].close
+    r1 = analyze_ict_strategy(
+        symbol="XAUUSD", candles_setup=setup, candles_execution=exec_c, bid=retrace_bid, cfg=cfg,
+    )
     sid = r1["setup_id"]
     assert sid.startswith("ICT-XAUUSD-M15-")
     active = get_active_setup("XAUUSD", "M15")
     assert active is not None
     assert active.setup_id == sid
-    r2 = analyze_ict_strategy(symbol="XAUUSD", candles_setup=setup, candles_execution=exec_c, cfg=cfg)
+    r2 = analyze_ict_strategy(
+        symbol="XAUUSD", candles_setup=setup, candles_execution=exec_c, bid=retrace_bid, cfg=cfg,
+    )
     assert r2["setup_id"] == sid
     assert "setup_record" in r2
     assert list_setups("XAUUSD")

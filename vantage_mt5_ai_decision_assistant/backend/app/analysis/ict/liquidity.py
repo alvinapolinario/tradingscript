@@ -1,6 +1,7 @@
-"""ICT liquidity map — BSL, SSL, equal highs/lows from swings."""
+"""ICT liquidity map — BSL, SSL, equal highs/lows, true PDH/PDL."""
 from __future__ import annotations
 
+from app.analysis.ict.session_levels import compute_previous_day_levels
 from app.analysis.ict.types import IctConfig, LiquidityLevel
 from app.market_structure.swings import find_swings
 from app.market_structure.types import Candle
@@ -10,8 +11,11 @@ def build_liquidity_levels(
     candles: list[Candle],
     atr_val: float,
     cfg: IctConfig,
-) -> tuple[list[LiquidityLevel], list[LiquidityLevel]]:
-    """Return (BSL levels, SSL levels) from confirmed swing pivots."""
+    *,
+    d1_candles: list[Candle] | None = None,
+    eval_time: int | None = None,
+) -> tuple[list[LiquidityLevel], list[LiquidityLevel], dict[str, float | str]]:
+    """Return (BSL levels, SSL levels, pdh_pdl_meta)."""
     swings = find_swings(
         candles,
         cfg.pivot_left,
@@ -30,7 +34,6 @@ def build_liquidity_levels(
     for s in lows[-6:]:
         ssl.append(LiquidityLevel("SSL", s["price"], s["time"], "SWING"))
 
-    # Equal highs / lows — cluster swing levels within tolerance
     for i, a in enumerate(highs[-4:]):
         for b in highs[-4:][i + 1 :]:
             if abs(a["price"] - b["price"]) <= eq_tol:
@@ -42,18 +45,27 @@ def build_liquidity_levels(
                 px = (a["price"] + b["price"]) / 2.0
                 ssl.append(LiquidityLevel("EQL", px, max(a["time"], b["time"]), "EQUAL_LOWS"))
 
-    # PDH/PDL when enough history (approximate last 96 M15 bars as day proxy if no D1)
-    if len(candles) >= 24:
-        day_window = candles[-96:] if len(candles) >= 96 else candles[-24:]
-        pdh = max(c.high for c in day_window)
-        pdl = min(c.low for c in day_window)
-        bsl.append(LiquidityLevel("PDH", pdh, day_window[-1].time, "SESSION_DAY"))
-        ssl.append(LiquidityLevel("PDL", pdl, day_window[-1].time, "SESSION_DAY"))
+    et = eval_time or (candles[-1].time if candles else 0)
+    pdh, pdl, pd_time, pd_source = compute_previous_day_levels(candles, d1_candles, et, cfg)
+    meta: dict[str, float | str] = {
+        "pdh": 0.0,
+        "pdl": 0.0,
+        "pdh_pdl_source": "",
+        "reference_time": 0,
+    }
+    if pdh is not None and pdl is not None and pdh > pdl:
+        bsl.append(LiquidityLevel("PDH", pdh, pd_time, pd_source))
+        ssl.append(LiquidityLevel("PDL", pdl, pd_time, pd_source))
+        meta = {
+            "pdh": pdh,
+            "pdl": pdl,
+            "pdh_pdl_source": pd_source,
+            "reference_time": pd_time,
+        }
 
-    # Dedupe nearby levels
     bsl = _dedupe_levels(bsl, eq_tol)
     ssl = _dedupe_levels(ssl, eq_tol)
-    return bsl, ssl
+    return bsl, ssl, meta
 
 
 def _dedupe_levels(levels: list[LiquidityLevel], tol: float) -> list[LiquidityLevel]:

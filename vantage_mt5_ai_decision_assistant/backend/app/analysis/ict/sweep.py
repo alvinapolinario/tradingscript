@@ -40,6 +40,8 @@ def detect_liquidity_sweep(
                     penetration=pen,
                     closed_back_inside=c.close < lv.price,
                     quality_score=q,
+                    liquidity_type=lv.kind,
+                    reclaim_confirmed=c.close < lv.price,
                 )
                 if best is None or c.time >= best.sweep_time:
                     best = ev
@@ -63,6 +65,8 @@ def detect_liquidity_sweep(
                     penetration=pen,
                     closed_back_inside=c.close > lv.price,
                     quality_score=q,
+                    liquidity_type=lv.kind,
+                    reclaim_confirmed=c.close > lv.price,
                 )
                 if best is None or c.time >= best.sweep_time:
                     best = ev

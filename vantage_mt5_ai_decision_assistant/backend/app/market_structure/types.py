@@ -59,6 +59,9 @@ class FvgZone:
     full_fill_time: int = 0
     invalidated_time: int = 0
     parent_fvg_id: str = ""
+    setup_id: str = ""
+    displacement_event_id: str = ""
+    mss_event_id: str = ""
     created_at: int = 0
     updated_at: int = 0
 

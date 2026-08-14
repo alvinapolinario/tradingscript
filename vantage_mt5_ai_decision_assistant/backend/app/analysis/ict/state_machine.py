@@ -19,13 +19,24 @@ STATE_RANK: dict[IctSetupState, int] = {
     IctSetupState.DISPLACEMENT_CONFIRMED: 4,
     IctSetupState.WAITING_FOR_MSS: 5,
     IctSetupState.MSS_CONFIRMED: 6,
-    IctSetupState.WAITING_FOR_RETRACE: 7,
-    IctSetupState.ENTRY_ZONE_ACTIVE: 8,
-    IctSetupState.TRIGGERED: 9,
-    IctSetupState.TARGET_REACHED: 10,
+    IctSetupState.WAITING_FOR_EXECUTION_FVG: 6,
+    IctSetupState.EXECUTION_FVG_FOUND: 7,
+    IctSetupState.WAITING_FOR_RETRACE: 8,
+    IctSetupState.FVG_TOUCHED: 9,
+    IctSetupState.ENTRY_ZONE_ACTIVE: 9,
+    IctSetupState.ENTRY_READY: 10,
+    IctSetupState.TRIGGERED: 10,
+    IctSetupState.TARGET_REACHED: 11,
     IctSetupState.INVALIDATED: 99,
     IctSetupState.EXPIRED: 99,
 }
+
+_ADVISORY_READY = (
+    IctSetupState.ENTRY_READY,
+    IctSetupState.TRIGGERED,
+    IctSetupState.ENTRY_ZONE_ACTIVE,
+    IctSetupState.FVG_TOUCHED,
+)
 
 
 def make_setup_id(symbol: str, timeframe: str, sweep: LiquiditySweepEvent | None, bias: str) -> str:
@@ -46,6 +57,11 @@ def merge_state(stored: IctSetupState | None, computed: IctSetupState) -> IctSet
         return stored
     if computed in (IctSetupState.INVALIDATED, IctSetupState.EXPIRED, IctSetupState.TARGET_REACHED):
         return computed
+    # Legacy TRIGGERED ↔ ENTRY_READY equivalence
+    if stored == IctSetupState.TRIGGERED and computed == IctSetupState.ENTRY_READY:
+        return IctSetupState.ENTRY_READY
+    if stored == IctSetupState.ENTRY_READY and computed == IctSetupState.TRIGGERED:
+        return IctSetupState.ENTRY_READY
     s_rank = STATE_RANK.get(stored, 0)
     c_rank = STATE_RANK.get(computed, 0)
     return computed if c_rank >= s_rank else stored
@@ -74,6 +90,34 @@ def check_expiration(
     return False
 
 
+def _opposite_sweep_invalidates(
+    ctx: IctSetupContext,
+    setup_candles: list[Candle],
+    cfg: IctConfig,
+) -> bool:
+    """Symmetric invalidation when opposite-side liquidity is swept after entry sweep."""
+    if not ctx.sweep:
+        return False
+    sweep = ctx.sweep
+    min_pen = cfg.sweep_min_penetration_atr
+    for c in setup_candles:
+        if c.time <= sweep.sweep_time:
+            continue
+        if sweep.sweep_type == "BUY_SIDE" and ctx.trade_bias == "BEARISH":
+            pen = sweep.level - c.low
+            if pen >= min_pen and c.close > sweep.level:
+                ctx.state = IctSetupState.INVALIDATED
+                ctx.reasons.append("Invalidated by opposite SSL sweep after BSL sweep.")
+                return True
+        if sweep.sweep_type == "SELL_SIDE" and ctx.trade_bias == "BULLISH":
+            pen = c.high - sweep.level
+            if pen >= min_pen and c.close < sweep.level:
+                ctx.state = IctSetupState.INVALIDATED
+                ctx.reasons.append("Invalidated by opposite BSL sweep after SSL sweep.")
+                return True
+    return False
+
+
 def check_invalidation(
     ctx: IctSetupContext,
     price: float,
@@ -91,21 +135,15 @@ def check_invalidation(
             ctx.reasons.append(f"Bearish setup invalidated — close above {invalidation_price:.2f}.")
             ctx.invalidations.append(f"{cfg.primary_setup_timeframe} close above {invalidation_price:.2f}")
             return True
-        # Opposite SSL sweep invalidates bearish
-        if last and ctx.sweep.sweep_type == "BUY_SIDE":
-            for c in setup_candles[-3:]:
-                if c.time <= ctx.sweep.sweep_time:
-                    continue
-                if c.low < ctx.sweep.level - cfg.sweep_min_penetration_atr * 2 and c.close > ctx.sweep.level:
-                    ctx.state = IctSetupState.INVALIDATED
-                    ctx.reasons.append("Invalidated by opposite SSL sweep after BSL sweep.")
-                    return True
     elif ctx.trade_bias == "BULLISH":
         if price < invalidation_price or (last and last.close < invalidation_price):
             ctx.state = IctSetupState.INVALIDATED
             ctx.reasons.append(f"Bullish setup invalidated — close below {invalidation_price:.2f}.")
             ctx.invalidations.append(f"{cfg.primary_setup_timeframe} close below {invalidation_price:.2f}")
             return True
+
+    if _opposite_sweep_invalidates(ctx, setup_candles, cfg):
+        return True
 
     return False
 
@@ -115,10 +153,7 @@ def check_target_reached(
     price: float,
     targets: list[dict],
 ) -> bool:
-    if not targets or ctx.state not in (
-        IctSetupState.TRIGGERED,
-        IctSetupState.ENTRY_ZONE_ACTIVE,
-    ):
+    if not targets or ctx.state not in _ADVISORY_READY:
         return False
     tp1 = float(targets[0].get("price") or 0)
     if tp1 <= 0:
@@ -185,7 +220,7 @@ def build_timeline(ctx: IctSetupContext) -> list[dict[str, str]]:
     )
 
     def _status(step_rank: int, *, active_state: IctSetupState | None = None) -> str:
-        if terminal and ctx.state == IctSetupState.TARGET_REACHED and step_rank <= STATE_RANK[IctSetupState.TRIGGERED]:
+        if terminal and ctx.state == IctSetupState.TARGET_REACHED and step_rank <= STATE_RANK[IctSetupState.ENTRY_READY]:
             return "done"
         if terminal and ctx.state in (IctSetupState.INVALIDATED, IctSetupState.EXPIRED):
             if step_rank <= rank:
@@ -200,15 +235,15 @@ def build_timeline(ctx: IctSetupContext) -> list[dict[str, str]]:
         {"step": "LIQUIDITY", "status": "done" if ctx.bsl_levels or ctx.ssl_levels else "pending"},
         {"step": "SWEEP", "status": "done" if ctx.sweep and ctx.sweep.detected else "pending"},
         {"step": "DISPLACEMENT", "status": _status(STATE_RANK[IctSetupState.DISPLACEMENT_CONFIRMED])},
-        {"step": "MSS", "status": "done" if ctx.mss else "pending"},
+        {"step": "MSS", "status": "done" if ctx.mss_event or ctx.mss else "pending"},
         {"step": "FVG", "status": "done" if ctx.fvg else "pending"},
         {
             "step": "RETRACE",
             "status": _status(
-                STATE_RANK[IctSetupState.ENTRY_ZONE_ACTIVE],
+                STATE_RANK[IctSetupState.FVG_TOUCHED],
                 active_state=IctSetupState.WAITING_FOR_RETRACE,
             ),
         },
-        {"step": "ENTRY", "status": _status(STATE_RANK[IctSetupState.TRIGGERED])},
+        {"step": "ENTRY", "status": _status(STATE_RANK[IctSetupState.ENTRY_READY])},
         {"step": "TP", "status": "done" if ctx.state == IctSetupState.TARGET_REACHED else "pending"},
     ]

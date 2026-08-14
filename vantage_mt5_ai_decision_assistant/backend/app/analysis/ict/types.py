@@ -3,8 +3,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum
+from typing import TYPE_CHECKING
 
 from app.market_structure.types import Candle, FvgZone
+
+if TYPE_CHECKING:
+    from app.analysis.ict.poi import OrderBlockZone
 
 
 class IctSetupState(str, Enum):
@@ -15,13 +19,23 @@ class IctSetupState(str, Enum):
     DISPLACEMENT_CONFIRMED = "DISPLACEMENT_CONFIRMED"
     WAITING_FOR_MSS = "WAITING_FOR_MSS"
     MSS_CONFIRMED = "MSS_CONFIRMED"
+    WAITING_FOR_EXECUTION_FVG = "WAITING_FOR_EXECUTION_FVG"
+    EXECUTION_FVG_FOUND = "EXECUTION_FVG_FOUND"
     WAITING_FOR_RETRACE = "WAITING_FOR_RETRACE"
+    FVG_TOUCHED = "FVG_TOUCHED"
     ENTRY_ZONE_ACTIVE = "ENTRY_ZONE_ACTIVE"
-    TRIGGERED = "TRIGGERED"
+    ENTRY_READY = "ENTRY_READY"
+    TRIGGERED = "TRIGGERED"  # legacy alias — maps to ENTRY_READY in API
     INVALIDATED = "INVALIDATED"
     TARGET_REACHED = "TARGET_REACHED"
     EXPIRED = "EXPIRED"
     NO_SETUP = "NO_SETUP"
+
+
+class EntryTriggerMode(str, Enum):
+    TOUCH = "TOUCH"
+    CLOSED_BAR_TOUCH = "CLOSED_BAR_TOUCH"
+    CE_TOUCH = "CE_TOUCH"
 
 
 class IctDecision(str, Enum):
@@ -58,17 +72,41 @@ class IctConfig:
     sweep_max_penetration_atr: float = 0.75
     sweep_require_reentry: bool = True
     displacement_min_body_atr: float = 0.8
+    displacement_min_range_atr: float = 1.0
+    displacement_min_body_ratio: float = 0.60
     displacement_min_score: float = 50.0
+    max_displacement_bars_after_sweep: int = 4
+    max_mss_bars_after_displacement: int = 2
+    max_fvg_bars_after_mss: int = 2
+    max_bars_sweep_to_displacement: int = 6
+    max_bars_displacement_to_mss: int = 4
+    max_bars_mss_to_fvg: int = 4
+    max_bars_fvg_to_retrace: int = 40
+    entry_trigger_mode: EntryTriggerMode = EntryTriggerMode.TOUCH
+    enable_ote: bool = True
+    enable_order_blocks: bool = True
+    enable_breaker: bool = True
+    ote_low_pct: float = 0.618
+    ote_mid_pct: float = 0.705
+    ote_high_pct: float = 0.790
+    weight_ote: float = 4.0
+    weight_order_block: float = 6.0
+    weight_breaker: float = 4.0
+    ob_require_sweep_origin: bool = True
+    breaker_quality_bonus: float = 8.0
     fvg_min_gap_atr: float = 0.05
     sl_buffer_atr: float = 0.2
     chase_max_atr: float = 0.35
     max_spread_points: float = 80.0
     session_timezone: str = "UTC"
+    trading_day_timezone: str = "America/New_York"
+    trading_day_reset_hour: int = 17
     weight_htf_alignment: float = 20.0
     weight_liquidity_sweep: float = 20.0
-    weight_displacement: float = 15.0
-    weight_mss: float = 15.0
-    weight_fvg: float = 10.0
+    weight_impulse_quality: float = 40.0  # grouped displacement+MSS+FVG (avoid double count)
+    weight_displacement: float = 0.0  # deprecated — use impulse group
+    weight_mss: float = 0.0
+    weight_fvg: float = 0.0
     weight_premium_discount: float = 10.0
     weight_session: float = 5.0
     weight_risk_reward: float = 5.0
@@ -99,6 +137,63 @@ class LiquiditySweepEvent:
     penetration: float
     closed_back_inside: bool
     quality_score: float = 0.0
+    event_id: str = ""
+    setup_id: str = ""
+    liquidity_level_id: str = ""
+    liquidity_type: str = ""
+    penetration_atr: float = 0.0
+    reclaim_confirmed: bool = False
+
+
+@dataclass
+class MssTarget:
+    swing_id: str
+    swing_type: str
+    price: float
+    time: int
+
+
+@dataclass
+class DisplacementEvent:
+    event_id: str
+    setup_id: str
+    direction: str
+    start_time: int
+    end_time: int
+    primary_candle_time: int
+    open_price: float
+    close_price: float
+    high: float
+    low: float
+    body_size: float
+    range_size: float
+    atr: float
+    body_atr_ratio: float
+    range_atr_ratio: float
+    body_to_range_ratio: float
+    close_location: float
+    distance_travelled: float
+    distance_atr: float
+    bars_count: int
+    structure_break: bool
+    fvg_created: bool
+    quality_score: float
+
+
+@dataclass
+class StructureBreakEvent:
+    event_id: str
+    setup_id: str
+    type: str
+    direction: str
+    broken_swing_id: str
+    broken_level: float
+    broken_swing_time: int
+    confirmation_time: int
+    confirmation_price: float
+    confirmation_type: str
+    source_displacement_event_id: str
+    quality_score: float
 
 
 @dataclass
@@ -118,11 +213,36 @@ class IctSetupContext:
     bsl_levels: list[LiquidityLevel] = field(default_factory=list)
     ssl_levels: list[LiquidityLevel] = field(default_factory=list)
     sweep: LiquiditySweepEvent | None = None
+    mss_target: MssTarget | None = None
+    displacement_event: DisplacementEvent | None = None
+    mss_event: StructureBreakEvent | None = None
     displacement_score: float = 0.0
     displacement_time: int = 0
     mss: dict | None = None
     fvg: FvgZone | None = None
+    execution_fvg_id: str = ""
+    fvg_touch_time: int = 0
+    entry_ready_time: int = 0
+    entry_event_id: str = ""
+    entry_ready_emitted: bool = False
     entry: EntryZone | None = None
+    ote_valid: bool = False
+    ote_low: float = 0.0
+    ote_mid: float = 0.0
+    ote_high: float = 0.0
+    price_in_ote: bool = False
+    poi_overlaps_ote: bool = False
+    fvg_overlaps_ote: bool = False
+    fvg_overlaps_ob: bool = False
+    order_block: OrderBlockZone | None = None
+    causality_valid: bool = True
+    causality_errors: list[str] = field(default_factory=list)
+    state_reason: str = ""
+    pdh: float = 0.0
+    pdl: float = 0.0
+    pdh_pdl_source: str = ""
+    equilibrium: float = 0.0
+    range_position: str = "NEUTRAL"
     dealing_high: float = 0.0
     dealing_low: float = 0.0
     premium_discount_zone: str = "NEUTRAL"

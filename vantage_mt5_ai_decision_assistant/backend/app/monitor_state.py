@@ -155,6 +155,7 @@ class EaSnapshot:
     box_theory_supported: bool = False
     ict: dict | None = None
     ict_supported: bool = False
+    ict_python_engine: bool = False
     h4_m15_fvg: dict | None = None
     h4_m15_fvg_supported: bool = False
     max_position_risk_pct: float | None = None
@@ -417,28 +418,47 @@ class MonitorStore:
         now = _utc_now()
         raw_sym = _norm_symbol(str(payload.get("symbol", "")))
         sym = _canonical_monitor_symbol(raw_sym)
+        hp = {**payload, "symbol": sym, "broker_symbol": raw_sym}
         h4_err: str | None = None
+        ict_err: str | None = None
+        h4_blob: dict[str, Any] | None = None
+        ict_blob: dict[str, Any] | None = None
+
+        # Run Python engines outside the store lock — analyze may call monitor_store.add_log.
+        if isinstance(payload.get("h4_m15_fvg_candles"), dict):
+            try:
+                from app.analysis.h4_m15_fvg.heartbeat import process_h4_m15_fvg_heartbeat
+
+                result = process_h4_m15_fvg_heartbeat(hp)
+                if isinstance(result, dict):
+                    h4_blob = result
+            except Exception as exc:
+                h4_err = str(exc)
+
+        if isinstance(payload.get("ict_candles"), dict):
+            try:
+                from app.analysis.ict.heartbeat import process_ict_heartbeat
+
+                result = process_ict_heartbeat(hp)
+                if isinstance(result, dict):
+                    ict_blob = result
+            except Exception as exc:
+                ict_err = str(exc)
+
         with self._lock:
             self._heartbeat_count += 1
             ea = self._get_or_create(sym)
             ea.last_seen_utc = now
             ea.symbol = sym
-            _apply_heartbeat_fields(
-                ea, {**payload, "symbol": sym, "broker_symbol": raw_sym}
-            )
+            _apply_heartbeat_fields(ea, hp)
 
-            if isinstance(payload.get("h4_m15_fvg_candles"), dict):
-                try:
-                    from app.analysis.h4_m15_fvg.heartbeat import process_h4_m15_fvg_heartbeat
-
-                    blob = process_h4_m15_fvg_heartbeat(
-                        {**payload, "symbol": sym, "broker_symbol": raw_sym}
-                    )
-                    if isinstance(blob, dict):
-                        ea.h4_m15_fvg = blob
-                        ea.h4_m15_fvg_supported = True
-                except Exception as exc:
-                    h4_err = str(exc)
+            if h4_blob is not None:
+                ea.h4_m15_fvg = h4_blob
+                ea.h4_m15_fvg_supported = True
+            if ict_blob is not None:
+                ea.ict = ict_blob
+                ea.ict_supported = True
+                ea.ict_python_engine = True
 
             if isinstance(payload.get("pl_calendar"), dict):
                 cal = payload["pl_calendar"]
@@ -462,6 +482,8 @@ class MonitorStore:
 
         if h4_err:
             self.add_log("WARN", "h4_m15_fvg", f"Heartbeat analyze failed: {h4_err}", symbol=sym)
+        if ict_err:
+            self.add_log("WARN", "ict", f"Heartbeat analyze failed: {ict_err}", symbol=sym)
 
         self.add_log(
             "WARN"
@@ -660,6 +682,7 @@ class MonitorStore:
             "box_theory_supported": ea.box_theory_supported,
             "ict": ea.ict,
             "ict_supported": ea.ict_supported,
+            "ict_python_engine": ea.ict_python_engine,
             "h4_m15_fvg": ea.h4_m15_fvg,
             "h4_m15_fvg_supported": ea.h4_m15_fvg_supported,
             "server_year": ea.server_year,

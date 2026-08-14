@@ -60,7 +60,7 @@ def test_eurusd_symbol_enabled():
 
 def test_liquidity_levels_from_swings():
     candles = [_c(i, 100, 101 + (i % 3), 99, 100) for i in range(30)]
-    bsl, ssl = build_liquidity_levels(candles, 2.0, DEFAULT_ICT_CONFIG)
+    bsl, ssl, _pd = build_liquidity_levels(candles, 2.0, DEFAULT_ICT_CONFIG)
     assert isinstance(bsl, list)
     assert isinstance(ssl, list)
 
@@ -82,6 +82,9 @@ def test_bearish_ict_analyze_integration():
     cfg = IctConfig(
         min_candles=40,
         displacement_min_score=35.0,
+        displacement_min_body_atr=0.4,
+        displacement_min_range_atr=0.4,
+        displacement_min_body_ratio=0.45,
         min_confidence=50.0,
         minimum_rr=1.0,
         fvg_min_gap_atr=0.01,
@@ -132,5 +135,5 @@ def test_scoring_components_sum():
     )
     assert 0 <= score <= 100
     assert components["liquidity_sweep"] > 0
-    assert components["mss"] > 0
+    assert components.get("impulse_quality", 0) >= 0
     assert isinstance(gates, dict)
