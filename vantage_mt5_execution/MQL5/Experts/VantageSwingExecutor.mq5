@@ -8,7 +8,7 @@
 //| RISK: Real money when live — not financial advice.               |
 //+------------------------------------------------------------------+
 #property copyright "Vantage Swing Executor"
-#property version   "1.10"
+#property version   "1.11"
 #property description "Auto-execution for Swing Strategy STRONG signals (demo default; live opt-in)"
 #property strict
 
@@ -36,6 +36,8 @@ input group "C. Risk"
 input double InpRiskPct        = 0.50;
 input double InpMaxLot         = 1.0;
 input int    InpMaxSpreadPoints = 450;
+input int    InpMaxTradesPerDay = 4;      // Entries per broker day for this magic (0 = off)
+input double InpMaxDailyLossPct = 2.0;    // Stop for the day at this realized+floating loss % (0 = off)
 
 //--- D. Signal / Mode
 input group "D. Signal / Mode"
@@ -53,6 +55,7 @@ CVantageExecutionTrade  g_trade;
 string g_csv_name = "";
 string g_account_mode = "DEMO";
 int    g_poll_timer = 0;
+string g_daily_block = "";
 
 #define VANTAGE_LIVE_CONFIRM_PHRASE "I_ACCEPT_LIVE_RISK"
 
@@ -158,6 +161,15 @@ void ProcessPoll(void)
       LogDbg("Skip poll — max open positions reached.");
       return;
      }
+   string daily = ExecDailyLimitReason(_Symbol, magic, InpMaxTradesPerDay, InpMaxDailyLossPct);
+   if(daily != "")
+     {
+      if(daily != g_daily_block)
+         Print("[VantageExec] Paused for today — ", daily);
+      g_daily_block = daily;
+      return;
+     }
+   g_daily_block = "";
    if(!ExecSpreadOk(_Symbol, max_spread))
      {
       LogDbg("Skip poll — spread too high.");
@@ -244,7 +256,9 @@ int OnInit(void)
          " | Mode=", ExecModeToApi(InpTradingMode),
          " | Symbol=", _Symbol,
          " | Magic=", ExecMagicForMode(InpTradingMode, InpMagicNumber),
-         " | Poll=", sec, "s");
+         " | Poll=", sec, "s",
+         " | MaxTrades/day=", InpMaxTradesPerDay,
+         " | MaxDailyLoss=", DoubleToString(InpMaxDailyLossPct, 2), "%");
    Print("[VantageExec] Allow WebRequest for: ", InpBackendUrl);
    return INIT_SUCCEEDED;
   }

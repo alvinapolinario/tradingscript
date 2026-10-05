@@ -10,7 +10,6 @@ import sqlite3
 import threading
 import uuid
 from datetime import datetime, timezone
-from pathlib import Path
 from typing import Any, Optional
 
 from app.strategy_desk import (
@@ -21,8 +20,9 @@ from app.strategy_desk import (
     build_dashboard,
     evaluate_gates,
 )
+from app.paths import data_dir
 
-_DATA_DIR = Path(__file__).resolve().parent.parent / "data"
+_DATA_DIR = data_dir()
 _DB_PATH = _DATA_DIR / "signal_ledger.db"
 _lock = threading.Lock()
 

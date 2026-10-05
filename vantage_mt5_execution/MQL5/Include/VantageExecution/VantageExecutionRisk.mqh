@@ -16,7 +16,7 @@ double ExecNormalizeVolume(const string symbol, double volume)
       volume = vmin;
    if(volume > vmax)
       volume = vmax;
-   volume = MathFloor(volume / vstep) * vstep;
+   volume = MathFloor(volume / vstep + 1e-9) * vstep;
    if(volume < vmin)
       volume = vmin;
    return volume;
@@ -61,8 +61,76 @@ double ExecCalcRiskVolume(
    double lot = risk_money / MathAbs(loss_one_lot);
    if(max_lot > 0.0 && lot > max_lot)
       lot = max_lot;
+   // Rounding up to the broker minimum would risk more than risk_pct — refuse instead.
+   if(lot < SymbolInfoDouble(symbol, SYMBOL_VOLUME_MIN))
+     {
+      err = "Min lot exceeds risk budget";
+      return 0.0;
+     }
    lot = ExecNormalizeVolume(symbol, lot);
    return lot;
+  }
+
+// Today's (broker server day) entries and realized P/L for this executor's magic.
+void ExecTodayStats(const string symbol, const long magic, int &entries, double &realized)
+  {
+   entries = 0;
+   realized = 0.0;
+   datetime now = TimeCurrent();
+   datetime day_start = now - (now % 86400);
+   if(!HistorySelect(day_start, now + 60))
+      return;
+   for(int i = HistoryDealsTotal() - 1; i >= 0; i--)
+     {
+      ulong ticket = HistoryDealGetTicket(i);
+      if(ticket == 0)
+         continue;
+      if(HistoryDealGetString(ticket, DEAL_SYMBOL) != symbol)
+         continue;
+      if(HistoryDealGetInteger(ticket, DEAL_MAGIC) != magic)
+         continue;
+      if(HistoryDealGetInteger(ticket, DEAL_ENTRY) == DEAL_ENTRY_IN)
+         entries++;
+      realized += HistoryDealGetDouble(ticket, DEAL_PROFIT)
+                + HistoryDealGetDouble(ticket, DEAL_SWAP)
+                + HistoryDealGetDouble(ticket, DEAL_COMMISSION)
+                + HistoryDealGetDouble(ticket, DEAL_FEE);
+     }
+  }
+
+double ExecFloatingPnl(const string symbol, const long magic)
+  {
+   double pnl = 0.0;
+   for(int i = PositionsTotal() - 1; i >= 0; i--)
+     {
+      ulong ticket = PositionGetTicket(i);
+      if(ticket == 0 || !PositionSelectByTicket(ticket))
+         continue;
+      if(PositionGetString(POSITION_SYMBOL) != symbol)
+         continue;
+      if((long)PositionGetInteger(POSITION_MAGIC) != magic)
+         continue;
+      pnl += PositionGetDouble(POSITION_PROFIT) + PositionGetDouble(POSITION_SWAP);
+     }
+   return pnl;
+  }
+
+// "" when trading may continue today, otherwise the reason it may not.
+string ExecDailyLimitReason(const string symbol, const long magic, const int max_trades, const double max_loss_pct)
+  {
+   int entries = 0;
+   double realized = 0.0;
+   ExecTodayStats(symbol, magic, entries, realized);
+   if(max_trades > 0 && entries >= max_trades)
+      return StringFormat("daily trade limit reached (%d/%d)", entries, max_trades);
+   if(max_loss_pct > 0.0)
+     {
+      double day_pnl = realized + ExecFloatingPnl(symbol, magic);
+      double start_balance = AccountInfoDouble(ACCOUNT_BALANCE) - realized;
+      if(start_balance > 0.0 && day_pnl < 0.0 && -day_pnl >= start_balance * max_loss_pct / 100.0)
+         return StringFormat("daily loss limit reached (%.2f%% of %.2f)", -day_pnl / start_balance * 100.0, start_balance);
+     }
+   return "";
   }
 
 int ExecCountOpenPositions(const string symbol, const long magic)

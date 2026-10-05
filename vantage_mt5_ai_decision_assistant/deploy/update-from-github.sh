@@ -61,7 +61,9 @@ fi
 echo "==> Healthy. Smoke checks:"
 curl -fsS "http://127.0.0.1:8000/health" || true
 echo
-echo "  Analyzer:  http://187.77.142.118:8000/analyzer"
-echo "  Signals:   http://187.77.142.118:8000/signals"
-echo "  Monitor:   http://187.77.142.118:8000/monitor"
+PUBLIC_BASE_URL="$(grep -E '^PUBLIC_BASE_URL=' .env | tail -n1 | cut -d= -f2- | tr -d '"' || true)"
+PUBLIC_BASE_URL="${PUBLIC_BASE_URL:-http://127.0.0.1:8000}"
+echo "  Analyzer:  ${PUBLIC_BASE_URL}/analyzer"
+echo "  Signals:   ${PUBLIC_BASE_URL}/signals"
+echo "  Monitor:   ${PUBLIC_BASE_URL}/monitor"
 echo "==> Done."

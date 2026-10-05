@@ -12,7 +12,9 @@ class Settings(BaseSettings):
     host: str = "127.0.0.1"
     port: int = 8000
     # Public URL used in health/heartbeat links + CORS (no trailing slash)
-    public_base_url: str = "http://187.77.142.118:8000"
+    public_base_url: str = "http://127.0.0.1:8000"
+    # Extra browser origins allowed by CORS, comma-separated (public_base_url is always allowed)
+    cors_extra_origins: str = ""
     local_api_token: str = "local-dev-token-change-me"
     max_response_age_seconds: int = 120
     openai_api_key: str | None = None
@@ -47,6 +49,14 @@ class Settings(BaseSettings):
 
     # Demo executor — set true only when intentionally enabling live account fills
     execution_allow_live: bool = False
+    # Order sanity checks before an executor order is reserved
+    execution_min_rr: float = 1.0          # reward:risk to the selected TP
+    execution_max_sl_atr: float = 3.0      # stop distance cap, in H4 ATRs (0 = off)
+    execution_max_entry_drift_atr: float = 0.5  # live price beyond the entry zone, in H4 ATRs (0 = off)
+
+    # Backtest evidence (python -m app.research.cli → strategy_scorecard.json)
+    strategy_scorecard_path: str = ""      # default: <data dir>/strategy_scorecard.json
+    evidence_gate_enabled: bool = False    # true = suppress actionable alerts without proven edge
 
     # Alert category toggles (Telegram + Discord when each is enabled)
     telegram_alert_risk: bool = True

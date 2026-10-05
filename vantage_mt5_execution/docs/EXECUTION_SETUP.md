@@ -71,8 +71,12 @@ If backend live is disabled, executor polls return `live_blocked` and **no order
 | `InpAllowLiveExecution` | **false** | Set true only on live |
 | `InpLiveConfirmPhrase` | empty | Required on live |
 | `InpMagicNumber` | 880001 | Tags executor positions |
-| `InpRiskPct` | 0.50 | Equity risk per trade |
+| `InpRiskPct` | 0.50 | Equity risk per trade — a trade is skipped (not rounded up) when the broker minimum lot would exceed it |
+| `InpMaxTradesPerDay` | 4 | Entries per broker day for this magic (0 = off) |
+| `InpMaxDailyLossPct` | 2.0 | Pause until the next broker day once realized + floating loss reaches this % of the day's starting balance (0 = off) |
 | `InpMinConfidence` | 85 | Swing; use 72 for scalping |
+
+The backend also rejects orders whose stop/target are on the wrong side of the live price, whose reward:risk is below `EXECUTION_MIN_RR`, whose stop is wider than `EXECUTION_MAX_SL_ATR` H4 ATRs, or when price has run more than `EXECUTION_MAX_ENTRY_DRIFT_ATR` H4 ATRs past the entry zone. The `reason` field of `GET /api/v1/execution/next` names the check.
 
 ## Signal rules
 

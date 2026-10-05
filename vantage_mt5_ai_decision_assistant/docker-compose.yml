@@ -1,13 +1,13 @@
 # Deploy FastAPI backend on Linux VPS (port 8000 is free on your host).
 # MT5 EA cannot run inside this container — attach EA on Windows MT5 and
-# Public URL: http://187.77.142.118:8000
+# Public URL: set PUBLIC_BASE_URL in .env
 # EA InpBackendUrl must match that URL (or nginx HTTPS).
 #
 # Usage:
 #   cp .env.docker.example .env   # edit secrets + PUBLIC_BASE_URL
 #   docker compose up -d --build
 #   curl http://127.0.0.1:8000/health
-#   curl http://187.77.142.118:8000/health
+#   curl "$PUBLIC_BASE_URL/health"
 
 services:
   vantage-api:

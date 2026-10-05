@@ -26,9 +26,9 @@ SAMPLE_SWING = {
     "signal": "STRONG SWING BUY",
     "entry_quality": "Excellent",
     "stop_loss": 4016.80,
-    "tp1": 4050.0,
-    "tp2": 4068.0,
-    "tp3": 4090.0,
+    "tp1": 4068.0,
+    "tp2": 4090.0,
+    "tp3": 4110.0,
     "eval_bar_m5": int(time.time()) - 60,
 }
 
@@ -39,7 +39,7 @@ SAMPLE_SCALP = {
     "confidence": 78.0,
     "entry_quality": "Average",
     "stop_loss": 4035.0,
-    "tp1": 4042.0,
+    "tp1": 4047.0,
 }
 
 WEAK_SWING = {
@@ -96,7 +96,7 @@ def test_execution_next_strong_signal(tmp_exec_db):
     order = body["order"]
     assert order["side"] == "BUY"
     assert order["stop_loss"] == 4016.80
-    assert order["take_profit"] == 4050.0
+    assert order["take_profit"] == 4068.0
     assert order["signal_id"]
 
 
@@ -201,3 +201,26 @@ def test_execution_live_blocked_without_server_flag(tmp_exec_db, monkeypatch: py
     assert body["has_signal"] is False
     assert body.get("live_blocked") is True
     assert body.get("reason") == "backend_live_disabled"
+
+
+@pytest.mark.parametrize(
+    "overrides, reason",
+    [
+        ({"tp1": 4045.0}, "reward_risk_below_min"),  # 4.8 reward vs 23.4 risk
+        ({"stop_loss": 4041.0}, "levels_wrong_side_of_price"),  # stop above the ask for a BUY
+        ({"tp1": 4039.0}, "levels_wrong_side_of_price"),  # price already through the target
+        ({"atr_h4": 5.0}, "stop_too_wide"),  # 23.4 stop > 3 × 5.0 ATR
+        ({"atr_h4": 20.0, "entry_zone": [4020.0, 4025.0]}, "price_left_entry_zone"),  # ask 15.2 above zone
+    ],
+)
+def test_execution_order_sanity_rejections(tmp_exec_db, overrides, reason):
+    _monitor_with_swing({**SAMPLE_SWING, **overrides})
+    body = client.get("/api/v1/execution/next?symbol=XAUUSD&mode=SWING", headers=_auth_headers()).json()
+    assert body["has_signal"] is False
+    assert body["reason"] == reason
+
+
+def test_execution_order_sanity_accepts_price_inside_zone(tmp_exec_db):
+    _monitor_with_swing({**SAMPLE_SWING, "atr_h4": 20.0, "entry_zone": [4036.0, 4041.0]})
+    body = client.get("/api/v1/execution/next?symbol=XAUUSD&mode=SWING", headers=_auth_headers()).json()
+    assert body["has_signal"] is True

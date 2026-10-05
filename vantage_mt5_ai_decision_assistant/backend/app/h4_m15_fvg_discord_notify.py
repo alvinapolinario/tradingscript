@@ -9,6 +9,7 @@ from typing import Any
 import httpx
 
 from app.config import Settings, get_settings
+from app.evidence import evidence_field, gate as evidence_gate
 
 _log = logging.getLogger(__name__)
 _lock = threading.Lock()
@@ -201,6 +202,11 @@ def maybe_h4_m15_fvg_alert(payload: dict[str, Any]) -> None:
 
         signal_id = f"{setup_id}|{state}"
         title, desc, fields, color = _fmt_setup_alert(setup, blob)
+        if state == "ENTRY_READY":
+            send, ev = evidence_gate("h4_m15_fvg", score)
+            if not send:
+                continue
+            fields.append(evidence_field(ev))
         _dedupe_send(signal_id, title=title, description=desc, fields=fields, color=color)
 
 

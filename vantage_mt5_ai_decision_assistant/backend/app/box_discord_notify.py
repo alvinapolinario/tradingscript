@@ -10,6 +10,7 @@ import httpx
 
 from app.analysis.box_theory.types import DEFAULT_DISCORD_EVENTS
 from app.config import Settings, get_settings
+from app.evidence import evidence_field, gate as evidence_gate
 
 _log = logging.getLogger(__name__)
 _lock = threading.Lock()
@@ -186,4 +187,10 @@ def maybe_box_theory_alert(payload: dict[str, Any]) -> None:
 
     box = blob.get("box") if isinstance(blob.get("box"), dict) else {}
     title, desc, fields, color = _fmt_box_alert(box, blob)
+    if str(blob.get("signal") or "").upper() in ("BUY", "SELL"):
+        conf = float(blob.get("confidence_score") or blob.get("confidence") or 0)
+        send, ev = evidence_gate("box_theory", conf)
+        if not send:
+            return
+        fields.append(evidence_field(ev))
     _dedupe_send(signal_id, title=title, description=desc, fields=fields, color=color)

@@ -270,7 +270,7 @@ class HealthResponse(BaseModel):
     service: str
     advisory_only: bool = True
     version: str = "1.2.0"
-    monitor_url: str = "http://187.77.142.118:8000/monitor"
+    monitor_url: str = "http://127.0.0.1:8000/monitor"
     telegram: Optional[dict[str, Any]] = None
     discord: Optional[dict[str, Any]] = None
 
@@ -369,7 +369,7 @@ class HeartbeatRequest(BaseModel):
 class HeartbeatResponse(BaseModel):
     status: str = "ok"
     received_utc: str
-    monitor_url: str = "http://187.77.142.118:8000/monitor"
+    monitor_url: str = "http://127.0.0.1:8000/monitor"
     calendar_year: int = 0
     calendar_month: int = 0
 

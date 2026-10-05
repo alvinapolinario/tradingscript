@@ -49,7 +49,7 @@ def health(settings: Settings = Depends(get_settings)) -> HealthResponse:
     from app.discord_notify import discord_status
     from app.telegram_notify import telegram_status
 
-    base = (settings.public_base_url or "http://187.77.142.118:8000").rstrip("/")
+    base = (settings.public_base_url or "http://127.0.0.1:8000").rstrip("/")
     return HealthResponse(
         status="ok",
         service=settings.app_name,
@@ -103,7 +103,7 @@ def heartbeat(
         cm = int(req.pl_calendar["month"])
         monitor_store.set_calendar_month(cy, cm)
     settings = get_settings()
-    base = (settings.public_base_url or "http://187.77.142.118:8000").rstrip("/")
+    base = (settings.public_base_url or "http://127.0.0.1:8000").rstrip("/")
     return HeartbeatResponse(
         status="ok",
         received_utc=datetime.now(timezone.utc).isoformat(),
@@ -1571,6 +1571,14 @@ def execution_history(
         "items": items,
         "summary": summary,
     }
+
+
+@router.get("/api/v1/evidence/scorecard")
+def evidence_scorecard() -> dict:
+    """Backtest scorecard summary (python -m app.research.cli) + gate status."""
+    from app.evidence import scorecard_summary
+
+    return scorecard_summary()
 
 
 @router.get("/api/v1/monitor/logs")

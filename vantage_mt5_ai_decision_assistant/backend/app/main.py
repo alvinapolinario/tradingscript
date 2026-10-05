@@ -7,6 +7,7 @@ Cloud AI provider keys (if any) stay on this host — never inside the EA.
 from __future__ import annotations
 
 import asyncio
+import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -22,6 +23,16 @@ from app.ws_hub import monitor_hub, push_monitor_update
 
 settings = get_settings()
 STATIC_DIR = Path(__file__).resolve().parent / "static"
+
+
+class _HealthCheckLogFilter(logging.Filter):
+    """Drop Docker HEALTHCHECK hits (every 30 s) from the access log so real requests stay visible."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        return '"GET /health ' not in record.getMessage()
+
+
+logging.getLogger("uvicorn.access").addFilter(_HealthCheckLogFilter())
 
 
 async def _status_ticker() -> None:
@@ -59,12 +70,11 @@ _cors_origins = [
     "http://localhost",
     "http://127.0.0.1:8000",
     "http://localhost:8000",
-    "http://187.77.142.118:8000",
-    "http://187.77.142.118",
 ]
-_pub = (settings.public_base_url or "").rstrip("/")
-if _pub and _pub not in _cors_origins:
-    _cors_origins.append(_pub)
+for _origin in [settings.public_base_url, *settings.cors_extra_origins.split(",")]:
+    _origin = (_origin or "").strip().rstrip("/")
+    if _origin and _origin not in _cors_origins:
+        _cors_origins.append(_origin)
 
 app.add_middleware(
     CORSMiddleware,

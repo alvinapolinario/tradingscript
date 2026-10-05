@@ -4,14 +4,14 @@ from __future__ import annotations
 import json
 import sqlite3
 import threading
-from pathlib import Path
 from typing import Any
 
 from app.analysis.h4_m15_fvg.explain import setup_to_json
 from app.analysis.h4_m15_fvg.types import H4M15Setup
+from app.paths import data_dir
 
 _lock = threading.Lock()
-_DB_PATH = Path(__file__).resolve().parents[3] / "data" / "h4_m15_fvg.db"
+_DB_PATH = data_dir() / "h4_m15_fvg.db"
 _initialized = False
 _last_setup_states: dict[str, str] = {}
 

@@ -49,3 +49,6 @@ docker-compose.override.yml
 *.bak
 *.tmp
 agent-transcripts/
+
+# Strategy research outputs / scratch
+research_out/

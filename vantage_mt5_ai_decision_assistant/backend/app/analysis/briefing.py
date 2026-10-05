@@ -131,7 +131,7 @@ def build_decision_brief(ea: dict[str, Any], stats: dict[str, Any] | None = None
     else:
         situation.append(
             "Attach EA to the chart for the selected pair (e.g. XAUUSD or BTCUSD M30), "
-            "allow WebRequest for http://187.77.142.118:8000, enable Algo Trading."
+            "allow WebRequest for your backend URL (PUBLIC_BASE_URL), enable Algo Trading."
         )
 
     # --- Actionable recommendations ---

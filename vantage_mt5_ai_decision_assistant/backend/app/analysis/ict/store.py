@@ -5,11 +5,12 @@ import json
 import sqlite3
 import threading
 import time
-from pathlib import Path
 from typing import Any
 
+from app.paths import data_dir
+
 _lock = threading.Lock()
-_DB_PATH = Path(__file__).resolve().parents[3] / "data" / "ict_setups.db"
+_DB_PATH = data_dir() / "ict_setups.db"
 _initialized = False
 _entry_emitted: set[str] = set()
 
@@ -162,7 +163,7 @@ def list_persisted_setups(symbol: str, limit: int = 10) -> list[dict[str, Any]]:
 
 def clear_store() -> None:
     """Test helper."""
-    global _initialized, _entry_emitted
+    global _initialized
     with _lock:
         if _DB_PATH.exists():
             _DB_PATH.unlink()

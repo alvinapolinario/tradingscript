@@ -7,12 +7,12 @@ import threading
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from pathlib import Path
 from typing import Any, Sequence
 
 from app.market_news.types import CentralBankContext, EconomicEvent, NormalizedNewsItem, NewsAnalysisRecord, economic_event_from_dict, news_item_from_dict
+from app.paths import data_dir
 
-_DATA_DIR = Path(__file__).resolve().parent.parent / "data"
+_DATA_DIR = data_dir()
 _DB_PATH = _DATA_DIR / "market_news.db"
 _lock = threading.Lock()
 

@@ -9,6 +9,7 @@ from typing import Any
 import httpx
 
 from app.config import Settings, get_settings
+from app.evidence import evidence_field, gate as evidence_gate
 
 _log = logging.getLogger(__name__)
 _lock = threading.Lock()
@@ -250,6 +251,12 @@ def maybe_ict_alert(payload: dict[str, Any]) -> None:
         sym = str(blob.get("symbol") or "XAUUSD").upper()
         signal_id = f"{sym}|{state}|{blob.get('eval_bar_time') or blob.get('timestamp') or ''}"
     title, desc, fields, color = _fmt_ict_alert(blob)
+    decision = str(blob.get("decision") or "").upper()
+    if decision in ("BUY", "SELL") and state in ("ENTRY_READY", "TRIGGERED", "ENTRY_ZONE_ACTIVE"):
+        send, ev = evidence_gate("ict", conf)
+        if not send:
+            return
+        fields.append(evidence_field(ev))
     _dedupe_send(signal_id, title=title, description=desc, fields=fields, color=color)
 
 

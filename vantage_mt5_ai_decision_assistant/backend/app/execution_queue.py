@@ -14,8 +14,9 @@ from datetime import datetime, timezone
 from typing import Any, Optional
 
 from app.strategy_desk import _ea_blob, _ea_is_connected
+from app.paths import data_dir
 
-_DATA_DIR = __import__("pathlib").Path(__file__).resolve().parent.parent / "data"
+_DATA_DIR = data_dir()
 _DB_PATH = _DATA_DIR / "execution_ledger.db"
 _lock = threading.Lock()
 
@@ -244,6 +245,56 @@ def _select_tp(swing: dict[str, Any], tp_level: str = "TP1") -> float:
     return _safe_float(swing.get("tp1"))
 
 
+def order_sanity_check(
+    side: str,
+    swing: dict[str, Any],
+    ea: dict[str, Any],
+    stop_loss: float,
+    take_profit: float,
+) -> Optional[str]:
+    """
+    Reject orders whose levels do not make sense at the live price.
+
+    The swing blob arrives in the EA heartbeat; this is the last check before an
+    order is handed to the executor, so it must not trust the blob's geometry.
+    Returns a reason code, or None when the order is acceptable.
+    """
+    from app.config import get_settings
+
+    st = get_settings()
+    is_buy = side == "BUY"
+    zone = swing.get("entry_zone")
+    zone_lo = zone_hi = 0.0
+    if isinstance(zone, list) and len(zone) >= 2:
+        zone_lo, zone_hi = sorted((_safe_float(zone[0]), _safe_float(zone[1])))
+    # Executor fills at market: BUY at ask, SELL at bid. Fall back to the zone midpoint.
+    entry = _safe_float(ea.get("ask") if is_buy else ea.get("bid"))
+    if entry <= 0 and zone_hi > 0:
+        entry = (zone_lo + zone_hi) / 2.0
+    if entry <= 0:
+        return "no_live_price"
+
+    if is_buy and not stop_loss < entry < take_profit:
+        return "levels_wrong_side_of_price"
+    if not is_buy and not take_profit < entry < stop_loss:
+        return "levels_wrong_side_of_price"
+
+    risk = abs(entry - stop_loss)
+    reward = abs(take_profit - entry)
+    if st.execution_min_rr > 0 and reward < st.execution_min_rr * risk:
+        return "reward_risk_below_min"
+
+    atr_h4 = _safe_float(swing.get("atr_h4"))
+    if atr_h4 > 0:
+        if st.execution_max_sl_atr > 0 and risk > st.execution_max_sl_atr * atr_h4:
+            return "stop_too_wide"
+        if st.execution_max_entry_drift_atr > 0 and zone_hi > 0:
+            drift = (entry - zone_hi) if is_buy else (zone_lo - entry)
+            if drift > st.execution_max_entry_drift_atr * atr_h4:
+                return "price_left_entry_zone"
+    return None
+
+
 def reserve_next(
     monitor_status: dict[str, Any],
     symbol: str,
@@ -325,6 +376,11 @@ def reserve_next(
     take_profit = _select_tp(swing, tp_level)
     if stop_loss <= 0 or take_profit <= 0:
         base["reason"] = "invalid_levels"
+        return base
+
+    sanity = order_sanity_check(side, swing, ea, stop_loss, take_profit)
+    if sanity:
+        base["reason"] = sanity
         return base
 
     fp = _fingerprint(ea_sym, signal_label, eval_bar, stop_loss, trade_mode)

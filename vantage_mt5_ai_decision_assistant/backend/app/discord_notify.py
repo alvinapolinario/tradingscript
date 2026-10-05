@@ -8,6 +8,7 @@ from typing import Any
 import httpx
 
 from app.config import Settings, get_settings
+from app.evidence import evidence_text, gate as evidence_gate
 
 _lock = threading.Lock()
 _last_state: dict[str, str] = {}
@@ -256,6 +257,11 @@ def _maybe_amd_ifvg_alert(payload: dict[str, Any], sym: str, st: Settings) -> No
     )
     if not (trade_signal or entry_zone):
         return
+    evidence = None
+    if trade_signal:
+        send, evidence = evidence_gate("amd_ifvg", conf)
+        if not send:
+            return
 
     eval_bar = str(amd.get("eval_bar_m5") or amd.get("timestamp") or "")
     key = f"{sym}|amd|{decision}|{setup_state}|{int(conf)}|{eval_bar}"
@@ -290,6 +296,8 @@ def _maybe_amd_ifvg_alert(payload: dict[str, Any], sym: str, st: Settings) -> No
     narrative = amd.get("technical_narrative") or ""
     if narrative:
         msg += f"\n{narrative[:240]}"
+    if evidence:
+        msg += f"\nBacktest: {evidence_text(evidence).splitlines()[0]}"
     msg += f"\n[AMD + iFVG desk]({base}/amd-ifvg)"
 
     color = 3066993 if decision == "BUY" else (15158332 if decision == "SELL" else 3447003)
