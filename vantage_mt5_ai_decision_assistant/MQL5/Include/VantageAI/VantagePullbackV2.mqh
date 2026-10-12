@@ -1514,8 +1514,12 @@ private:
                           const PbV2PoiSnap &poi, const bool gsm_active, const VantageGoldSMCResult &gsm)
      {
       PbV2OteSnap ote;
+      // Gold SMC measures OTE on its own dealing range; only accept it when it overlaps
+      // this desk's dealing range, otherwise the zone describes a different swing.
+      bool gsm_ote_in_range = (!dr.valid || dr.range_high <= dr.range_low ||
+                               PbV2Overlap(dr.range_low, dr.range_high, gsm.ote_low, gsm.ote_high));
       if(m_cfg.prefer_gold_smc_ote && gsm_active && gsm.valid && gsm.analysis_active &&
-         gsm.gold_symbol_valid && gsm.ote_enabled_hit && gsm.ote_high > gsm.ote_low)
+         gsm.gold_symbol_valid && gsm.ote_enabled_hit && gsm.ote_high > gsm.ote_low && gsm_ote_in_range)
          ote = MapGoldSmcOte(poi, gsm);
       else
          ote = CalcOteFallback(dom, m15, dr, poi);
@@ -2152,17 +2156,20 @@ public:
       if(reject >= 50) pos += "Rejection candle / BB reclaim;";
       if(disp.score >= 65) pos += "Strong displacement;";
       if(disp_exhaust >= 60) pos += "Displacement exhaustion risk;";
-      if(dr.valid) pos += "Dealing range " + dr.location + ";";
-      if(liq.valid)
+      // Only confluences go in pos/neg. Data sources (Gold SMC POI/OTE, Liquidity Grab
+      // module, depth source) are shown on their KPI cards, not as checklist ticks.
+      if(dr.valid)
         {
-         pos += "Liquidity " + liq.draw + " " + liq.state_label + ";";
-         if(liq.from_liquidity_grab) pos += "Liquidity Grab module;";
+         double pd_fav = CalcPdEntryFavorability(dom, dr);
+         if(pd_fav >= 55) pos += "Dealing range " + dr.location + ";";
+         else if(pd_fav <= 35) neg += "Dealing range " + dr.location + " (against trend entry);";
         }
+      if(liq.valid)
+         pos += "Liquidity " + liq.draw + " " + liq.state_label + ";";
       if(poi.valid)
         {
          pos += "POI " + poi.primary_dir + " " + poi.primary_type + " Q=" +
                 DoubleToString(poi.quality, 0) + ";";
-         if(poi.from_gold_smc) pos += "Gold SMC POI;";
          if(poi.price_inside) pos += "Price inside POI;";
          else if(poi.price_approaching) pos += "Approaching POI retrace;";
         }
@@ -2170,10 +2177,7 @@ public:
         {
          if(ote.price_in_ote) pos += "Price in OTE;";
          if(ote.poi_overlaps_ote) pos += "POI overlaps OTE;";
-         if(ote.from_gold_smc) pos += "Gold SMC OTE;";
         }
-      if(out.depth_source != "" && out.depth_source != "heuristic")
-         pos += "Depth from " + out.depth_source + ";";
       if(out.entry_location_score <= 34) neg += "Poor entry location / chase risk;";
       if(out.entry_location_score >= 65) pos += "Favorable entry location;";
       if(poi.valid && poi.mitigation_pct >= 70) neg += "Primary POI heavily mitigated;";

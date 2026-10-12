@@ -127,13 +127,24 @@ private:
 
    string StructureFromSwings(void) const
      {
+      // Classify from the most recent labelled high and low only (m_swings is newest → oldest).
       bool hh=false, hl=false, lh=false, ll=false;
-      for(int i = 0; i < m_swing_n; i++)
+      bool seen_high = false, seen_low = false;
+      for(int i = 0; i < m_swing_n && !(seen_high && seen_low); i++)
         {
-         if(m_swings[i].label == SWING_LBL_HH) hh = true;
-         if(m_swings[i].label == SWING_LBL_HL) hl = true;
-         if(m_swings[i].label == SWING_LBL_LH) lh = true;
-         if(m_swings[i].label == SWING_LBL_LL) ll = true;
+         if(m_swings[i].label == SWING_LBL_UNKNOWN) continue;
+         if(m_swings[i].is_high && !seen_high)
+           {
+            seen_high = true;
+            hh = (m_swings[i].label == SWING_LBL_HH);
+            lh = (m_swings[i].label == SWING_LBL_LH);
+           }
+         else if(!m_swings[i].is_high && !seen_low)
+           {
+            seen_low = true;
+            hl = (m_swings[i].label == SWING_LBL_HL);
+            ll = (m_swings[i].label == SWING_LBL_LL);
+           }
         }
       if(hh && hl) return "HH-HL";
       if(lh && ll) return "LH-LL";
@@ -196,14 +207,25 @@ private:
       // Step 3 — swings (H4 external)
       m_swing_n = 0;
       CollectSwings(h4, n_h4, atr_h4, true);
+      // m_swings is ordered newest → oldest; keep the first (most recent) match only.
       double sh = 0, sl = 0, psh = 0, psl = 0;
+      datetime sh_t = 0, psh_t = 0, psl_t = 0;
       for(int i = 0; i < m_swing_n; i++)
         {
-         if(m_swings[i].is_high) { psh = sh; sh = m_swings[i].price; if(r.current_swing_time == 0) { r.current_swing_price = sh; r.current_swing_time = m_swings[i].time; } }
-         else { psl = sl; sl = m_swings[i].price; if(r.previous_swing_time == 0 && sl > 0) { r.previous_swing_price = sl; r.previous_swing_time = m_swings[i].time; } }
+         if(m_swings[i].is_high)
+           {
+            if(sh == 0) { sh = m_swings[i].price; sh_t = m_swings[i].time; }
+            else if(psh == 0) { psh = m_swings[i].price; psh_t = m_swings[i].time; }
+           }
+         else
+           {
+            if(sl == 0) sl = m_swings[i].price;
+            else if(psl == 0) { psl = m_swings[i].price; psl_t = m_swings[i].time; }
+           }
         }
-      if(psh > 0) { r.previous_swing_price = psh; r.previous_swing_time = m_swings[1].time; }
-      if(psl > 0 && r.previous_swing_price == 0) r.previous_swing_price = psl;
+      if(sh > 0) { r.current_swing_price = sh; r.current_swing_time = sh_t; }
+      if(psh > 0) { r.previous_swing_price = psh; r.previous_swing_time = psh_t; }
+      else if(psl > 0) { r.previous_swing_price = psl; r.previous_swing_time = psl_t; }
       r.swing_score = ClampD((m_swing_n > 2 ? 55 : 35) + r.trend_strength * 0.3, 0, 100);
 
       bool bullish_bias = (r.trend_class <= SWING_TREND_WEAK_BULL);
@@ -400,10 +422,23 @@ private:
          r.entry_zone_hi = bid + atr_m5 * 0.2;
          r.stop_loss = 0; r.tp1 = 0; r.tp2 = 0; r.tp3 = 0;
         }
-      double risk = MathAbs(bid - r.stop_loss);
-      double reward = MathAbs(r.tp1 - bid);
-      r.risk_reward = (risk > 0 ? reward / risk : 0);
-      r.risk_reward_label = "1:" + DoubleToString(r.risk_reward, 1);
+      // Geometry guard: stop must sit on the losing side and TP1 on the winning side.
+      bool risk_geometry_ok = true;
+      if(bullish_bias && r.stop_loss > 0 && (r.stop_loss >= bid || r.tp1 <= bid)) risk_geometry_ok = false;
+      if(bearish_bias && r.stop_loss > 0 && (r.stop_loss <= bid || r.tp1 >= bid)) risk_geometry_ok = false;
+      if(!risk_geometry_ok)
+        {
+         r.risk_reward = 0;
+         r.risk_reward_label = "Invalid — stop on wrong side";
+        }
+      else
+        {
+         double risk = bid - r.stop_loss;
+         double reward = r.tp1 - bid;
+         if(bearish_bias) { risk = -risk; reward = -reward; }
+         r.risk_reward = (risk > 0 && r.stop_loss > 0 ? reward / risk : 0);
+         r.risk_reward_label = "1:" + DoubleToString(r.risk_reward, 1);
+        }
 
       // Step 11 — decision (rules from spec)
       r.signal_class = SWING_SIG_NO_TRADE;

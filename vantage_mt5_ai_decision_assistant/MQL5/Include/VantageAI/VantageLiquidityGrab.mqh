@@ -500,7 +500,7 @@ private:
       return false;
      }
 
-   bool DetectMSS(MqlRates &rates[], const int n, const bool bearish,
+   bool DetectMSS(MqlRates &rates[], const int n, const bool bearish, const double sweep_price,
                   double &mss_level, ENUM_LG_MSS_TYPE &mss_type)
      {
       mss_type = LG_MSS_NONE;
@@ -508,13 +508,15 @@ private:
       if(n < 10) return false;
       const int L = m_cfg.swing_left;
       const int R = m_cfg.swing_right;
+      // Most recent pivot on the far side of the sweep (rates are newest → oldest):
+      // bullish MSS = swing high above the sweep low; bearish MSS = swing low below the sweep high.
       double pivot = 0.0;
       for(int i = R + 1; i < MathMin(n - L, 40); i++)
         {
-         if(bearish && IsSwingLow(rates, i, L, R))
-            pivot = rates[i].low;
-         if(!bearish && IsSwingHigh(rates, i, L, R))
-            pivot = rates[i].high;
+         if(bearish && IsSwingLow(rates, i, L, R) && (sweep_price <= 0 || rates[i].low < sweep_price))
+           { pivot = rates[i].low; break; }
+         if(!bearish && IsSwingHigh(rates, i, L, R) && (sweep_price <= 0 || rates[i].high > sweep_price))
+           { pivot = rates[i].high; break; }
         }
       if(pivot <= 0.0) return false;
       double close0 = rates[0].close;
@@ -681,7 +683,7 @@ private:
         {
          double mss_lvl = 0;
          ENUM_LG_MSS_TYPE mt = LG_MSS_NONE;
-         if(DetectMSS(rates, n, bsl, mss_lvl, mt))
+         if(DetectMSS(rates, n, bsl, c.sweep_price, mss_lvl, mt))
            {
             c.mss_detected = true;
             c.mss_type = mt;
