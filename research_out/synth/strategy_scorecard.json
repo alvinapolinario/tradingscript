@@ -1,0 +1,264 @@
+{
+  "schema": "vantage.strategy_scorecard.v1",
+  "generated_utc": "2026-10-05T03:56:00.652559+00:00",
+  "data": {
+    "symbol": "XAUUSD",
+    "csv": "synth_m5.csv",
+    "from": "2025-01-06 00:00",
+    "to": "2025-02-14 23:55",
+    "m5_bars": 8640
+  },
+  "assumptions": {
+    "cadence": "M5",
+    "tp_level": "TP2",
+    "max_hold_bars_m5": 48,
+    "default_rr": 2.0,
+    "commission": 0.0,
+    "default_spread": 0.3,
+    "server_utc_offset_hours": 0.0,
+    "fills": "market at next M5 open (buy at ask); stop wins when SL and TP share a bar"
+  },
+  "strategies": {
+    "ict": {
+      "verdict": "INSUFFICIENT_DATA",
+      "overall": {
+        "n": 0
+      },
+      "signals": {},
+      "exit_reasons": {},
+      "by_side": {},
+      "by_session": {},
+      "by_year": {},
+      "folds": [],
+      "confidence_buckets": [],
+      "threshold": {
+        "fitted_on": "first 70% of trades (time-ordered)",
+        "min_confidence": null,
+        "out_of_sample_filtered": {
+          "n": 0
+        },
+        "out_of_sample_unfiltered": {
+          "n": 0
+        },
+        "confirmed": false
+      }
+    },
+    "h4_m15_fvg": {
+      "verdict": "INSUFFICIENT_DATA",
+      "overall": {
+        "n": 3,
+        "win_rate": 0.0,
+        "avg_r": -1.0,
+        "median_r": -1.0,
+        "total_r": -3.0,
+        "profit_factor": 0.0,
+        "max_drawdown_r": 3.0,
+        "t_stat": 0.0
+      },
+      "signals": {
+        "CLOSED": 3
+      },
+      "exit_reasons": {
+        "SL": 3
+      },
+      "by_side": {
+        "BUY": {
+          "n": 3,
+          "win_rate": 0.0,
+          "avg_r": -1.0,
+          "median_r": -1.0,
+          "total_r": -3.0,
+          "profit_factor": 0.0,
+          "max_drawdown_r": 3.0,
+          "t_stat": 0.0
+        }
+      },
+      "by_session": {
+        "ASIA": {
+          "n": 1,
+          "win_rate": 0.0,
+          "avg_r": -1.0,
+          "median_r": -1.0,
+          "total_r": -1.0,
+          "profit_factor": 0.0,
+          "max_drawdown_r": 1.0,
+          "t_stat": 0.0
+        },
+        "NEW_YORK": {
+          "n": 2,
+          "win_rate": 0.0,
+          "avg_r": -1.0,
+          "median_r": -1.0,
+          "total_r": -2.0,
+          "profit_factor": 0.0,
+          "max_drawdown_r": 2.0,
+          "t_stat": 0.0
+        }
+      },
+      "by_year": {
+        "2025": {
+          "n": 3,
+          "win_rate": 0.0,
+          "avg_r": -1.0,
+          "median_r": -1.0,
+          "total_r": -3.0,
+          "profit_factor": 0.0,
+          "max_drawdown_r": 3.0,
+          "t_stat": 0.0
+        }
+      },
+      "folds": [
+        {
+          "fold": 1,
+          "from": 1736278200,
+          "to": 1736278200,
+          "n": 1,
+          "win_rate": 0.0,
+          "avg_r": -1.0,
+          "median_r": -1.0,
+          "total_r": -1.0,
+          "profit_factor": 0.0,
+          "max_drawdown_r": 1.0,
+          "t_stat": 0.0
+        },
+        {
+          "fold": 2,
+          "from": 1738129500,
+          "to": 1738129500,
+          "n": 1,
+          "win_rate": 0.0,
+          "avg_r": -1.0,
+          "median_r": -1.0,
+          "total_r": -1.0,
+          "profit_factor": 0.0,
+          "max_drawdown_r": 1.0,
+          "t_stat": 0.0
+        },
+        {
+          "fold": 3,
+          "from": 1739207700,
+          "to": 1739207700,
+          "n": 1,
+          "win_rate": 0.0,
+          "avg_r": -1.0,
+          "median_r": -1.0,
+          "total_r": -1.0,
+          "profit_factor": 0.0,
+          "max_drawdown_r": 1.0,
+          "t_stat": 0.0
+        }
+      ],
+      "confidence_buckets": [
+        {
+          "lo": 60,
+          "hi": 70,
+          "n": 1,
+          "win_rate": 0.0,
+          "avg_r": -1.0,
+          "median_r": -1.0,
+          "total_r": -1.0,
+          "profit_factor": 0.0,
+          "max_drawdown_r": 1.0,
+          "t_stat": 0.0
+        },
+        {
+          "lo": 70,
+          "hi": 80,
+          "n": 1,
+          "win_rate": 0.0,
+          "avg_r": -1.0,
+          "median_r": -1.0,
+          "total_r": -1.0,
+          "profit_factor": 0.0,
+          "max_drawdown_r": 1.0,
+          "t_stat": 0.0
+        },
+        {
+          "lo": 80,
+          "hi": 90,
+          "n": 1,
+          "win_rate": 0.0,
+          "avg_r": -1.0,
+          "median_r": -1.0,
+          "total_r": -1.0,
+          "profit_factor": 0.0,
+          "max_drawdown_r": 1.0,
+          "t_stat": 0.0
+        }
+      ],
+      "threshold": {
+        "fitted_on": "first 70% of trades (time-ordered)",
+        "min_confidence": null,
+        "out_of_sample_filtered": {
+          "n": 1,
+          "win_rate": 0.0,
+          "avg_r": -1.0,
+          "median_r": -1.0,
+          "total_r": -1.0,
+          "profit_factor": 0.0,
+          "max_drawdown_r": 1.0,
+          "t_stat": 0.0
+        },
+        "out_of_sample_unfiltered": {
+          "n": 1,
+          "win_rate": 0.0,
+          "avg_r": -1.0,
+          "median_r": -1.0,
+          "total_r": -1.0,
+          "profit_factor": 0.0,
+          "max_drawdown_r": 1.0,
+          "t_stat": 0.0
+        },
+        "confirmed": false
+      }
+    },
+    "box_theory": {
+      "verdict": "INSUFFICIENT_DATA",
+      "overall": {
+        "n": 0
+      },
+      "signals": {},
+      "exit_reasons": {},
+      "by_side": {},
+      "by_session": {},
+      "by_year": {},
+      "folds": [],
+      "confidence_buckets": [],
+      "threshold": {
+        "fitted_on": "first 70% of trades (time-ordered)",
+        "min_confidence": null,
+        "out_of_sample_filtered": {
+          "n": 0
+        },
+        "out_of_sample_unfiltered": {
+          "n": 0
+        },
+        "confirmed": false
+      }
+    },
+    "amd_ifvg": {
+      "verdict": "INSUFFICIENT_DATA",
+      "overall": {
+        "n": 0
+      },
+      "signals": {},
+      "exit_reasons": {},
+      "by_side": {},
+      "by_session": {},
+      "by_year": {},
+      "folds": [],
+      "confidence_buckets": [],
+      "threshold": {
+        "fitted_on": "first 70% of trades (time-ordered)",
+        "min_confidence": null,
+        "out_of_sample_filtered": {
+          "n": 0
+        },
+        "out_of_sample_unfiltered": {
+          "n": 0
+        },
+        "confirmed": false
+      }
+    }
+  }
+}
