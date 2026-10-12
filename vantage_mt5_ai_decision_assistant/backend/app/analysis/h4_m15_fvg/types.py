@@ -53,6 +53,7 @@ class H4M15FvgConfig:
     sl_buffer_atr: float = 0.15
     max_confirmation_m15_bars: int = 32
     max_retrace_m15_bars: int = 24
+    max_entry_ready_m15_bars: int = 16
     max_h4_age_bars: int = 40
     allow_reentry: bool = False
     retrace_mode: RetraceMode = RetraceMode.TOUCH
@@ -119,6 +120,7 @@ class H4M15Setup:
     m15_bars_since_touch: int = 0
     m15_bars_since_mss: int = 0
     m15_bars_since_ltf_fvg: int = 0
+    m15_bars_since_entry_ready: int = 0
     reasons: list[str] = field(default_factory=list)
     rejections: list[str] = field(default_factory=list)
     transition_log: list[StateTransitionLog] = field(default_factory=list)

@@ -20,10 +20,11 @@ from app.market_structure.structure import detect_mss
 from app.market_structure.swings import find_swings
 from app.market_structure.types import Candle, FvgStatus, FvgZone
 
+# ENTRY_READY is not terminal: the setup stays live so a later close through the
+# sweep (stop) invalidates it, or it expires after max_entry_ready_m15_bars.
 TERMINAL = {
     H4M15SetupState.SETUP_INVALIDATED,
     H4M15SetupState.SETUP_EXPIRED,
-    H4M15SetupState.ENTRY_READY,
 }
 
 _EXEC_FVG_DIRECTION_MISMATCH = (
@@ -294,6 +295,13 @@ class H4M15Engine:
                 )
                 continue
 
+            if setup.state == H4M15SetupState.ENTRY_READY:
+                if candle.time > setup.entry_ready_time:
+                    setup.m15_bars_since_entry_ready += 1
+                    self._check_invalidation(setup, candle, atr_m15)
+                    self._check_expiration(setup, candle)
+                continue
+
             if setup.state in (
                 H4M15SetupState.WAITING_FOR_HTF_MITIGATION,
                 H4M15SetupState.HTF_FVG_FOUND,
@@ -513,6 +521,18 @@ class H4M15Engine:
 
     def _check_expiration(self, setup: H4M15Setup, candle: Candle) -> None:
         if setup.state in TERMINAL:
+            return
+        if setup.state == H4M15SetupState.ENTRY_READY:
+            if setup.m15_bars_since_entry_ready > self.cfg.max_entry_ready_m15_bars:
+                setup.expiration_reason = (
+                    f"ENTRY_READY not acted on within {self.cfg.max_entry_ready_m15_bars} M15 bars."
+                )
+                self._transition(
+                    setup,
+                    H4M15SetupState.SETUP_EXPIRED,
+                    setup.expiration_reason,
+                    candle_time=candle.time,
+                )
             return
         if setup.htf_first_touch_time and setup.m15_bars_since_touch > self.cfg.max_confirmation_m15_bars:
             setup.expiration_reason = f"Exceeded {self.cfg.max_confirmation_m15_bars} M15 bars since H4 touch."
